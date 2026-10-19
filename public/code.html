@@ -1,0 +1,675 @@
+<!DOCTYPE html><html class="h-full bg-canvas" lang="en" style=""><svg class="inline-defs-container" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Student Dashboard — AI Tutor Scholar's Edition</title>
+<!-- Typography & Material Icons -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&amp;family=Geist:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Tailwind CSS with custom configuration -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "on-secondary": "#ffffff",
+            "tertiary-fixed": "#8cf4e8",
+            "inverse-surface": "#30312f",
+            "accent-hover": "#A94734",
+            "surface-dim": "#dbdad8",
+            "on-primary": "#ffffff",
+            "on-surface-variant": "#57423e",
+            "error": "#ba1a1a",
+            "on-secondary-fixed-variant": "#2f4d3b",
+            "primary-fixed-dim": "#ffb4a4",
+            "on-primary-container": "#fffbff",
+            "outline-variant": "#ddc0ba",
+            "on-tertiary-fixed": "#00201d",
+            "on-primary-fixed": "#3e0500",
+            "on-tertiary": "#ffffff",
+            "tertiary-fixed-dim": "#6fd8cc",
+            "on-secondary-fixed": "#022112",
+            "ink-muted": "#7A7C75",
+            "outline": "#8a726c",
+            "secondary-container": "#c8ebd2",
+            "on-error": "#ffffff",
+            "surface-tint": "#a23e29",
+            "secondary-fixed": "#c8ebd2",
+            "surface-container-highest": "#e4e2e0",
+            "surface-bright": "#fbf9f7",
+            "primary-container": "#bf533d",
+            "surface": "#FFFFFF",
+            "border-subtle": "#E5E3DB",
+            "canvas": "#F8F6F0",
+            "on-background": "#1b1c1b",
+            "ink-secondary": "#555852",
+            "error-container": "#ffdad6",
+            "on-secondary-container": "#4c6b57",
+            "surface-variant": "#e4e2e0",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#f5f3f1",
+            "on-surface": "#1b1c1b",
+            "primary": "#9f3c27",
+            "surface-container": "#efeeeb",
+            "on-primary-fixed-variant": "#822715",
+            "ink-primary": "#171817",
+            "tertiary-container": "#008379",
+            "secondary": "#466552",
+            "background": "#fbf9f7",
+            "primary-fixed": "#ffdad3",
+            "inverse-primary": "#ffb4a4",
+            "inverse-on-surface": "#f2f0ee",
+            "on-tertiary-fixed-variant": "#00504a",
+            "surface-container-high": "#e9e8e6",
+            "on-error-container": "#93000a",
+            "tertiary": "#006860",
+            "secondary-fixed-dim": "#adcfb7",
+            "on-tertiary-container": "#f3fffc"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "2xl": "1rem",
+            "3xl": "1.5rem",
+            "full": "9999px"
+          },
+          spacing: {
+            "space-md": "1rem",
+            "space-lg": "2rem",
+            "space-xl": "3rem",
+            "space-xs": "0.5rem",
+            "margin": "3rem",
+            "space-sm": "0.75rem",
+            "gutter": "2rem"
+          },
+          fontFamily: {
+            "label-micro": ["Geist", "sans-serif"],
+            "headline-md": ["Newsreader", "serif"],
+            "body-lg": ["Geist", "sans-serif"],
+            "headline-sm": ["Geist", "sans-serif"],
+            "headline-lg": ["Newsreader", "serif"],
+            "body-md": ["Geist", "sans-serif"],
+            "label-md": ["Geist", "sans-serif"],
+            "headline-lg-mobile": ["Newsreader", "serif"],
+            "display-hero": ["Newsreader", "serif"]
+          },
+          fontSize: {
+            "label-micro": [
+              "0.75rem",
+              { lineHeight: "1.2", letterSpacing: "0.05em", fontWeight: "600" }
+            ],
+            "headline-md": [
+              "2rem",
+              { lineHeight: "1.25", fontWeight: "400" }
+            ],
+            "body-lg": [
+              "1.125rem",
+              { lineHeight: "1.6", fontWeight: "400" }
+            ],
+            "headline-sm": [
+              "1.25rem",
+              { lineHeight: "1.4", fontWeight: "600" }
+            ],
+            "headline-lg": [
+              "3rem",
+              { lineHeight: "1.15", letterSpacing: "-0.015em", fontWeight: "400" }
+            ],
+            "body-md": [
+              "1rem",
+              { lineHeight: "1.5", fontWeight: "400" }
+            ],
+            "label-md": [
+              "0.875rem",
+              { lineHeight: "1.4", fontWeight: "500" }
+            ],
+            "headline-lg-mobile": [
+              "2.25rem",
+              { lineHeight: "1.2", letterSpacing: "-0.01em", fontWeight: "400" }
+            ],
+            "display-hero": [
+              "4.5rem",
+              { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "400" }
+            ]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    /* Subtle 2.5% opacity organic botanical linework pattern overlay */
+    .botanical-pattern {
+      background-image: radial-gradient(rgba(23, 24, 23, 0.04) 1px, transparent 1px),
+                        radial-gradient(rgba(82, 113, 93, 0.03) 1px, transparent 1px);
+      background-size: 36px 36px, 18px 18px;
+      background-position: 0 0, 9px 9px;
+    }
+
+    .diffused-card-shadow {
+      box-shadow: 0 20px 40px -15px rgba(23, 24, 23, 0.05);
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+      line-height: 1;
+    }
+    
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="min-h-full font-body-md text-body-md text-ink-primary bg-canvas botanical-pattern antialiased selection:bg-primary-fixed selection:text-ink-primary">
+<!-- ========================================================================= -->
+<!-- SIDE NAVIGATION (Shared Component: SideNavBar)                            -->
+<!-- ========================================================================= -->
+<aside class="fixed left-0 top-0 h-screen w-64 p-6 z-40 bg-canvas dark:bg-canvas border-r border-border-subtle dark:border-border-subtle flex flex-col justify-between hidden md:flex">
+<!-- Top Area: Crest Logo & Section Links -->
+<div class="space-y-8">
+<!-- Crest Motif & Brand Header -->
+<div class="flex items-start gap-3.5 px-1 pt-1">
+<div class="w-10 h-10 rounded-xl bg-surface border border-border-subtle flex items-center justify-center text-secondary shadow-sm">
+<span class="material-symbols-outlined text-2xl text-secondary">eco</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md text-ink-primary dark:text-ink-primary tracking-tight leading-none">AI Tutor</h1>
+<p class="font-label-micro text-label-micro text-ink-muted mt-1 uppercase tracking-wider">Scholar's Edition</p>
+</div>
+</div>
+<!-- Main Navigation Menu -->
+<nav class="space-y-1">
+<!-- Item: Home (Active based on JSON & Dashboard context) -->
+<a class="flex items-center gap-3 text-primary dark:text-primary font-label-md text-label-md border-r-2 border-primary bg-surface-container-low/50 dark:bg-surface-container-low/50 pl-3 py-2.5 transition-colors scale-[0.98]" href="#dashboard">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: &quot;FILL&quot; 1;">home</span>
+<span class="">Home</span>
+</a>
+<!-- Item: Learn -->
+<a class="flex items-center gap-3 text-ink-secondary dark:text-ink-secondary font-label-md text-label-md pl-3 py-2.5 transition-colors hover:text-ink-primary dark:hover:text-ink-primary hover:bg-surface-container-low/40 dark:hover:bg-surface-container-low/40" href="#learn">
+<span class="material-symbols-outlined text-xl">auto_stories</span>
+<span class="">Learn</span>
+</a>
+<!-- Item: Practice -->
+<a class="flex items-center gap-3 text-ink-secondary dark:text-ink-secondary font-label-md text-label-md pl-3 py-2.5 transition-colors hover:text-ink-primary dark:hover:text-ink-primary hover:bg-surface-container-low/40 dark:hover:bg-surface-container-low/40" href="#practice">
+<span class="material-symbols-outlined text-xl">edit_note</span>
+<span class="">Practice</span>
+</a>
+<!-- Item: Live Tutor -->
+<a class="flex items-center justify-between text-ink-secondary dark:text-ink-secondary font-label-md text-label-md pl-3 pr-2 py-2.5 transition-colors hover:text-ink-primary dark:hover:text-ink-primary hover:bg-surface-container-low/40 dark:hover:bg-surface-container-low/40" href="#livetutor">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-xl">psychology</span>
+<span class="">Live Tutor</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse" title="Tutor Active"></span>
+</a>
+<!-- Item: Progress -->
+<a class="flex items-center gap-3 text-ink-secondary dark:text-ink-secondary font-label-md text-label-md pl-3 py-2.5 transition-colors hover:text-ink-primary dark:hover:text-ink-primary hover:bg-surface-container-low/40 dark:hover:bg-surface-container-low/40" href="#progress">
+<span class="material-symbols-outlined text-xl">insights</span>
+<span class="">Progress</span>
+</a>
+<!-- Item: History -->
+<a class="flex items-center gap-3 text-ink-secondary dark:text-ink-secondary font-label-md text-label-md pl-3 py-2.5 transition-colors hover:text-ink-primary dark:hover:text-ink-primary hover:bg-surface-container-low/40 dark:hover:bg-surface-container-low/40" href="#history">
+<span class="material-symbols-outlined text-xl">schedule</span>
+<span class="">History</span>
+</a>
+</nav>
+<!-- Side CTA Action -->
+<div class="pt-2 px-1">
+<button class="w-full flex items-center justify-center gap-2 bg-primary hover:bg-accent-hover text-on-primary py-2.5 px-4 rounded-xl font-label-md text-label-md transition-all scale-[0.98] active:scale-95 shadow-sm" onclick="openLiveModal()">
+<span class="material-symbols-outlined text-lg">mic</span>
+<span class="">Start Session</span>
+</button>
+</div>
+</div>
+<!-- Bottom Dock: Student Profile Card & Settings -->
+<div class="space-y-3 pt-6 border-t border-border-subtle dark:border-border-subtle">
+<div class="p-2.5 bg-surface rounded-xl border border-border-subtle flex items-center gap-3">
+<div class="relative w-9 h-9 rounded-full bg-surface-container-high border border-border-subtle overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="Shaurya student profile avatar with a composed, scholarly appearance dressed in quiet academic attire, lit by warm natural study room lighting against a soft muted ivory backdrop." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFxoCqLtIVbreAvTcMlqWOBP-haPLvS8_i2INWdrpGHw7YdK63Gsk3di5JxM87DH8j9Z_iG9IRCWvMUPZvayaauwg_WtAGQ4z_Hk4Lm_5H-TCXqdGG2BNvqZk426ou0PATZ8_SWD5fF4kF0-YRLsVyduFyzOWZp_cvalOiXS5UrzVkSnGMnMQ5E-2Rx8Bg4DlkUDkXm3D4DDtWnVeCvp-vff0mzG_1_6B6bMH8D00">
+</div>
+<div class="min-w-0 flex-1">
+<p class="font-label-md text-label-md text-ink-primary truncate font-semibold">Shaurya K.</p>
+<p class="font-label-micro text-label-micro text-ink-muted truncate">Grade 11 Honors</p>
+</div>
+</div>
+<nav class="space-y-0.5">
+<a class="flex items-center gap-3 text-ink-secondary dark:text-ink-secondary font-label-md text-label-md pl-3 py-2 rounded-lg hover:text-ink-primary dark:hover:text-ink-primary hover:bg-surface-container-low/40" href="#profile">
+<span class="material-symbols-outlined text-lg">person</span>
+<span class="">Profile</span>
+</a>
+<a class="flex items-center gap-3 text-ink-secondary dark:text-ink-secondary font-label-md text-label-md pl-3 py-2 rounded-lg hover:text-ink-primary dark:hover:text-ink-primary hover:bg-surface-container-low/40" href="#settings">
+<span class="material-symbols-outlined text-lg">settings</span>
+<span class="">Settings</span>
+</a>
+</nav>
+</div>
+</aside>
+<!-- ========================================================================= -->
+<!-- MAIN WORKSPACE & TOP BAR                                                  -->
+<!-- ========================================================================= -->
+<div class="md:pl-64 flex flex-col min-h-screen">
+<!-- Top Sticky Bar (Shared Component: TopNavBar) -->
+<header class="sticky top-0 z-30 w-full pl-6 md:pl-8 pr-6 md:pr-8 py-4 flex items-center justify-between bg-canvas/90 dark:bg-canvas/90 backdrop-blur-md border-b border-border-subtle dark:border-border-subtle">
+<div class="flex items-center gap-4">
+<button class="md:hidden p-2 text-ink-secondary hover:text-ink-primary" onclick="toggleMobileNav()">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div>
+<span class="font-label-micro text-label-micro text-ink-muted uppercase tracking-wider block">Tuesday, October 24</span>
+<h2 class="font-headline-sm text-headline-sm text-ink-primary tracking-tight">Academic Overview</h2>
+</div>
+</div>
+<div class="flex items-center gap-3 sm:gap-4">
+<!-- Quick Focus Button Action -->
+<button class="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-border-subtle bg-surface hover:bg-surface-container-low text-ink-primary font-label-md text-label-md transition-colors scale-[0.98]">
+<span class="material-symbols-outlined text-sm text-primary">timer</span>
+<span class="">Quick Focus</span>
+</button>
+<!-- Calendar Today Action -->
+<button class="p-2 text-ink-secondary hover:text-ink-primary hover:bg-surface rounded-lg border border-border-subtle transition-colors" title="Academic Calendar">
+<span class="material-symbols-outlined text-xl">calendar_today</span>
+</button>
+<!-- Notifications Action -->
+<div class="relative">
+<button class="p-2 text-ink-secondary hover:text-ink-primary hover:bg-surface rounded-lg border border-border-subtle transition-colors" title="Notifications">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-canvas"></span>
+</div>
+<div class="h-6 w-px bg-border-subtle mx-1 hidden sm:block"></div>
+<!-- Student Micro Profile Preview -->
+<div class="flex items-center gap-2.5 pl-1">
+<div class="w-8 h-8 rounded-full bg-surface border border-border-subtle overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Shaurya student profile avatar rendered in clean photographic minimalism, warm natural daylight and serene expression reflecting deep academic focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBILDMIDWoGXFBryoKX-1UfQxLMs7mNcoo-BOViwkKiBmaUNjNmaLCG7pApfJLbH32GJIGjFtNufyGjfqVMG3M08o3lNzF1yRec2CVJMnSEPfeGlzlTWPMC4Ycloox7K8b26TWhPguuO2n9z-cZpk85pWt4tZjwEXESa9pYH-KYYGEOzPpGEvSQM6aUE7P6GUIhjCnH-tFB5YWL82KI_BoB1Z9vKrLJm7KIZ-dzqu0">
+</div>
+<span class="hidden lg:inline-block font-label-md text-label-md text-ink-primary font-medium">Shaurya K.</span>
+</div>
+</div>
+</header>
+<!-- Contextual Greeting Header -->
+
+<!-- ======================================================================= -->
+<!-- DASHBOARD CORE CANVAS (DISCOVER → LEARN → PRACTICE → REVIEW LOOP)       -->
+<!-- ======================================================================= -->
+<main class="flex-1 px-6 md:px-10 py-6 max-w-7xl w-full mx-auto space-y-10">
+<!-- SECTION 1: HERO "CONTINUE LEARNING" & BOTANICAL LIVE TUTOR CARD -->
+<section class="bg-surface rounded-3xl border border-border-subtle p-7 md:p-8 diffused-card-shadow space-y-6 w-full"><div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-subtle/80 pb-5"><div class="flex items-center gap-3.5"><div class="w-10 h-10 rounded-xl bg-secondary/10 border border-secondary/20 flex items-center justify-center text-secondary flex-shrink-0"><span class="material-symbols-outlined text-2xl">calendar_month</span></div><div><div class="flex items-center gap-2.5"><h3 class="font-headline-md text-headline-md text-ink-primary font-serif leading-none tracking-tight">Consistency &amp; Study Cadence</h3></div><p class="font-body-md text-body-md text-ink-secondary text-sm mt-1">Deliberate practice retention and cumulative cognitive velocity across 14-day study cycles.</p></div></div></div><div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center"><div class="lg:col-span-4 bg-canvas/70 rounded-2xl border border-border-subtle p-4 space-y-2.5"><div class="flex items-center justify-between"><span class="font-label-micro text-label-micro text-ink-muted uppercase tracking-wider">14-Day Study Velocity</span><span class="text-xs font-semibold text-secondary font-label-micro">18.4 hrs log</span></div><div class="w-full h-20"><svg class="w-full h-full overflow-visible" viewBox="0 0 280 60" preserveAspectRatio="none"><defs><linearGradient id="cadenceGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#466552" stop-opacity="0.25"></stop><stop offset="100%" stop-color="#466552" stop-opacity="0.0"></stop></linearGradient></defs><line x1="0" y1="55" x2="280" y2="55" stroke="#E5E3DB" stroke-width="1" stroke-dasharray="3 3"></line><line x1="0" y1="30" x2="280" y2="30" stroke="#E5E3DB" stroke-width="1" stroke-dasharray="3 3"></line><path d="M 0,50 Q 25,48 45,38 T 90,32 T 135,42 T 180,22 T 225,16 T 260,10 L 280,8 L 280,58 L 0,58 Z" fill="url(#cadenceGrad)"></path><path d="M 0,50 Q 25,48 45,38 T 90,32 T 135,42 T 180,22 T 225,16 T 260,10 L 280,8" fill="none" stroke="#466552" stroke-width="2.5" stroke-linecap="round"></path><circle cx="225" cy="16" r="3.5" fill="#FFFFFF" stroke="#466552" stroke-width="2"></circle><circle cx="260" cy="10" r="3.5" fill="#FFFFFF" stroke="#9f3c27" stroke-width="2"></circle><circle cx="280" cy="8" r="4" fill="#9f3c27"></circle></svg></div><div class="flex justify-between font-label-micro text-label-micro text-ink-muted text-xs pt-1"><span class="">Oct 11</span><span class="">Oct 17</span><span class="">Today (Oct 24)</span></div></div><div class="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-4"><div class="p-4 bg-canvas rounded-2xl border border-border-subtle flex flex-col justify-between"><span class="font-label-micro text-label-micro text-ink-muted uppercase tracking-wider block">Current Streak</span><div class="mt-3"><div class="flex items-baseline gap-1.5"><span class="text-2xl font-semibold text-ink-primary tracking-tight font-label-md leading-none">6</span><span class="text-xs text-secondary font-semibold font-label-micro">Days</span></div><p class="font-label-micro text-label-micro text-ink-secondary text-xs mt-1.5 leading-tight">Active deliberate block</p></div></div><div class="p-4 bg-canvas rounded-2xl border border-border-subtle flex flex-col justify-between"><span class="font-label-micro text-label-micro text-ink-muted uppercase tracking-wider block">Study Velocity</span><div class="mt-3"><div class="flex items-baseline gap-1.5"><span class="text-2xl font-semibold text-ink-primary tracking-tight font-label-md leading-none">18.4</span><span class="text-xs text-ink-muted font-medium font-label-micro">hrs</span></div><p class="font-label-micro text-label-micro text-secondary text-xs mt-1.5 leading-tight font-medium">+2.5 hrs vs last week</p></div></div><div class="p-4 bg-canvas rounded-2xl border border-border-subtle flex flex-col justify-between"><span class="font-label-micro text-label-micro text-ink-muted uppercase tracking-wider block">Syllabus Covered</span><div class="mt-3"><div class="flex items-baseline gap-1"><span class="text-2xl font-semibold text-ink-primary tracking-tight font-label-md leading-none">55%</span></div><div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden mt-2.5"><div class="h-full bg-secondary rounded-full" style="width: 55%;"></div></div></div></div><div class="p-4 bg-canvas rounded-2xl border border-border-subtle flex flex-col justify-between"><span class="font-label-micro text-label-micro text-ink-muted uppercase tracking-wider block">Lessons &amp; Mastery</span><div class="mt-3"><div class="flex items-baseline gap-1.5"><span class="text-2xl font-semibold text-ink-primary tracking-tight font-label-md leading-none">42</span><span class="text-xs text-ink-muted font-medium font-label-micro">done</span></div><p class="font-label-micro text-label-micro text-ink-secondary text-xs mt-1.5 leading-tight">88% 1st-attempt rate</p></div></div></div></div><div class="pt-2 border-t border-border-subtle/60 flex flex-col md:flex-row md:items-center justify-between gap-3"><div class="flex items-center gap-2"><span class="font-label-micro text-label-micro text-ink-muted uppercase tracking-wider">Weekly Cadence:</span><div class="flex items-center gap-1.5 sm:gap-2"><div class="flex items-center gap-1 bg-canvas px-2 py-1 rounded-lg border border-border-subtle"><span class="font-label-micro text-ink-muted text-xs">M</span><div class="w-4 h-4 rounded-full bg-secondary text-white flex items-center justify-center text-[10px]"><span class="material-symbols-outlined text-xs leading-none">check</span></div></div><div class="flex items-center gap-1 bg-canvas px-2 py-1 rounded-lg border border-border-subtle"><span class="font-label-micro text-ink-muted text-xs">T</span><div class="w-4 h-4 rounded-full bg-secondary text-white flex items-center justify-center text-[10px]"><span class="material-symbols-outlined text-xs leading-none">check</span></div></div><div class="flex items-center gap-1 bg-canvas px-2 py-1 rounded-lg border border-border-subtle"><span class="font-label-micro text-ink-muted text-xs">W</span><div class="w-4 h-4 rounded-full bg-secondary text-white flex items-center justify-center text-[10px]"><span class="material-symbols-outlined text-xs leading-none">check</span></div></div><div class="flex items-center gap-1 bg-canvas px-2 py-1 rounded-lg border border-border-subtle"><span class="font-label-micro text-ink-muted text-xs">T</span><div class="w-4 h-4 rounded-full bg-secondary text-white flex items-center justify-center text-[10px]"><span class="material-symbols-outlined text-xs leading-none">check</span></div></div><div class="flex items-center gap-1 bg-canvas px-2 py-1 rounded-lg border border-border-subtle"><span class="font-label-micro text-ink-muted text-xs">F</span><div class="w-4 h-4 rounded-full bg-secondary text-white flex items-center justify-center text-[10px]"><span class="material-symbols-outlined text-xs leading-none">check</span></div></div><div class="flex items-center gap-1 bg-primary/10 px-2 py-1 rounded-lg border border-primary/20"><span class="font-label-micro text-primary font-bold text-xs">S</span><div class="w-4 h-4 rounded-full bg-primary text-white flex items-center justify-center text-[10px]"><span class="material-symbols-outlined text-xs leading-none">check</span></div></div><div class="flex items-center gap-1 bg-canvas px-2 py-1 rounded-lg border border-dashed border-border-subtle"><span class="font-label-micro text-ink-muted text-xs">S</span><div class="w-4 h-4 rounded-full border border-dashed border-border-subtle bg-surface text-ink-muted flex items-center justify-center text-[10px]">·</div></div></div></div><div class="flex items-center gap-2 text-xs font-label-micro text-ink-muted"><span class="material-symbols-outlined text-sm text-secondary">verified</span><span class="">Academic cadence on track for AP® examinations</span></div></div></section><section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+<!-- Hero: Continue Primary Course (Dominant 7-Column Layout) -->
+<div class="lg:col-span-12 bg-surface rounded-3xl border border-border-subtle p-8 md:p-10 diffused-card-shadow flex flex-col justify-between relative overflow-hidden">
+<!-- Subtle watermark icon in background -->
+<div class="absolute -right-8 -bottom-8 pointer-events-none opacity-[0.03] text-ink-primary">
+<span class="material-symbols-outlined text-[180px]">biotech</span>
+</div>
+<div class="space-y-6 relative z-10">
+<!-- Time Remaining Pill / Header row without badge -->
+<div class="flex items-center justify-end">
+<span class="font-label-micro text-label-micro text-ink-muted flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm text-ink-muted">schedule</span>
+18 mins remaining
+</span>
+</div>
+<!-- Title & Context and Progress layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
+<div class="lg:col-span-8">
+<h2 class="font-headline-lg text-headline-lg text-ink-primary leading-tight">Cellular Energetics &amp; ATP Synthesis</h2>
+<p class="font-body-md text-body-md text-ink-secondary mt-3 max-w-3xl">
+Paused at <strong class="text-ink-primary font-medium">Section 4.3: Electron Transport Chain &amp; Proton Gradients</strong>. Reviewing inner mitochondrial membrane phosphorylation and ATP synthase motor rotation.
+</p>
+</div>
+<!-- Subtle Progress Track (Right Column on desktop) -->
+<div class="lg:col-span-4 space-y-2 bg-canvas/70 p-4 rounded-2xl border border-border-subtle">
+<div class="flex justify-between font-label-micro text-label-micro text-ink-muted">
+<span class="">Progress: Section 3 of 5</span>
+<span class="text-ink-primary font-semibold">68% Complete</span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-high overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-500 ease-out" style="width: 68%;"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="pt-8 flex flex-wrap items-center gap-4 relative z-10 border-t border-border-subtle/60 mt-6">
+<a class="inline-flex items-center gap-2.5 bg-primary hover:bg-accent-hover text-on-primary font-label-md text-label-md px-7 py-3.5 rounded-xl transition-all scale-[0.98] active:scale-95 shadow-sm" href="#lesson-viewer">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: &quot;FILL&quot; 1;">play_arrow</span>
+<span class="">Resume Chapter</span>
+</a>
+<button class="inline-flex items-center gap-1.5 px-4 py-3.5 rounded-xl border border-border-subtle bg-transparent hover:bg-canvas text-ink-primary font-label-md text-label-md transition-colors">
+<span class="">Review Chapter Notes</span>
+<span class="material-symbols-outlined text-base">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Prominent Live AI Tutor Card (4-5 Column Editorial Margin) -->
+
+</section>
+<!-- SECTION 2: TODAY'S STRUCTURED LEARNING PLAN & CONSISTENCY -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Left: Today's Learning Agenda (8 Columns) -->
+<div class="lg:col-span-12 space-y-4"><div class="flex items-baseline justify-between"><div><h3 class="font-headline-md text-headline-md text-ink-primary">Today's Learning Plan</h3><p class="font-body-md text-body-md text-ink-secondary">Prioritized tasks to maintain academic cadence.</p></div><span class="font-label-micro text-label-micro text-ink-muted uppercase">3 of 3 Pending</span></div><div class="space-y-3.5"><div class="group bg-surface rounded-2xl border border-border-subtle p-5 md:p-6 transition-all hover:border-ink-muted flex flex-col sm:flex-row sm:items-center justify-between gap-4 diffused-card-shadow"><div class="flex items-start gap-4"><div class="w-10 h-10 rounded-xl bg-surface-container-low border border-border-subtle flex items-center justify-center text-primary flex-shrink-0 mt-0.5"><span class="material-symbols-outlined text-xl">menu_book</span></div><div><div class="flex items-center gap-2"><span class="font-label-micro text-label-micro text-primary uppercase font-bold tracking-wider">Lesson</span><span class="text-ink-muted text-xs">• Est. 20 min</span></div><h4 class="font-headline-sm text-headline-sm text-ink-primary mt-0.5 group-hover:text-primary transition-colors">Complete Section 4.3: Cellular Respiration</h4><p class="font-body-md text-body-md text-ink-secondary text-sm mt-0.5">Cover proton motive force and ubiquinone shuttle mechanisms.</p></div></div><button class="sm:self-center flex-shrink-0 px-5 py-2.5 rounded-xl bg-primary hover:bg-accent-hover text-on-primary font-label-md text-label-md transition-colors scale-[0.98]">Continue</button></div><div class="group bg-surface rounded-2xl border border-border-subtle p-5 md:p-6 transition-all hover:border-ink-muted flex flex-col sm:flex-row sm:items-center justify-between gap-4 diffused-card-shadow"><div class="flex items-start gap-4"><div class="w-10 h-10 rounded-xl bg-surface-container-low border border-border-subtle flex items-center justify-center text-secondary flex-shrink-0 mt-0.5"><span class="material-symbols-outlined text-xl">psychology_alt</span></div><div><div class="flex items-center gap-2"><span class="font-label-micro text-label-micro text-secondary uppercase font-bold tracking-wider">Practice</span><span class="text-ink-muted text-xs">• Review weak area</span></div><h4 class="font-headline-sm text-headline-sm text-ink-primary mt-0.5 group-hover:text-secondary transition-colors">12 Practice Questions on Chemiosmosis</h4><p class="font-body-md text-body-md text-ink-secondary text-sm mt-0.5">Targeted reinforcement based on previous quiz diagnostic.</p></div></div><button class="sm:self-center flex-shrink-0 px-5 py-2.5 rounded-xl border border-border-subtle bg-surface hover:bg-canvas text-ink-primary font-label-md text-label-md transition-colors">Start Practice</button></div><div class="group bg-surface rounded-2xl border border-border-subtle p-5 md:p-6 transition-all hover:border-ink-muted flex flex-col sm:flex-row sm:items-center justify-between gap-4 diffused-card-shadow"><div class="flex items-start gap-4"><div class="w-10 h-10 rounded-xl bg-surface-container-low border border-border-subtle flex items-center justify-center text-ink-secondary flex-shrink-0 mt-0.5"><span class="material-symbols-outlined text-xl">history_edu</span></div><div><div class="flex items-center gap-2"><span class="font-label-micro text-label-micro text-ink-muted uppercase font-bold tracking-wider">Review</span><span class="text-ink-muted text-xs">• 5 min flash review</span></div><h4 class="font-headline-sm text-headline-sm text-ink-primary mt-0.5">Spaced Repetition: Photosystem II vs I</h4><p class="font-body-md text-body-md text-ink-secondary text-sm mt-0.5">Keep light-dependent photochemical reaction concepts warm.</p></div></div><button class="sm:self-center flex-shrink-0 px-5 py-2.5 rounded-xl border border-border-subtle bg-surface hover:bg-canvas text-ink-primary font-label-md text-label-md transition-colors">Quick Review</button></div></div></div>
+<!-- Right: Academic Cadence & Weekly Consistency (4 Columns) -->
+
+</section>
+<!-- SECTION 3: ENROLLED SUBJECTS & SCHOLAR TRACKS -->
+<section class="space-y-5">
+<div class="flex items-center justify-between">
+<div>
+<h3 class="font-headline-md text-headline-md text-ink-primary">Enrolled Subjects</h3>
+<p class="font-body-md text-body-md text-ink-secondary">Curriculum status across your active academic courses.</p>
+</div>
+<button class="font-label-md text-label-md text-primary hover:text-accent-hover font-semibold inline-flex items-center gap-1">
+<span class="">Manage Courses</span>
+<span class="material-symbols-outlined text-base">chevron_right</span>
+</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Subject Card 1: AP Biology -->
+<div class="bg-surface rounded-2xl border border-border-subtle p-6 diffused-card-shadow flex flex-col justify-between hover:border-ink-muted transition-colors">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="w-9 h-9 rounded-xl bg-surface-container-low border border-border-subtle flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-xl">biotech</span>
+</span>
+<span class="font-label-micro text-label-micro text-secondary font-bold uppercase">In Progress</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-ink-primary">AP Biology</h4>
+<p class="font-body-md text-body-md text-ink-secondary text-sm mt-1">
+                  8 of 12 chapters completed · Active topic: Cellular Respiration.
+                </p>
+</div>
+<!-- Progress bar -->
+<div class="space-y-1.5 pt-2">
+<div class="flex justify-between font-label-micro text-label-micro text-ink-muted">
+<span class="">Syllabus Completed</span>
+<span class="text-ink-primary font-medium">68%</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 68%;"></div>
+</div>
+</div>
+</div>
+<div class="pt-6 mt-4 border-t border-border-subtle flex items-center justify-between">
+<span class="font-label-micro text-label-micro text-ink-muted">Unit 4: Bioenergetics</span>
+<a class="font-label-md text-label-md text-ink-primary hover:text-primary font-medium inline-flex items-center gap-1" href="#biology">
+<span class="">Enter Subject</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Subject Card 2: AP Chemistry -->
+<div class="bg-surface rounded-2xl border border-border-subtle p-6 diffused-card-shadow flex flex-col justify-between hover:border-ink-muted transition-colors">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="w-9 h-9 rounded-xl bg-surface-container-low border border-border-subtle flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-xl">science</span>
+</span>
+<span class="font-label-micro text-label-micro text-ink-muted font-bold uppercase">Up Next</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-ink-primary">AP Chemistry</h4>
+<p class="font-body-md text-body-md text-ink-secondary text-sm mt-1">
+                  5 of 12 chapters completed · Next topic: Reaction Kinetics &amp; Rate Laws.
+                </p>
+</div>
+<!-- Progress bar -->
+<div class="space-y-1.5 pt-2">
+<div class="flex justify-between font-label-micro text-label-micro text-ink-muted">
+<span class="">Syllabus Completed</span>
+<span class="text-ink-primary font-medium">42%</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 42%;"></div>
+</div>
+</div>
+</div>
+<div class="pt-6 mt-4 border-t border-border-subtle flex items-center justify-between">
+<span class="font-label-micro text-label-micro text-ink-muted">Unit 5: Chemical Kinetics</span>
+<a class="font-label-md text-label-md text-ink-primary hover:text-primary font-medium inline-flex items-center gap-1" href="#chemistry">
+<span class="">Enter Subject</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Subject Card 3: Multivariable Calculus -->
+<div class="bg-surface rounded-2xl border border-border-subtle p-6 diffused-card-shadow flex flex-col justify-between hover:border-ink-muted transition-colors">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="w-9 h-9 rounded-xl bg-surface-container-low border border-border-subtle flex items-center justify-center text-ink-primary">
+<span class="material-symbols-outlined text-xl">functions</span>
+</span>
+<span class="font-label-micro text-label-micro text-ink-muted font-bold uppercase">On Track</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-ink-primary">Multivariable Calculus</h4>
+<p class="font-body-md text-body-md text-ink-secondary text-sm mt-1">
+                  6 of 11 modules done · Current: Directional Derivatives &amp; Gradients.
+                </p>
+</div>
+<!-- Progress bar -->
+<div class="space-y-1.5 pt-2">
+<div class="flex justify-between font-label-micro text-label-micro text-ink-muted">
+<span class="">Syllabus Completed</span>
+<span class="text-ink-primary font-medium">55%</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+<div class="h-full bg-ink-primary rounded-full" style="width: 55%;"></div>
+</div>
+</div>
+</div>
+<div class="pt-6 mt-4 border-t border-border-subtle flex items-center justify-between">
+<span class="font-label-micro text-label-micro text-ink-muted">Vector Calculus II</span>
+<a class="font-label-md text-label-md text-ink-primary hover:text-primary font-medium inline-flex items-center gap-1" href="#calculus">
+<span class="">Enter Subject</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 4: RECENT SESSION HISTORY & PRACTICE BENCHMARK -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-12">
+<!-- Recent Academic Activity (7 Columns) -->
+
+<!-- Deliberate Practice Quick Launcher (5 Columns) -->
+<div class="lg:col-span-5 bg-surface rounded-3xl border border-border-subtle p-7 md:p-8 diffused-card-shadow flex flex-col justify-between">
+<div class="space-y-5">
+<div class="flex items-center justify-between">
+<span class="font-label-micro text-label-micro text-ink-muted uppercase tracking-wider">Practice Diagnostic</span>
+<span class="material-symbols-outlined text-ink-muted text-xl">tune</span>
+</div>
+<div>
+<h4 class="font-headline-md text-headline-md text-ink-primary leading-tight">Deliberate Question Bank</h4>
+<p class="font-body-md text-body-md text-ink-secondary text-sm mt-1.5">
+                Target high-yield exam question types calibrated dynamically to your weaker diagnostic areas.
+              </p>
+</div>
+<!-- Subject Toggle Chips -->
+<div class="space-y-2 pt-1">
+<span class="font-label-micro text-label-micro text-ink-muted uppercase">Select Discipline</span>
+<div class="flex flex-wrap gap-2">
+<button class="px-3 py-1.5 rounded-lg bg-ink-primary text-white font-label-micro text-label-micro">AP Biology</button>
+<button class="px-3 py-1.5 rounded-lg border border-border-subtle bg-canvas hover:bg-surface text-ink-secondary font-label-micro text-label-micro">AP Chemistry</button>
+<button class="px-3 py-1.5 rounded-lg border border-border-subtle bg-canvas hover:bg-surface text-ink-secondary font-label-micro text-label-micro">Calculus</button>
+</div>
+</div>
+</div>
+<div class="pt-6 mt-6 border-t border-border-subtle">
+<button class="w-full flex items-center justify-center gap-2 border border-border-subtle bg-surface hover:bg-canvas text-ink-primary py-3 rounded-xl font-label-md text-label-md transition-all">
+<span class="material-symbols-outlined text-lg">edit_document</span>
+<span class="">Launch Custom 15-Question Set</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+<!-- Quiet Editorial Footer -->
+<footer class="border-t border-border-subtle bg-canvas px-6 md:px-10 py-8 text-center text-ink-muted font-label-micro text-label-micro max-w-7xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-lg">eco</span>
+<span class="">AI Tutor Scholar's Edition · Botanical Intelligence Design System</span>
+</div>
+<div>
+<span class="">Curriculum aligned with College Board AP® standards</span>
+</div>
+</footer>
+</div>
+<!-- ========================================================================= -->
+<!-- MODAL: LIVE AI TUTOR SOCRATIC DIALOGUE PREVIEW                            -->
+<!-- ========================================================================= -->
+<div class="fixed inset-0 z-50 bg-ink-primary/30 backdrop-blur-sm flex items-center justify-center p-4 hidden opacity-0 transition-opacity duration-200" id="liveModal">
+<div class="bg-surface rounded-3xl border border-border-subtle max-w-lg w-full p-8 diffused-card-shadow relative transform transition-transform scale-95" id="modalCard">
+<!-- Close button -->
+<button class="absolute top-6 right-6 p-2 rounded-full text-ink-muted hover:text-ink-primary hover:bg-canvas transition-colors" onclick="closeLiveModal()">
+<span class="material-symbols-outlined text-xl">close</span>
+</button>
+<!-- Modal Header -->
+<div class="space-y-3">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/10 border border-secondary/20 text-secondary font-label-micro text-label-micro">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="">Connecting to Neural Tutor Core</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-ink-primary leading-tight">
+          Ready to explore Cellular Energetics?
+        </h3>
+<p class="font-body-md text-body-md text-ink-secondary text-sm">
+          Your AI tutor has synthesized your last 3 practice questions on the electron transport chain. We will begin with how complex IV handles oxygen as the terminal electron acceptor.
+        </p>
+</div>
+<!-- Audio wave animation placeholder simulation -->
+<div class="my-6 p-6 rounded-2xl bg-canvas border border-border-subtle flex flex-col items-center justify-center space-y-3 text-center">
+<div class="flex items-center justify-center gap-1.5 h-10">
+<span class="w-1.5 h-4 bg-secondary rounded-full animate-bounce" style="animation-delay: 0.1s;"></span>
+<span class="w-1.5 h-8 bg-secondary rounded-full animate-bounce" style="animation-delay: 0.2s;"></span>
+<span class="w-1.5 h-10 bg-primary rounded-full animate-bounce" style="animation-delay: 0.3s;"></span>
+<span class="w-1.5 h-6 bg-secondary rounded-full animate-bounce" style="animation-delay: 0.4s;"></span>
+<span class="w-1.5 h-3 bg-secondary rounded-full animate-bounce" style="animation-delay: 0.5s;"></span>
+</div>
+<span class="font-label-micro text-label-micro text-ink-muted uppercase">Microphone calibrated &amp; clear</span>
+</div>
+<!-- Action buttons -->
+<div class="flex items-center gap-3 pt-2">
+<button class="flex-1 py-3 px-4 rounded-xl border border-border-subtle text-ink-primary font-label-md text-label-md hover:bg-canvas transition-colors" onclick="closeLiveModal()">
+          Cancel
+        </button>
+<button class="flex-1 py-3 px-4 rounded-xl bg-primary hover:bg-accent-hover text-on-primary font-label-md text-label-md transition-colors flex items-center justify-center gap-2 shadow-sm" id="startBtn" onclick="simulateSessionStart()">
+<span class="material-symbols-outlined text-lg">mic</span>
+<span class="">Begin Conversation</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Mobile Drawer Backdrop & Drawer -->
+<div class="fixed inset-0 bg-ink-primary/20 backdrop-blur-xs z-50 hidden" id="mobileDrawerBackdrop" onclick="toggleMobileNav()"></div>
+<aside class="fixed left-0 top-0 bottom-0 w-72 bg-canvas z-50 border-r border-border-subtle p-6 flex flex-col justify-between transform -translate-x-full transition-transform duration-300 md:hidden" id="mobileDrawer">
+<div class="space-y-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-2xl">eco</span>
+<span class="font-headline-md text-headline-md text-ink-primary">AI Tutor</span>
+</div>
+<button class="p-1 text-ink-muted hover:text-ink-primary" onclick="toggleMobileNav()">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<nav class="space-y-1">
+<a class="flex items-center gap-3 text-primary font-label-md text-label-md bg-surface-container-low/50 pl-3 py-2.5 rounded-lg border-l-2 border-primary" href="#dashboard">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">home</span>
+<span class="">Home</span>
+</a>
+<a class="flex items-center gap-3 text-ink-secondary font-label-md text-label-md pl-3 py-2.5 rounded-lg hover:text-ink-primary" href="#learn">
+<span class="material-symbols-outlined">auto_stories</span>
+<span class="">Learn</span>
+</a>
+<a class="flex items-center gap-3 text-ink-secondary font-label-md text-label-md pl-3 py-2.5 rounded-lg hover:text-ink-primary" href="#practice">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="">Practice</span>
+</a>
+<a class="flex items-center gap-3 text-ink-secondary font-label-md text-label-md pl-3 py-2.5 rounded-lg hover:text-ink-primary" href="#livetutor">
+<span class="material-symbols-outlined">psychology</span>
+<span class="">Live Tutor</span>
+</a>
+<a class="flex items-center gap-3 text-ink-secondary font-label-md text-label-md pl-3 py-2.5 rounded-lg hover:text-ink-primary" href="#progress">
+<span class="material-symbols-outlined">insights</span>
+<span class="">Progress</span>
+</a>
+</nav>
+</div>
+<div class="border-t border-border-subtle pt-4">
+<div class="flex items-center gap-3 p-2 bg-surface rounded-xl border border-border-subtle">
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Shaurya student profile thumbnail with crisp natural lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPfQG280rrJF8U0vvh5zYsWI0WAZMqOTj6adD8y2NyTrEaNhM3NpUvO31gTXrGU0Hr0555ZSGyL4jwuLPWh4iwBMVK7com5xRiPbcqnZcKSEpLhZChDlHELKoqb6qN3kq64RrlUNrF8ZI30gA5afsVIkB-OdrvdiKBW84Huz5q3dbfVg7lY9yt8LJj2Mj8Sp9aUSJRjSJqtJ9IWiCmT4v5ksm1vlB0vEumqnuEs6Y">
+</div>
+<div>
+<p class="font-label-md text-label-md text-ink-primary font-medium">Shaurya K.</p>
+<p class="font-label-micro text-label-micro text-ink-muted">Grade 11 Honors</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- ========================================================================= -->
+<!-- INLINE SCRIPTS (INTERACTIONS)                                             -->
+<!-- ========================================================================= -->
+<script>
+    function openLiveModal() {
+      const modal = document.getElementById('liveModal');
+      const card = document.getElementById('modalCard');
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        card.classList.remove('scale-95');
+        card.classList.add('scale-100');
+      }, 10);
+    }
+
+    function closeLiveModal() {
+      const modal = document.getElementById('liveModal');
+      const card = document.getElementById('modalCard');
+      modal.classList.add('opacity-0');
+      card.classList.remove('scale-100');
+      card.classList.add('scale-95');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 200);
+    }
+
+    function simulateSessionStart() {
+      const btn = document.getElementById('startBtn');
+      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-lg">sync</span> Connecting...';
+      btn.disabled = true;
+      setTimeout(() => {
+        btn.innerHTML = '<span class="material-symbols-outlined text-lg">check</span> Session Active';
+        btn.classList.remove('bg-primary');
+        btn.classList.add('bg-secondary');
+        setTimeout(() => {
+          closeLiveModal();
+          btn.innerHTML = '<span class="material-symbols-outlined text-lg">mic</span><span>Begin Conversation</span>';
+          btn.classList.remove('bg-secondary');
+          btn.classList.add('bg-primary');
+          btn.disabled = false;
+        }, 800);
+      }, 1200);
+    }
+
+    function toggleMobileNav() {
+      const drawer = document.getElementById('mobileDrawer');
+      const backdrop = document.getElementById('mobileDrawerBackdrop');
+      const isClosed = drawer.classList.contains('-translate-x-full');
+      
+      if (isClosed) {
+        backdrop.classList.remove('hidden');
+        drawer.classList.remove('-translate-x-full');
+      } else {
+        drawer.classList.add('-translate-x-full');
+        backdrop.classList.add('hidden');
+      }
+    }
+  </script>
+
+
+
+
+</body></html>

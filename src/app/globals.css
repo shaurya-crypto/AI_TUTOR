@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 44 33% 96%; /* #F8F6F0 */
+    --foreground: 120 2% 9%; /* #171817 */
+
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 120 2% 9%; /* #171817 */
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 120 2% 9%;
+
+    --primary: 11 58% 52%; /* #C85A43 Coral */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 142 16% 38%; /* #52715D Green */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 80 2% 47%; /* #7A7C75 */
+    --muted-foreground: 120 2% 9%;
+
+    --accent: 14 54% 92%; /* #F6E5DF Soft Coral */
+    --accent-foreground: 11 58% 52%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 50 16% 88%; /* #E5E3DB */
+    --input: 50 16% 88%;
+    --ring: 120 2% 9%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Botanical Pattern & Shadows from Botanical Intelligence Design System */
+.botanical-pattern {
+  background-image: radial-gradient(rgba(23, 24, 23, 0.04) 1px, transparent 1px),
+                    radial-gradient(rgba(82, 113, 93, 0.03) 1px, transparent 1px);
+  background-size: 36px 36px, 18px 18px;
+  background-position: 0 0, 9px 9px;
+}
+
+.diffused-card-shadow {
+  box-shadow: 0 20px 40px -15px rgba(23, 24, 23, 0.05);
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.material-symbols-outlined.fill-icon {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Excalidraw UI Chrome Suppression (Hide 3-lines menu, 3 dots, library, zoom controls) */
+.excalidraw .main-menu-trigger,
+.excalidraw .dropdown-menu-button,
+.excalidraw .dropdown-menu,
+.excalidraw .layer-ui__library,
+.excalidraw .help-icon,
+.excalidraw button[aria-label="Menu"],
+.excalidraw button[aria-label="Help"],
+.excalidraw button[aria-label="Open menu"],
+.excalidraw button[title*="Menu"],
+.excalidraw button[title*="Help"],
+.excalidraw button[aria-label*="Zoom"],
+.excalidraw button[title*="Zoom"],
+.excalidraw .App-menu__left,
+.excalidraw .App-toolbar,
+.excalidraw .footer-center,
+.excalidraw .footer-right,
+.excalidraw .zoom-actions,
+.excalidraw .zen-mode-transition,
+.excalidraw .undo-redo-buttons,
+.excalidraw .eraser-button,
+.excalidraw .library-button,
+.excalidraw .sidebar-trigger,
+.excalidraw .encrypted-icon,
+.excalidraw .collab-button,
+.excalidraw .ToolIcon__icon[aria-label="Menu"],
+.excalidraw .Island.App-menu__left,
+.excalidraw .App-bottom-bar,
+.excalidraw .welcome-screen-menu,
+.excalidraw .hint {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Clean Whiteboard Container Styling */
+.whiteboard-container .excalidraw {
+  border: none !important;
+  border-radius: 1rem !important;
+  background-color: #FFFFFF !important;
+}
+
