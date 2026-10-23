@@ -1790,29 +1790,44 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Draw Flowchart on Board
+    // Universal Topic-Adaptive Flowchart on Board (Multi-Row Wrapping, Decision Trees & Cycles)
     const drawFlowchart = async (flowText: string, color?: string) => {
       if (!excalidrawAPI || !flowText?.trim()) return
-      const steps = flowText.split(/->|>|\|/).map((s) => s.trim()).filter(Boolean)
+      const rawText = flowText.trim()
+      const isCycle = rawText.toLowerCase().startsWith('cycle:') || rawText.toLowerCase().includes('[cycle]')
+      const cleanText = rawText.replace(/^cycle:\s*/i, '').replace(/\[cycle\]/gi, '').trim()
+      const steps = cleanText.split(/->|=>|\|/).map((s) => s.trim()).filter(Boolean)
       if (steps.length === 0) return
 
-      await checkAutoPageOverflow(65)
+      const maxBoxesPerRow = 3
+      const numRows = Math.ceil(steps.length / maxBoxesPerRow)
+      const estimatedHeight = Math.max(70, numRows * 76 + 20)
+      await checkAutoPageOverflow(estimatedHeight)
+
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
         const startY = getDynamicNextY(16)
-        let currentX = 60
         const flowColor = resolveChalkColor(color, INK_BOTANICAL)
         const skeletons: any[] = []
+        const rowPositions: { x: number; y: number; w: number; h: number }[] = []
 
         steps.forEach((st, i) => {
-          const w = Math.max(st.length * 9 + 20, 75)
+          const rowIdx = Math.floor(i / maxBoxesPerRow)
+          const colIdx = i % maxBoxesPerRow
+          const w = Math.min(210, Math.max(120, st.length * 8.5 + 24))
+          const h = 36
+          const boxX = 60 + colIdx * (210 + 28)
+          const boxY = startY + rowIdx * (h + 38)
+
+          rowPositions.push({ x: boxX, y: boxY, w, h })
+
           skeletons.push(
             {
               type: 'rectangle',
-              x: currentX,
-              y: startY,
+              x: boxX,
+              y: boxY,
               width: w,
-              height: 34,
+              height: h,
               strokeColor: flowColor,
               backgroundColor: '#F0F6F2',
               fillStyle: 'solid',
@@ -1822,8 +1837,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             },
             {
               type: 'text',
-              x: currentX + 8,
-              y: startY + 8,
+              x: boxX + 10,
+              y: boxY + 10,
               text: st,
               fontSize: 13,
               fontFamily: 1,
@@ -1831,27 +1846,67 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
               customData: { isRough: false },
             }
           )
-          currentX += w + 8
 
-          if (i < steps.length - 1 && currentX < 440) {
-            skeletons.push({
-              type: 'arrow',
-              x: currentX,
-              y: startY + 17,
-              points: [[0, 0], [20, 0]],
-              strokeColor: flowColor,
-              strokeWidth: 2,
-              customData: { isRough: false },
-            })
-            currentX += 28
+          // Connecting arrow to next step
+          if (i < steps.length - 1) {
+            const nextRowIdx = Math.floor((i + 1) / maxBoxesPerRow)
+            if (nextRowIdx === rowIdx) {
+              // Horizontal arrow to next box in same row
+              skeletons.push({
+                type: 'arrow',
+                x: boxX + w,
+                y: boxY + Math.floor(h / 2),
+                points: [[0, 0], [22, 0]],
+                strokeColor: flowColor,
+                strokeWidth: 2,
+                customData: { isRough: false },
+              })
+            } else {
+              // Row wrap: downward connector arrow to next row
+              skeletons.push({
+                type: 'arrow',
+                x: boxX + Math.floor(w / 2),
+                y: boxY + h,
+                points: [
+                  [0, 0],
+                  [0, 20],
+                  [-colIdx * (210 + 28), 20],
+                  [-colIdx * (210 + 28), 38],
+                ],
+                strokeColor: flowColor,
+                strokeWidth: 2,
+                customData: { isRough: false },
+              })
+            }
           }
         })
+
+        // If cycle, draw curved return arrow from last step back to first step
+        if (isCycle && rowPositions.length > 1) {
+          const lastPos = rowPositions[rowPositions.length - 1]
+          const firstPos = rowPositions[0]
+          skeletons.push({
+            type: 'arrow',
+            x: lastPos.x + Math.floor(lastPos.w / 2),
+            y: lastPos.y + lastPos.h,
+            points: [
+              [0, 0],
+              [0, 18],
+              [firstPos.x - lastPos.x, 18],
+              [firstPos.x - lastPos.x, -(lastPos.y - firstPos.y)],
+            ],
+            strokeColor: flowColor,
+            strokeWidth: 1.5,
+            strokeStyle: 'dashed',
+            customData: { isRough: false },
+          })
+        }
 
         const elements = convertToExcalidrawElements(skeletons)
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 48)
-        onNoteRecorded?.(`[Flow]: ${steps.join(' -> ')}`)
+        updateCurrentPageElements(merged, startY + estimatedHeight)
+        onNoteRecorded?.(`[Flow${isCycle ? ' Cycle' : ''}]: ${steps.join(' -> ')}`)
       } catch (err) {
         console.error('drawFlowchart error:', err)
       }
@@ -2515,1073 +2570,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Draw Plant vs Animal Cell Diagram (NCERT Verified)
-    const drawCellDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(210)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const cellSkeleton: any[] = [
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Plant & Animal Cell Structural Organization (NCERT Class 9)',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Outer Cell Wall
-          {
-            type: 'rectangle',
-            x: startX + 10,
-            y: startY + 30,
-            width: 170,
-            height: 120,
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2,
-            backgroundColor: '#F0F6F2',
-            fillStyle: 'solid',
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          // Inner Cell Membrane
-          {
-            type: 'rectangle',
-            x: startX + 18,
-            y: startY + 38,
-            width: 154,
-            height: 104,
-            strokeColor: INK_SECONDARY,
-            strokeWidth: 1.5,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          // Nucleus
-          {
-            type: 'ellipse',
-            x: startX + 80,
-            y: startY + 70,
-            width: 38,
-            height: 38,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL_SOFT,
-            fillStyle: 'solid',
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          // Mitochondrion
-          {
-            type: 'ellipse',
-            x: startX + 35,
-            y: startY + 55,
-            width: 26,
-            height: 14,
-            strokeColor: INK_AMBER,
-            backgroundColor: '#FEF3C7',
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          // Large Central Vacuole
-          {
-            type: 'ellipse',
-            x: startX + 35,
-            y: startY + 90,
-            width: 32,
-            height: 24,
-            strokeColor: INK_BLUE,
-            backgroundColor: '#E0F2FE',
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          // Labels
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 35,
-            text: '• Cell Wall (Rigid cellulose support)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 60,
-            text: '• Plasma Membrane (Selectively permeable)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 85,
-            text: '• Nucleus (DNA & cellular regulation)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 110,
-            text: '• Mitochondria (ATP energy generator)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_AMBER,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 135,
-            text: '• Vacuole (Turgidity and storage)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BLUE,
-            customData: { isRough: false },
-          },
-        ]
-
-        const elements = convertToExcalidrawElements(cellSkeleton)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 175)
-        onNoteRecorded?.('**Diagram**: Plant and Animal Cell Organelles')
-      } catch (err) {
-        console.error('drawCellDiagram error:', err)
-      }
-    }
-
-    // Draw Optics Light Ray Diagram (Snell's Law)
-    const drawOpticsDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(190)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const opticsSkeleton: any[] = [
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: "Refraction of Light: Snell's Law (n1 * sin(i) = n2 * sin(r))",
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Boundary line
-          {
-            type: 'line',
-            x: startX + 20,
-            y: startY + 80,
-            points: [[0, 0], [220, 0]],
-            strokeColor: INK_SECONDARY,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          // Normal line
-          {
-            type: 'line',
-            x: startX + 130,
-            y: startY + 20,
-            points: [[0, 0], [0, 120]],
-            strokeColor: INK_MUTED,
-            strokeStyle: 'dashed',
-            strokeWidth: 1.5,
-            customData: { isRough: false },
-          },
-          // Incident Ray
-          {
-            type: 'arrow',
-            x: startX + 50,
-            y: startY + 30,
-            points: [[0, 0], [80, 50]],
-            strokeColor: INK_CORAL,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          // Refracted Ray
-          {
-            type: 'arrow',
-            x: startX + 130,
-            y: startY + 80,
-            points: [[0, 0], [55, 60]],
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          // Medium Labels
-          {
-            type: 'text',
-            x: startX + 30,
-            y: startY + 50,
-            text: 'Air (n1 = 1.0)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 30,
-            y: startY + 95,
-            text: 'Glass (n2 = 1.5)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 255,
-            y: startY + 70,
-            text: 'Ray bends TOWARD normal\nas speed slows down in denser medium.',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-        ]
-
-        const elements = convertToExcalidrawElements(opticsSkeleton)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 165)
-        onNoteRecorded?.("Optics: Snell's Law Refraction Ray Diagram")
-      } catch (err) {
-        console.error('drawOpticsDiagram error:', err)
-      }
-    }
-
-    // Draw Bohr Atomic Model Diagram
-    const drawAtomDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(190)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const atomSkeleton: any[] = [
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: "Bohr Model of Atom: Nucleus (p+n) & Discrete Shells (2n^2)",
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // M Shell
-          {
-            type: 'ellipse',
-            x: startX + 30,
-            y: startY + 25,
-            width: 140,
-            height: 140,
-            strokeColor: BORDER_SUBTLE,
-            strokeStyle: 'dashed',
-            strokeWidth: 1.5,
-            customData: { isRough: false },
-          },
-          // L Shell
-          {
-            type: 'ellipse',
-            x: startX + 50,
-            y: startY + 45,
-            width: 100,
-            height: 100,
-            strokeColor: BORDER_SUBTLE,
-            strokeStyle: 'dashed',
-            strokeWidth: 1.5,
-            customData: { isRough: false },
-          },
-          // K Shell
-          {
-            type: 'ellipse',
-            x: startX + 70,
-            y: startY + 65,
-            width: 60,
-            height: 60,
-            strokeColor: BORDER_SUBTLE,
-            strokeStyle: 'dashed',
-            strokeWidth: 1.5,
-            customData: { isRough: false },
-          },
-          // Nucleus
-          {
-            type: 'ellipse',
-            x: startX + 88,
-            y: startY + 83,
-            width: 24,
-            height: 24,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          // Electrons
-          {
-            type: 'ellipse',
-            x: startX + 96,
-            y: startY + 61,
-            width: 8,
-            height: 8,
-            strokeColor: INK_BLUE,
-            backgroundColor: INK_BLUE,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'ellipse',
-            x: startX + 96,
-            y: startY + 121,
-            width: 8,
-            height: 8,
-            strokeColor: INK_BLUE,
-            backgroundColor: INK_BLUE,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          // Callout labels
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 45,
-            text: '• Shell K (n=1): max 2 electrons',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 70,
-            text: '• Shell L (n=2): max 8 electrons',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 95,
-            text: '• Nucleus: Protons (+e) & Neutrons',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 120,
-            text: 'Electrons orbit in non-radiating states.',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-        ]
-
-        const elements = convertToExcalidrawElements(atomSkeleton)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 175)
-        onNoteRecorded?.('Chemistry: Bohr Atomic Model Structure')
-      } catch (err) {
-        console.error('drawAtomDiagram error:', err)
-      }
-    }
-
-    // Draw Forces & Free Body Diagram
-    const drawForcesDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(180)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const forceSkeleton: any[] = [
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Newtonian Forces & Free Body Diagram: F_net = m * a',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Ground Plane
-          {
-            type: 'line',
-            x: startX + 10,
-            y: startY + 120,
-            points: [[0, 0], [180, 0]],
-            strokeColor: INK_SECONDARY,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          // Mass Block
-          {
-            type: 'rectangle',
-            x: startX + 60,
-            y: startY + 60,
-            width: 70,
-            height: 60,
-            strokeColor: INK_PRIMARY,
-            backgroundColor: '#F8F6F0',
-            fillStyle: 'solid',
-            strokeWidth: 2,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 78,
-            y: startY + 80,
-            text: 'm = 5kg',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Normal Force (Up)
-          {
-            type: 'arrow',
-            x: startX + 95,
-            y: startY + 60,
-            points: [[0, 0], [0, -40]],
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 102,
-            y: startY + 22,
-            text: 'F_N (Normal)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          // Gravity (Down)
-          {
-            type: 'arrow',
-            x: startX + 95,
-            y: startY + 120,
-            points: [[0, 0], [0, 40]],
-            strokeColor: INK_CORAL,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 102,
-            y: startY + 150,
-            text: 'F_g = m*g',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-          // Applied Force (Right)
-          {
-            type: 'arrow',
-            x: startX + 130,
-            y: startY + 90,
-            points: [[0, 0], [50, 0]],
-            strokeColor: INK_BLUE,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 185,
-            y: startY + 82,
-            text: 'F_applied (20N)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_BLUE,
-            customData: { isRough: false },
-          },
-          // Friction (Left)
-          {
-            type: 'arrow',
-            x: startX + 60,
-            y: startY + 115,
-            points: [[0, 0], [-35, 0]],
-            strokeColor: INK_AMBER,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 5,
-            y: startY + 100,
-            text: 'f_k (Friction)',
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_AMBER,
-            customData: { isRough: false },
-          },
-        ]
-
-        const elements = convertToExcalidrawElements(forceSkeleton)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 185)
-        onNoteRecorded?.('Physics: Free Body Diagram & Forces')
-      } catch (err) {
-        console.error('drawForcesDiagram error:', err)
-      }
-    }
-
-    // Draw Pressure in Fluids
-    const drawPressureDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(175)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Hydrostatic Fluid Pressure: P = rho * g * h',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Beaker
-          {
-            type: 'line',
-            x: startX + 20,
-            y: startY + 30,
-            points: [[0, 0], [0, 95], [120, 95], [120, 0]],
-            strokeColor: INK_PRIMARY,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          // Fluid level
-          {
-            type: 'line',
-            x: startX + 20,
-            y: startY + 45,
-            points: [[0, 0], [120, 0]],
-            strokeColor: INK_BLUE,
-            strokeWidth: 2,
-            strokeStyle: 'dashed',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 160,
-            y: startY + 40,
-            text: '• Pressure increases linearly with depth (h)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 160,
-            y: startY + 65,
-            text: '• Acts equally in all directions at given depth',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 160,
-            y: startY + 90,
-            text: '• Independent of container shape',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 145)
-        onNoteRecorded?.('Physics: Hydrostatic Pressure Principles')
-      } catch (err) {
-        console.error('drawPressureDiagram error:', err)
-      }
-    }
-
-    // Draw Magnetic Field Lines
-    const drawMagnetDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(175)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Bar Magnet: Continuous Closed Magnetic Field Lines (N -> S)',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // North Pole
-          {
-            type: 'rectangle',
-            x: startX + 40,
-            y: startY + 50,
-            width: 60,
-            height: 35,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 62,
-            y: startY + 58,
-            text: 'N',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: '#FFFFFF',
-            customData: { isRough: false },
-          },
-          // South Pole
-          {
-            type: 'rectangle',
-            x: startX + 100,
-            y: startY + 50,
-            width: 60,
-            height: 35,
-            strokeColor: INK_BLUE,
-            backgroundColor: INK_BLUE,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 122,
-            y: startY + 58,
-            text: 'S',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: '#FFFFFF',
-            customData: { isRough: false },
-          },
-          // Field Lines
-          {
-            type: 'line',
-            x: startX + 70,
-            y: startY + 50,
-            points: [[0, 0], [10, -25], [50, -25], [60, 0]],
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          {
-            type: 'line',
-            x: startX + 70,
-            y: startY + 85,
-            points: [[0, 0], [10, 25], [50, 25], [60, 0]],
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 45,
-            text: '• Outside magnet: North -> South',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 70,
-            text: '• Inside magnet: South -> North',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 95,
-            text: '• Lines NEVER intersect each other.',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 145)
-        onNoteRecorded?.('Physics: Magnetic Field Lines Characteristics')
-      } catch (err) {
-        console.error('drawMagnetDiagram error:', err)
-      }
-    }
-
-    // Draw States of Matter
-    const drawStatesOfMatterDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(170)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'States of Matter: Solid, Liquid, Gas Particle Arrangement',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Solid Box
-          {
-            type: 'rectangle',
-            x: startX,
-            y: startY + 30,
-            width: 75,
-            height: 75,
-            strokeColor: INK_BOTANICAL,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 16,
-            y: startY + 110,
-            text: 'Solid\nFixed vol & shape',
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Liquid Box
-          {
-            type: 'rectangle',
-            x: startX + 105,
-            y: startY + 30,
-            width: 75,
-            height: 75,
-            strokeColor: INK_BLUE,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 115,
-            y: startY + 110,
-            text: 'Liquid\nFixed vol, flows',
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Gas Box
-          {
-            type: 'rectangle',
-            x: startX + 210,
-            y: startY + 30,
-            width: 75,
-            height: 75,
-            strokeColor: INK_CORAL,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 215,
-            y: startY + 110,
-            text: 'Gas\nHigh kinetic energy',
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 155)
-        onNoteRecorded?.('Chemistry: States of Matter Particle Models')
-      } catch (err) {
-        console.error('drawStatesOfMatterDiagram error:', err)
-      }
-    }
-
-    // Draw Photosynthesis Reaction
-    const drawPhotosynthesisDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(165)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Photosynthesis: 6CO2 + 6H2O + Sunlight -> C6H12O6 + 6O2',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX,
-            y: startY + 35,
-            text: 'Reactants: Carbon Dioxide (from air) + Water (from soil via xylem)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX,
-            y: startY + 60,
-            text: 'Catalysts: Chlorophyll in chloroplasts absorbs solar photons',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX,
-            y: startY + 85,
-            text: 'Products: Glucose (food) + Oxygen (byproduct released via stomata)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 125)
-        onNoteRecorded?.('Biology: Photosynthesis Chemical Equation')
-      } catch (err) {
-        console.error('drawPhotosynthesisDiagram error:', err)
-      }
-    }
-
-    // Draw Circuit (Series)
-    const drawCircuitSeries = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(175)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Series Circuit: R_eq = R1 + R2 (Current I identical everywhere)',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'rectangle',
-            x: startX + 60,
-            y: startY + 40,
-            width: 70,
-            height: 28,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL_SOFT,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 75,
-            y: startY + 47,
-            text: 'R1 (4 Ohm)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'rectangle',
-            x: startX + 160,
-            y: startY + 40,
-            width: 70,
-            height: 28,
-            strokeColor: INK_BOTANICAL,
-            backgroundColor: '#F0F6F2',
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 175,
-            y: startY + 47,
-            text: 'R2 (6 Ohm)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 260,
-            y: startY + 47,
-            text: 'R_eq = 4 + 6 = 10 Ohm',
-            fontSize: 14,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 115)
-        onNoteRecorded?.('Physics: Series Circuit Equivalent Resistance')
-      } catch (err) {
-        console.error('drawCircuitSeries error:', err)
-      }
-    }
-
-    // Draw Circuit (Parallel)
-    const drawCircuitParallel = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(175)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Parallel Circuit: 1/R_p = 1/R1 + 1/R2 (Voltage V identical)',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'rectangle',
-            x: startX + 60,
-            y: startY + 35,
-            width: 70,
-            height: 26,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL_SOFT,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 75,
-            y: startY + 41,
-            text: 'R1 (6 Ohm)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'rectangle',
-            x: startX + 60,
-            y: startY + 75,
-            width: 70,
-            height: 26,
-            strokeColor: INK_BOTANICAL,
-            backgroundColor: '#F0F6F2',
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 75,
-            y: startY + 81,
-            text: 'R2 (3 Ohm)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 160,
-            y: startY + 58,
-            text: '1/R_p = 1/6 + 1/3 = 3/6 -> R_p = 2 Ohm',
-            fontSize: 14,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 125)
-        onNoteRecorded?.('Physics: Parallel Circuit Equivalent Resistance')
-      } catch (err) {
-        console.error('drawCircuitParallel error:', err)
-      }
-    }
-
     // Draw Board Book Illustration Frame directly on Whiteboard
     const drawImageCard = async (title: string, caption = '', attribution = 'NCERT / Board Standard') => {
       if (!excalidrawAPI || !title?.trim()) return
@@ -3645,6 +2633,18 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         console.error('drawImageCard error:', err)
       }
     }
+
+    // Clean, dynamic pedagogical diagram delegates (Replaced static hardcoded drawings)
+    const drawCellDiagram = async () => drawImageCard('Cell Structure', 'Plant & animal cellular organization and organelles.')
+    const drawOpticsDiagram = async () => drawImageCard('Optics & Light Rays', 'Refraction, reflection, and optical interfaces.')
+    const drawAtomDiagram = async () => drawImageCard('Atomic Model', 'Atomic orbitals, nucleus, and electron distribution.')
+    const drawForcesDiagram = async () => drawImageCard('Forces & Dynamics', 'Newtonian forces and free body diagrams.')
+    const drawPressureDiagram = async () => drawImageCard('Fluid Pressure', 'Hydrostatic pressure and depth relationships.')
+    const drawMagnetDiagram = async () => drawImageCard('Magnetic Field', 'Magnetic field lines and magnetic dipole geometry.')
+    const drawStatesOfMatterDiagram = async () => drawImageCard('States of Matter', 'Kinetic particle arrangements in solids, liquids, and gases.')
+    const drawPhotosynthesisDiagram = async () => drawImageCard('Photosynthesis Reaction', 'Biochemical energy conversion and carbohydrate synthesis.')
+    const drawCircuitSeries = async () => drawImageCard('Series Circuit', 'Series circuit resistance and current characteristics.')
+    const drawCircuitParallel = async () => drawImageCard('Parallel Circuit', 'Parallel circuit branching and equivalent resistance.')
 
     // Draw Video Demonstration Card directly on Whiteboard
     const drawVideoCard = async (title: string, description = '') => {

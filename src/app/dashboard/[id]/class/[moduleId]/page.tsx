@@ -22,6 +22,7 @@ const WhiteboardWorkspace = dynamicImport(
 )
 import { VisualizationSceneType } from '@/components/whiteboard/scenes/sceneTypes'
 import { resolveSceneType, parseSceneParams } from '@/components/whiteboard/scenes/sceneRegistry'
+import type { MafsGraphCanvasProps } from '@/components/whiteboard/MafsGraphCanvas'
 import { VisualLessonManifest, LessonStep } from '@/types/lessonManifest'
 import {
   generateVisualLessonPlanForCapsule,
@@ -193,6 +194,9 @@ export default function ModuleClassroomPage() {
   // Verdict review barrier: locks whiteboard on current page until student confirms understanding
   const isReviewingVerdictRef = useRef<boolean>(false)
   const [isReviewingVerdict, setIsReviewingVerdict] = useState<boolean>(false)
+
+  // Mafs.dev high-precision dynamic mathematical & scientific graph state
+  const [activeGraph, setActiveGraph] = useState<MafsGraphCanvasProps | null>(null)
 
   const handleStudentSubmitAnswer = (answer: string) => {
     if (!answer?.trim()) return
@@ -1494,7 +1498,33 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           else if (action === 'draw_flowchart') chalkboardRef.current.drawFlowchart(content, color)
           else if (action === 'draw_table' || action === 'table') chalkboardRef.current.drawTable?.(content)
           else if (action === 'draw_geometry' || action === 'geometry') chalkboardRef.current.drawGeometry?.(content)
-          else if (action === 'draw_graph' || action === 'graph') chalkboardRef.current.drawGraph(content)
+          else if (action === 'draw_graph' || action === 'graph') {
+            chalkboardRef.current.drawGraph(content)
+            const pipeParts = (content || '').split('|').map((s: string) => s.trim())
+            let formula = ''
+            let domain: [number, number] = [-5, 5]
+            let range: [number, number] = [-5, 5]
+            let title = 'Graph'
+            let callout = ''
+            let points = ''
+            pipeParts.forEach((p: string) => {
+              if (p.startsWith('formula=')) formula = p.substring(8).trim()
+              else if (p.startsWith('title=')) title = p.substring(6).trim()
+              else if (p.startsWith('callout=')) callout = p.substring(8).trim()
+              else if (p.startsWith('points=')) points = p.substring(7).trim()
+              else if (p.startsWith('domain=')) {
+                const m = p.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
+                if (m) domain = [parseFloat(m[1]), parseFloat(m[2])]
+              } else if (p.startsWith('range=')) {
+                const m = p.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
+                if (m) range = [parseFloat(m[1]), parseFloat(m[2])]
+              } else if (!formula && (p.includes('x') || p.includes('^') || p.includes('sin') || p.includes('cos'))) {
+                formula = p
+              }
+            })
+            if (!formula) formula = pipeParts[0] || 'x^2 - 4'
+            setActiveGraph({ formula, domain, range, title, callout, points })
+          }
           else if (action === 'draw_numerical' || action === 'numerical' || action === 'worked_example' || action === 'solve') {
             if (typeof content === 'object') chalkboardRef.current.drawNumericalSolution?.(content)
             else chalkboardRef.current.handleAiDirective(`[NUMERICAL: ${content}]`)
@@ -2099,6 +2129,8 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             activeSceneParams={activeSceneParams}
             activeSceneTitle={activeSceneTitle}
             onCloseScene={() => setActiveSceneType(null)}
+            activeGraph={activeGraph}
+            onCloseGraph={() => setActiveGraph(null)}
             lessonManifest={lessonManifest}
             initialStepIndex={activeVisualStepIndex}
             onStepChange={(stepIdx) => setActiveVisualStepIndex(stepIdx)}

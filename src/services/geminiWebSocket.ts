@@ -90,18 +90,7 @@ export class GeminiLiveClient {
       }
     }
 
-    // 3. Match show_educational_media(...)
-    const mediaRegex = /show_educational_media\s*\(\s*(?:mediaType\s*=\s*)?["']?([a-zA-Z0-9_\-]+)["']?\s*(?:,\s*(?:title\s*=\s*)?["']([^"']*)["'])?(?:,\s*(?:caption\s*=\s*)?["']([^"']*)["'])?(?:,\s*(?:attribution\s*=\s*)?["']([^"']*)["'])?\s*\)/gi;
-    let mm;
-    while ((mm = mediaRegex.exec(rawText)) !== null) {
-      const mediaType = mm[1]?.trim() || "image";
-      const title = mm[2]?.trim() || "";
-      const caption = mm[3]?.trim() || "";
-      const attribution = mm[4]?.trim() || "";
-      this.handleSingleToolCall("show_educational_media", { mediaType, title, caption, attribution });
-    }
-
-    // 3b. Match draw_shape(...)
+    // 3. Match draw_shape(...)
     const shapeRegex = /draw_shape\s*\(\s*([^()]+)\)/gi;
     let sm;
     while ((sm = shapeRegex.exec(rawText)) !== null) {
@@ -120,7 +109,6 @@ export class GeminiLiveClient {
     return rawText
       .replace(stripCall("write_chalkboard"), "")
       .replace(stripCall("execute_visual_action"), "")
-      .replace(stripCall("show_educational_media"), "")
       .replace(stripCall("plot_mathematical_graph"), "")
       .replace(stripCall("open_interactive_simulation"), "")
       .replace(stripCall("update_interactive_simulation"), "")
@@ -173,12 +161,6 @@ export class GeminiLiveClient {
       this.callbacks.onVisualAction?.("UPDATE_SCENE", { title, ...parameters });
     } else if (name === "draw_shape") {
       this.callbacks.onChalkboardToolCall?.("draw_shape", args, args.color);
-    } else if (name === "show_educational_media") {
-      if (args.mediaType === "video") {
-        this.callbacks.onChalkboardToolCall?.("draw_video", `${args.title || "Demonstration"} | ${args.caption || ""}`);
-      } else {
-        this.callbacks.onChalkboardToolCall?.("draw_image", `${args.title || "Diagram"} | ${args.caption || ""} | ${args.attribution || "NCERT / Board Standard"}`);
-      }
     } else if (name === "solve_step_by_step_numerical") {
       this.callbacks.onChalkboardToolCall?.("draw_numerical", args);
     } else if (name === "conclude_and_open_quiz") {
@@ -234,56 +216,16 @@ export class GeminiLiveClient {
                         "draw_note",
                         "draw_step",
                         "draw_highlight_box",
-                        "draw_rough_work",
-                        "clear_rough",
-                        "clear_notes",
-                        "clear_board",
-                        "erase_board",
-                        "new_page",
                         "draw_question",
-                        "draw_flowchart",
-                        "draw_table",
-                        "draw_geometry",
-                        "draw_numerical",
-                        "draw_graph",
-                        "draw_image",
-                        "draw_video",
-                        "draw_diagram",
-                        "draw_cell",
-                        "draw_atom",
-                        "draw_optics",
-                        "draw_forces",
-                        "draw_magnet",
-                        "draw_pressure",
-                        "draw_matter",
-                        "draw_photosynthesis",
-                        "draw_circuit",
-                        "draw_circuit_series",
-                        "draw_circuit_parallel",
-                        "rewrite_notes",
-                        "start_quiz",
-                        "open_quiz",
-                        "chapter_summary",
-                        "concept_focus",
-                        "concept_done",
-                        "concept_goto",
-                        "worked_example",
-                        "draw_shape",
                         "draw_student_answer",
                         "draw_answer_verdict",
                         "draw_exam_question",
-                        "draw_rectangle",
-                        "draw_circle",
-                        "draw_triangle",
-                        "table",
-                        "geometry",
-                        "graph",
-                        "diagram",
-                        "image",
-                        "video",
-                        "set_color",
+                        "draw_flowchart",
+                        "draw_table",
+                        "draw_rough_work",
+                        "new_page",
                       ],
-                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_shape, new_page, concept_focus, concept_done)",
+                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_flowchart, draw_table, draw_rough_work, new_page)",
                     },
                     content: {
                       type: Type.STRING,
@@ -442,7 +384,7 @@ export class GeminiLiveClient {
               },
               {
                 name: "open_interactive_simulation",
-                description: "Summon an interactive 3D WebGL physics, chemistry, biology, or math simulation container directly on the whiteboard stage with full control over title, values, and parameters.",
+                description: "Summon an interactive 3D WebGL geometry solid or cross-section model directly on the whiteboard stage with full control over title, shape, and dimensions.",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -450,33 +392,18 @@ export class GeminiLiveClient {
                     sceneType: {
                       type: Type.STRING,
                       enum: [
-                        "circuits",
-                        "forces",
-                        "optics",
-                        "matter",
-                        "waves",
-                        "geometry",
-                        "linear_graph",
-                        "3d_vectors",
-                        "bohr_atom",
-                        "circuits_interactive",
-                        "physics_forces",
-                        "optics_refraction",
-                        "wave_harmonics",
-                        "states_of_matter",
-                        "coordinate_geometry",
                         "geometry_3d",
                         "geometry_cross_section",
                       ],
-                      description: "The 3D interactive simulation scene to open",
+                      description: "The 3D geometric simulation scene to open ('geometry_3d' for 3D solids or 'geometry_cross_section' for cutting plane slices)",
                     },
                     title: {
                       type: Type.STRING,
-                      description: "Custom title for the 3D model simulation (e.g. 'Parallel Circuit: 12V Battery', 'Bohr Atom: Carbon Shell Model')",
+                      description: "Custom title for the 3D model simulation",
                     },
                     parameters: {
                       type: Type.OBJECT,
-                      description: "Dynamic simulation parameters and values (e.g. { voltage: 12, circuitType: 'parallel', r1: 6, r2: 12, mass: 10, temperature: 400, shape: 'cylinder', radius: 4, height: 8 })",
+                      description: "Dynamic simulation parameters and values (e.g. { shape: 'cylinder', radius: 4, height: 8 })",
                     },
                   },
                   required: ["sceneType"],
@@ -484,7 +411,7 @@ export class GeminiLiveClient {
               },
               {
                 name: "update_interactive_simulation",
-                description: "Update values, variables, sliders, or title of the currently active 3D simulation scene in real time (e.g. adjust voltage, change solid shape, alter temperature, update angle).",
+                description: "Update values, variables, sliders, or title of the currently active 3D simulation scene in real time (e.g. adjust shape, change radius or height, alter slice angle).",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -498,34 +425,6 @@ export class GeminiLiveClient {
                       description: "Updated parameters and values to apply to the 3D model",
                     },
                   },
-                },
-              },
-              {
-                name: "show_educational_media",
-                description: "Display an authentic textbook illustration card or educational video demonstration card on the whiteboard.",
-                behavior: Behavior.NON_BLOCKING,
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: {
-                    mediaType: {
-                      type: Type.STRING,
-                      enum: ["image", "video"],
-                      description: "Whether to display an illustration card ('image') or a practical demonstration card ('video')",
-                    },
-                    title: {
-                      type: Type.STRING,
-                      description: "Title of the diagram, figure, or video demonstration",
-                    },
-                    caption: {
-                      type: Type.STRING,
-                      description: "Concise educational caption explaining the figure",
-                    },
-                    attribution: {
-                      type: Type.STRING,
-                      description: "Textbook source, e.g. 'NCERT / CBSE Standard' or 'Selina ICSE'",
-                    },
-                  },
-                  required: ["mediaType", "title"],
                 },
               },
               {

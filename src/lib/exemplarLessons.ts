@@ -196,19 +196,18 @@ export const OHMS_LAW_COMPLETE_LESSON: VisualLessonManifest = {
       assetStatus: 'ready',
       content: {
         scene3D: {
-          sceneType: 'circuits_interactive',
-          title: '3D Electron Drift & Circuit Laboratory',
+          sceneType: 'geometry_3d',
+          title: '3D Conductor Geometry: R = rho * (L / A)',
           initialParams: {
-            circuitType: 'series',
-            voltage: 12,
-            resistor1: 4,
-            resistor2: 2,
+            shape: 'cylinder',
+            dimension1: 5,
+            dimension2: 2,
           },
         },
       },
       boardDirective: {
         action: 'draw_step',
-        content: '3D Simulation: Interactive Series Circuit with Drifting Charges',
+        content: 'Resistance depends on geometry: R = rho * (L / A). Double length -> double resistance.',
       },
       estimatedSeconds: 150,
     },

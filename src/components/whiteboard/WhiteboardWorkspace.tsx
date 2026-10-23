@@ -4,6 +4,7 @@ import React, { forwardRef, useState, useEffect } from 'react'
 import { GreenChalkboard, GreenChalkboardRef, WritingPositionInfo } from './GreenChalkboard'
 import { SobiCompanion } from './SobiCompanion'
 import { VisualizationViewport } from './VisualizationViewport'
+import { MafsGraphCanvas, MafsGraphCanvasProps } from './MafsGraphCanvas'
 import { VisualizationSceneType } from './scenes/sceneTypes'
 import { resolveSceneType } from './scenes/sceneRegistry'
 import { MultimediaLessonPlayer } from '@/components/multimedia/MultimediaLessonPlayer'
@@ -49,6 +50,8 @@ export interface WhiteboardWorkspaceProps {
   isListening?: boolean
   onSubmitStudentAnswer?: (answer: string) => void
   onVoiceStudentAnswer?: (answer: string) => void
+  activeGraph?: MafsGraphCanvasProps | null
+  onCloseGraph?: () => void
 }
 
 export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWorkspaceProps>(
@@ -82,6 +85,8 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       isListening = true,
       onSubmitStudentAnswer,
       onVoiceStudentAnswer,
+      activeGraph = null,
+      onCloseGraph,
     },
     ref
   ) => {
@@ -342,6 +347,21 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
                     onClose={onCloseScene}
                   />
                 </div>
+              </div>
+            )}
+
+            {/* In-Whiteboard Dynamic Mafs Vector Graphing Canvas */}
+            {activeGraph && (
+              <div className="absolute top-14 right-4 z-30 w-[92vw] max-w-[480px] shadow-[0_20px_50px_rgba(0,0,0,0.35)] animate-in fade-in slide-in-from-top-4 duration-300">
+                <MafsGraphCanvas
+                  formula={activeGraph.formula}
+                  domain={activeGraph.domain}
+                  range={activeGraph.range}
+                  title={activeGraph.title}
+                  callout={activeGraph.callout}
+                  points={activeGraph.points}
+                  onClose={onCloseGraph}
+                />
               </div>
             )}
 
