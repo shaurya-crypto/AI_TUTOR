@@ -759,6 +759,16 @@ export default function ModuleClassroomPage() {
         directive.chalkboardContent
       ) {
         chalkboardRef.current.handleAiDirective(`[NUMERICAL: ${directive.chalkboardContent}]`)
+      } else if (
+        (directive.chalkboardAction === 'render_svg_diagram' || directive.chalkboardAction === 'draw_svg') &&
+        directive.chalkboardContent
+      ) {
+        const parts = directive.chalkboardContent.split('|').map((s) => s.trim())
+        chalkboardRef.current.drawSvgDiagram?.(
+          parts[0] || 'Educational Diagram',
+          parts[1] || '',
+          parts[2] || ''
+        )
       }
     }
   }
@@ -1441,9 +1451,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           'draw_geometry', 'geometry', 'draw_table', 'table',
           'draw_shape', 'shape', 'draw_rectangle', 'draw_circle', 'draw_triangle',
           'draw_flowchart', 'draw_numerical', 'numerical', 'solve', 'worked_example',
-          'draw_cell', 'draw_atom', 'draw_optics', 'draw_forces', 'draw_magnet',
-          'draw_pressure', 'draw_matter', 'draw_photosynthesis', 'draw_circuit',
-          'draw_circuit_series', 'draw_circuit_parallel'
+          'render_svg_diagram', 'draw_svg', 'draw_svg_diagram',
         ].includes(action)
         if (isVisualAction) {
           renderedVisualConceptsRef.current.add(currentConceptIndexRef.current)
@@ -1537,16 +1545,14 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             const parts = (content || '').split('|').map((s: string) => s.trim())
             chalkboardRef.current.drawVideoCard?.(parts[0] || 'Demonstration', parts[1] || '')
           }
-          else if (action === 'draw_cell') chalkboardRef.current.drawCellDiagram()
-          else if (action === 'draw_atom') chalkboardRef.current.drawAtomDiagram()
-          else if (action === 'draw_optics') chalkboardRef.current.drawOpticsDiagram()
-          else if (action === 'draw_forces') chalkboardRef.current.drawForcesDiagram()
-          else if (action === 'draw_magnet') chalkboardRef.current.drawMagnetDiagram()
-          else if (action === 'draw_pressure') chalkboardRef.current.drawPressureDiagram()
-          else if (action === 'draw_matter') chalkboardRef.current.drawStatesOfMatterDiagram()
-          else if (action === 'draw_photosynthesis') chalkboardRef.current.drawPhotosynthesisDiagram()
-          else if (action === 'draw_circuit' || action === 'draw_circuit_series') chalkboardRef.current.drawCircuitSeries()
-          else if (action === 'draw_circuit_parallel') chalkboardRef.current.drawCircuitParallel()
+          else if (action === 'render_svg_diagram' || action === 'draw_svg' || action === 'draw_svg_diagram') {
+            if (typeof content === 'object' && content !== null) {
+              chalkboardRef.current.drawSvgDiagram?.(content.title || 'Educational Diagram', content.svg || '', content.caption)
+            } else if (typeof content === 'string') {
+              const parts = content.split('|').map((s: string) => s.trim())
+              chalkboardRef.current.drawSvgDiagram?.(parts[0] || 'Educational Diagram', parts[1] || '', parts[2])
+            }
+          }
           else if (action === 'new_page') chalkboardRef.current.addNewPage?.()
           else if (action === 'clear_board' || action === 'erase_board') chalkboardRef.current.clearBoard()
           else if (action === 'start_quiz' || action === 'open_quiz') {

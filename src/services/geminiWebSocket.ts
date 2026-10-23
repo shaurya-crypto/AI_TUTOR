@@ -9,7 +9,7 @@ export interface GeminiLiveCallbacks {
   onError: (error: Error) => void;
   onClose: (event: CloseEvent) => void;
   onUserSpeechStart?: () => void;
-  onChalkboardToolCall?: (action: string, content: string, color?: string) => void;
+  onChalkboardToolCall?: (action: string, content: any, color?: string) => void;
   onVisualAction?: (action: string, params: Record<string, any>) => void;
 }
 
@@ -104,7 +104,28 @@ export class GeminiLiveClient {
       } catch {}
     }
 
-    // 4. Strip any leaked tool calls and bracket directives from spoken transcript text
+    // 4. Match render_svg_diagram(...)
+    const svgRegex = /render_svg_diagram\s*\(\s*(?:(?:title\s*=\s*)?["']([^"']*)["']\s*,\s*(?:svg\s*=\s*)?["']([\s\S]*?)["'](?:\s*,\s*(?:caption\s*=\s*)?["']([^"']*)["'])?|(\{[\s\S]*?\}))\s*\)/gi;
+    let svgm;
+    while ((svgm = svgRegex.exec(rawText)) !== null) {
+      if (svgm[4]) {
+        try {
+          const parsed = JSON.parse(svgm[4]);
+          if (parsed.svg) {
+            this.handleSingleToolCall("render_svg_diagram", parsed);
+          }
+        } catch {}
+      } else {
+        const title = svgm[1]?.trim() || "Educational Diagram";
+        const svg = (svgm[2] ?? "").trim();
+        const caption = svgm[3]?.trim() || "";
+        if (svg) {
+          this.handleSingleToolCall("render_svg_diagram", { title, svg, caption });
+        }
+      }
+    }
+
+    // 5. Strip any leaked tool calls and bracket directives from spoken transcript text
     const stripCall = (name: string) => new RegExp(`${name}\\s*\\((?:'[^']*'|"[^"]*"|[^()]*|\\([^()]*\\))*\\)`, "gi");
     return rawText
       .replace(stripCall("write_chalkboard"), "")
@@ -115,6 +136,8 @@ export class GeminiLiveClient {
       .replace(stripCall("draw_shape"), "")
       .replace(stripCall("solve_step_by_step_numerical"), "")
       .replace(stripCall("conclude_and_open_quiz"), "")
+      .replace(stripCall("render_svg_diagram"), "")
+      .replace(/render_svg_diagram\s*\([\s\S]*?\)/gi, "")
       .replace(/\[[A-Z_]+(?::\s*[^\]]*)?\]/gi, "")
       .replace(/\s+/g, " ")
       .trim();
@@ -163,6 +186,11 @@ export class GeminiLiveClient {
       this.callbacks.onChalkboardToolCall?.("draw_shape", args, args.color);
     } else if (name === "solve_step_by_step_numerical") {
       this.callbacks.onChalkboardToolCall?.("draw_numerical", args);
+    } else if (name === "render_svg_diagram") {
+      const title = args.title || "Educational Diagram";
+      const svg = args.svg || "";
+      const caption = args.caption || "";
+      this.callbacks.onChalkboardToolCall?.("render_svg_diagram", { title, svg, caption });
     } else if (name === "conclude_and_open_quiz") {
       if (args.summary) {
         this.callbacks.onChalkboardToolCall?.("chapter_summary", args.summary);
@@ -204,7 +232,7 @@ export class GeminiLiveClient {
             functionDeclarations: [
               {
                 name: "write_chalkboard",
-                description: "Draw or write notes, titles, formulas, steps, rough scratch work, math equations, or scientific diagrams on the student's live whiteboard.",
+                description: "Draw or write notes, titles, formulas, steps, rough scratch work, math equations, tables, flowcharts, or set chalk colors on the student's live whiteboard.",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -223,13 +251,14 @@ export class GeminiLiveClient {
                         "draw_flowchart",
                         "draw_table",
                         "draw_rough_work",
+                        "set_color",
                         "new_page",
                       ],
-                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_flowchart, draw_table, draw_rough_work, new_page)",
+                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_flowchart, draw_table, draw_rough_work, set_color, new_page)",
                     },
                     content: {
                       type: Type.STRING,
-                      description: "The text to write, equation, or diagram name (forces, cell, atom, optics, matter, magnet, photosynthesis, series, parallel, graph, velocity-time, linear)",
+                      description: "The text to write, equation, table markup, flowchart text, or color name to apply to the chalkboard.",
                     },
                     color: {
                       type: Type.STRING,
@@ -319,6 +348,29 @@ export class GeminiLiveClient {
                     },
                   },
                   required: ["formula"],
+                },
+              },
+              {
+                name: "render_svg_diagram",
+                description: "Render a clean, high-precision vector SVG educational diagram on the chalkboard (e.g. physics apparatus, ray diagrams, chemical apparatus, biological structures, or mathematical geometric figures).",
+                behavior: Behavior.NON_BLOCKING,
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: {
+                      type: Type.STRING,
+                      description: "Title of the diagram (e.g. 'Reflection of Light at Plane Mirror', 'Structure of Plant Cell', 'Electrolysis of Water')",
+                    },
+                    svg: {
+                      type: Type.STRING,
+                      description: "Well-formed XML SVG markup string with viewBox, paths, rects, circles, lines, and text labels with contrasting colors (e.g. #171817, #52715D, #C85A43, #D97706, #0284C7).",
+                    },
+                    caption: {
+                      type: Type.STRING,
+                      description: "Optional pedagogical caption, law explanation, or annotation note.",
+                    },
+                  },
+                  required: ["title", "svg"],
                 },
               },
               {

@@ -113,12 +113,13 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
 
     const hasVisualStage = !!lessonManifest || (!!activeSceneType && sceneBoxMode === 'docked_split')
 
-    const handleExecuteBoardDirective = (action: string, content: string) => {
+    const handleExecuteBoardDirective = (action: string, content: any) => {
       if (!ref || typeof ref === 'function') return
       const board = ref.current
       if (!board) return
 
-      if (action === 'draw_title') board.drawTitle(content)
+      if (action === 'set_color' || action === 'chalk_color') board.setChalkColor(typeof content === 'string' ? content : '')
+      else if (action === 'draw_title') board.drawTitle(content)
       else if (action === 'draw_note') board.drawNote(content)
       else if (action === 'draw_step') board.drawStep(content)
       else if (action === 'draw_highlight_box') board.drawHighlightBox(content)
@@ -136,6 +137,14 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       else if (action === 'draw_table' || action === 'table') board.drawTable?.(content)
       else if (action === 'draw_geometry' || action === 'geometry') board.drawGeometry?.(content)
       else if (action === 'draw_graph' || action === 'graph') board.drawGraph(content)
+      else if (action === 'render_svg_diagram' || action === 'draw_svg' || action === 'draw_svg_diagram') {
+        if (typeof content === 'object' && content !== null) {
+          board.drawSvgDiagram?.(content.title || 'Educational Diagram', content.svg || '', content.caption)
+        } else if (typeof content === 'string') {
+          const parts = content.split('|').map((s: string) => s.trim())
+          board.drawSvgDiagram?.(parts[0] || 'Educational Diagram', parts[1] || '', parts[2])
+        }
+      }
       else if (action === 'draw_numerical' || action === 'numerical' || action === 'worked_example') {
         if (typeof content === 'object') board.drawNumericalSolution?.(content)
         else board.handleAiDirective(`[NUMERICAL: ${content}]`)
@@ -148,16 +157,6 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
         const parts = (content || '').split('|').map((s: string) => s.trim())
         board.drawVideoCard?.(parts[0] || 'Demonstration', parts[1] || '')
       }
-      else if (action === 'draw_cell') board.drawCellDiagram()
-      else if (action === 'draw_atom') board.drawAtomDiagram()
-      else if (action === 'draw_optics') board.drawOpticsDiagram()
-      else if (action === 'draw_forces') board.drawForcesDiagram()
-      else if (action === 'draw_magnet') board.drawMagnetDiagram()
-      else if (action === 'draw_pressure') board.drawPressureDiagram()
-      else if (action === 'draw_matter') board.drawStatesOfMatterDiagram()
-      else if (action === 'draw_photosynthesis') board.drawPhotosynthesisDiagram()
-      else if (action === 'draw_circuit' || action === 'draw_circuit_series') board.drawCircuitSeries()
-      else if (action === 'draw_circuit_parallel') board.drawCircuitParallel()
       else if (action === 'new_page') board.addNewPage?.()
       else if (action === 'draw_diagram' || action === 'diagram') board.handleAiDirective(`[DIAGRAM: ${content}]`)
       else board.handleAiDirective(`[${action.toUpperCase()}: ${content}]`)

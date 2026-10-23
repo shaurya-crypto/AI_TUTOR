@@ -72,7 +72,7 @@ export function useGeminiLive() {
     voiceOverride?: GeminiVoice,
     systemInstructionOverride?: string,
     kickoffPrompt?: string,
-    onChalkboardToolCall?: (action: string, content: string, color?: string) => void,
+    onChalkboardToolCall?: (action: string, content: any, color?: string) => void,
     onVisualAction?: (action: string, params: Record<string, any>) => void
   ) => {
     setErrorMessage(null);

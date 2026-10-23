@@ -42,16 +42,7 @@ export interface GreenChalkboardRef {
   clearBoard: () => void
   setChalkColor: (colorNameOrHex: string) => void
   setBoardColor: (theme: 'green' | 'blackboard' | 'slate' | 'white') => void
-  drawForcesDiagram: () => void
-  drawPressureDiagram: () => void
-  drawMagnetDiagram: () => void
-  drawCellDiagram: () => void
-  drawOpticsDiagram: () => void
-  drawAtomDiagram: () => void
-  drawStatesOfMatterDiagram: () => void
-  drawPhotosynthesisDiagram: () => void
-  drawCircuitSeries: () => void
-  drawCircuitParallel: () => void
+  drawSvgDiagram: (title: string, svgMarkup: string, caption?: string) => void
   drawGraph: (type?: string) => void
   drawNumericalSolution?: (solution: {
     problem?: string
@@ -452,6 +443,12 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       persistTimeoutRef.current = setTimeout(() => {
         try {
           localStorage.setItem(storageKey, JSON.stringify(pagesRef.current))
+          if (excalidrawAPI?.getFiles) {
+            const files = excalidrawAPI.getFiles()
+            if (files && Object.keys(files).length > 0) {
+              localStorage.setItem(`${storageKey}_files`, JSON.stringify(files))
+            }
+          }
           if (onBoardContentChange) {
             onBoardContentChange(getBoardSummary())
           }
@@ -689,6 +686,21 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             }
           } catch (e) {
             console.error('Error reading saved whiteboard pages:', e)
+          }
+
+          try {
+            if (typeof window !== 'undefined' && storageKey) {
+              const rawFiles = localStorage.getItem(`${storageKey}_files`)
+              if (rawFiles && excalidrawAPI?.addFiles) {
+                const parsedFiles = JSON.parse(rawFiles)
+                const filesArr = Object.values(parsedFiles) as any[]
+                if (filesArr.length > 0) {
+                  excalidrawAPI.addFiles(filesArr)
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Error reading saved whiteboard files:', e)
           }
 
           const initialTargetIdx = typeof activeConceptIndex === 'number' && activeConceptIndex > 0 ? activeConceptIndex : 0
@@ -2634,17 +2646,136 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Clean, dynamic pedagogical diagram delegates (Replaced static hardcoded drawings)
-    const drawCellDiagram = async () => drawImageCard('Cell Structure', 'Plant & animal cellular organization and organelles.')
-    const drawOpticsDiagram = async () => drawImageCard('Optics & Light Rays', 'Refraction, reflection, and optical interfaces.')
-    const drawAtomDiagram = async () => drawImageCard('Atomic Model', 'Atomic orbitals, nucleus, and electron distribution.')
-    const drawForcesDiagram = async () => drawImageCard('Forces & Dynamics', 'Newtonian forces and free body diagrams.')
-    const drawPressureDiagram = async () => drawImageCard('Fluid Pressure', 'Hydrostatic pressure and depth relationships.')
-    const drawMagnetDiagram = async () => drawImageCard('Magnetic Field', 'Magnetic field lines and magnetic dipole geometry.')
-    const drawStatesOfMatterDiagram = async () => drawImageCard('States of Matter', 'Kinetic particle arrangements in solids, liquids, and gases.')
-    const drawPhotosynthesisDiagram = async () => drawImageCard('Photosynthesis Reaction', 'Biochemical energy conversion and carbohydrate synthesis.')
-    const drawCircuitSeries = async () => drawImageCard('Series Circuit', 'Series circuit resistance and current characteristics.')
-    const drawCircuitParallel = async () => drawImageCard('Parallel Circuit', 'Parallel circuit branching and equivalent resistance.')
+    // Draw Dynamic Vector SVG Diagram Card directly on Whiteboard
+    const drawSvgDiagram = async (title: string, svgMarkup: string, caption = '') => {
+      if (!excalidrawAPI || !title?.trim() || !svgMarkup?.trim()) return
+      await checkAutoPageOverflow(260)
+      try {
+        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
+        const startX = 60
+        const startY = getDynamicNextY(20)
+
+        // Ensure xmlns is present on svg
+        let cleanSvg = svgMarkup.trim()
+        if (!cleanSvg.includes('xmlns=')) {
+          cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"')
+        }
+
+        // Determine dimensions from viewBox or width/height
+        let svgWidth = 440
+        let svgHeight = 240
+        const viewBoxMatch = cleanSvg.match(/viewBox\s*=\s*["']([^"']+)["']/i)
+        if (viewBoxMatch) {
+          const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(Number)
+          if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+            const vbW = parts[2]
+            const vbH = parts[3]
+            const aspect = vbH / vbW
+            svgWidth = Math.min(480, Math.max(260, vbW))
+            svgHeight = Math.round(svgWidth * aspect)
+          }
+        } else {
+          const wMatch = cleanSvg.match(/width\s*=\s*["']?(\d+)/i)
+          const hMatch = cleanSvg.match(/height\s*=\s*["']?(\d+)/i)
+          if (wMatch && hMatch) {
+            const parsedW = parseInt(wMatch[1], 10)
+            const parsedH = parseInt(hMatch[1], 10)
+            if (parsedW > 0 && parsedH > 0) {
+              const aspect = parsedH / parsedW
+              svgWidth = Math.min(480, Math.max(260, parsedW))
+              svgHeight = Math.round(svgWidth * aspect)
+            }
+          }
+        }
+
+        // Clamp height for whiteboard balance
+        if (svgHeight > 380) {
+          const ratio = 380 / svgHeight
+          svgHeight = 380
+          svgWidth = Math.round(svgWidth * ratio)
+        }
+        if (svgHeight < 120) svgHeight = 160
+
+        const fileId = `svg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` as any
+        const encodedSvg = encodeURIComponent(cleanSvg)
+        const dataURL = `data:image/svg+xml;utf8,${encodedSvg}` as any
+
+        if (excalidrawAPI.addFiles) {
+          excalidrawAPI.addFiles([
+            {
+              id: fileId,
+              dataURL,
+              mimeType: 'image/svg+xml',
+              created: Date.now(),
+            },
+          ])
+        }
+
+        const cardWidth = Math.max(svgWidth + 32, 440)
+        const captionHeight = caption ? 32 : 0
+        const cardHeight = svgHeight + 56 + captionHeight + 16
+
+        const skeletons: any[] = [
+          // Background card container
+          {
+            type: 'rectangle',
+            x: startX,
+            y: startY,
+            width: cardWidth,
+            height: cardHeight,
+            strokeColor: INK_BOTANICAL,
+            backgroundColor: '#FDFBF7',
+            fillStyle: 'solid',
+            strokeWidth: 1.5,
+            roundness: { type: 3 },
+            customData: { isRough: false },
+          },
+          // Header / Title
+          {
+            type: 'text',
+            x: startX + 16,
+            y: startY + 12,
+            text: `[DIAGRAM]: ${title.toUpperCase()}`,
+            fontSize: 14,
+            fontFamily: 1,
+            strokeColor: INK_BOTANICAL,
+            customData: { isRough: false },
+          },
+          // SVG Image Element
+          {
+            type: 'image',
+            x: startX + 16,
+            y: startY + 44,
+            width: svgWidth,
+            height: svgHeight,
+            fileId,
+            status: 'saved',
+            customData: { isRough: false },
+          },
+        ]
+
+        if (caption) {
+          skeletons.push({
+            type: 'text',
+            x: startX + 16,
+            y: startY + 44 + svgHeight + 12,
+            text: caption,
+            fontSize: 12,
+            fontFamily: 1,
+            strokeColor: INK_SECONDARY,
+            customData: { isRough: false },
+          })
+        }
+
+        const elements = convertToExcalidrawElements(skeletons)
+        const current = getCurrentElements()
+        const merged = [...current, ...elements]
+        updateCurrentPageElements(merged, startY + cardHeight + 20)
+        onNoteRecorded?.(`[Diagram]: ${title}${caption ? ` - ${caption}` : ''}`)
+      } catch (err) {
+        console.error('drawSvgDiagram error:', err)
+      }
+    }
 
     // Draw Video Demonstration Card directly on Whiteboard
     const drawVideoCard = async (title: string, description = '') => {
@@ -2747,6 +2878,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             if (content) await drawExamQuestion(content, undefined, undefined, color);
           } else if (action === 'draw_shape' || action === 'shape' || action === 'draw_rectangle' || action === 'draw_circle' || action === 'draw_triangle') {
             if (content) await drawShape(content);
+          } else if (action === 'render_svg_diagram' || action === 'draw_svg' || action === 'draw_svg_diagram') {
+            if (content) await drawSvgDiagram('Educational Diagram', content);
           } else if (action === 'draw_flowchart' || action === 'flowchart') {
             if (content) await drawFlowchart(content, color);
           } else if (action === 'draw_rough_work' || action === 'rough_work' || action === 'rough') {
@@ -2772,6 +2905,41 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             onModuleComplete?.(content);
           }
         });
+      }
+
+      // Match pseudo-code: render_svg_diagram(title="...", svg="...", caption="...") or JSON format
+      const svgToolRegex = /render_svg_diagram\s*\(([\s\S]*?)\)/gi;
+      const svgMatches = Array.from(rawText.matchAll(svgToolRegex));
+      for (const sm of svgMatches) {
+        const body = sm[1]?.trim();
+        if (!body) continue;
+        let title = 'Educational Diagram';
+        let svg = '';
+        let caption = '';
+        if (body.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(body);
+            title = parsed.title || title;
+            svg = parsed.svg || '';
+            caption = parsed.caption || '';
+          } catch {}
+        } else {
+          const tMatch = body.match(/(?:title\s*=\s*)?["']([^"']*)["']/i);
+          const sMatch = body.match(/(?:svg\s*=\s*)?["']([\s\S]*?)["'](?:\s*,\s*|$)/i);
+          const cMatch = body.match(/(?:caption\s*=\s*)?["']([^"']*)["']\s*$/i);
+          if (tMatch) title = tMatch[1];
+          if (sMatch) svg = sMatch[1];
+          if (cMatch) caption = cMatch[1];
+        }
+        if (svg) {
+          const signature = `SVG:${normalizeTitle(title)}`;
+          if (!executedDirectivesRef.current.has(signature)) {
+            executedDirectivesRef.current.add(signature);
+            enqueueOperation(async () => {
+              await drawSvgDiagram(title, svg, caption);
+            });
+          }
+        }
       }
 
       const directiveRegex = /\[([A-Z_]+)(?::\s*([^\]]+))?\]/gi;
@@ -2890,12 +3058,23 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           } else if (tagType === 'TIMELINE') {
             if (payload) await drawFlowchart(payload)
           }
-          // 3. Universal Diagrams & Graphs (Any Subject)
-          else if (tagType === 'GRAPH' || tagType === 'DRAW_GRAPH') {
+          // 3. Universal Diagrams, SVG & Graphs (Any Subject)
+          else if (tagType === 'SVG' || tagType === 'SVG_DIAGRAM' || tagType === 'RENDER_SVG' || tagType === 'RENDER_SVG_DIAGRAM') {
+            const parts = payload.split('|').map((s) => s.trim())
+            const title = parts[0] || 'Educational Diagram'
+            const svg = parts[1] || ''
+            const caption = parts[2] || ''
+            if (svg) await drawSvgDiagram(title, svg, caption)
+          } else if (tagType === 'GRAPH' || tagType === 'DRAW_GRAPH') {
             await drawGraph(payload)
           } else if (tagType === 'DIAGRAM' || tagType === 'DRAW_DIAGRAM') {
             const diag = payload.toLowerCase()
-            if (diag.includes('triangle') || diag.includes('circle') || diag.includes('geometry') || diag.includes('polygon') || diag.includes('angle')) {
+            if (payload.includes('<svg') && payload.includes('</svg>')) {
+              const titleMatch = payload.match(/title\s*=\s*["']([^"']+)["']/i)
+              const title = titleMatch ? titleMatch[1] : 'Educational Diagram'
+              const svgMatch = payload.match(/<svg[\s\S]*?<\/svg>/i)
+              if (svgMatch) await drawSvgDiagram(title, svgMatch[0])
+            } else if (diag.includes('triangle') || diag.includes('circle') || diag.includes('geometry') || diag.includes('polygon') || diag.includes('angle')) {
               await drawGeometry(payload)
             } else if (diag.includes('table') || diag.includes('compare') || diag.includes('vs')) {
               if (payload.includes('|')) await drawTable(payload)
@@ -2904,32 +3083,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
               await drawFlowchart(payload)
             } else if (diag.includes('graph') || diag.includes('ohm') || diag.includes('linear') || diag.includes('velocity') || diag.includes('speed') || diag.includes('distance') || diag.includes('wave') || diag.includes('parabola') || diag.includes('quad') || diag.includes('boyle') || diag.includes('curve') || diag.includes('plot') || diag.includes('=')) {
               await drawGraph(diag)
-            } else if (diag.includes('force') || diag.includes('newton') || diag.includes('fbd')) {
-              await drawForcesDiagram()
-            } else if (diag.includes('pressure') || diag.includes('fluid')) {
-              await drawPressureDiagram()
-            } else if (diag.includes('magnet')) {
-              await drawMagnetDiagram()
-            } else if (
-              diag.includes('plant cell') ||
-              diag.includes('animal cell') ||
-              diag.includes('cell organelle') ||
-              diag.includes('cell structure') ||
-              (/\bcell\b/i.test(diag) && !diag.includes('electric') && !diag.includes('battery') && !diag.includes('dry cell') && !diag.includes('galvanic') && !diag.includes('electrolytic'))
-            ) {
-              await drawCellDiagram()
-            } else if (diag.includes('optic') || diag.includes('reflect') || diag.includes('light') || diag.includes('snell') || diag.includes('refract') || diag.includes('lens')) {
-              await drawOpticsDiagram()
-            } else if (diag.includes('atom') || diag.includes('bohr')) {
-              await drawAtomDiagram()
-            } else if (diag.includes('matter') || diag.includes('state')) {
-              await drawStatesOfMatterDiagram()
-            } else if (diag.includes('photo') || diag.includes('photosynthesis')) {
-              await drawPhotosynthesisDiagram()
-            } else if (diag.includes('series')) {
-              await drawCircuitSeries()
-            } else if (diag.includes('parallel')) {
-              await drawCircuitParallel()
             } else {
               // Universal for ANY syllabus subject (History, Geography, Economics, Mathematics, Chemistry, Biology, Social Science, English)
               await drawImageCard(payload || 'Curriculum Schematic', `Authentic textbook illustration and conceptual schematic for ${payload}.`, 'NCERT / Board Standard')
@@ -3014,16 +3167,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       clearBoard,
       setChalkColor: (colorNameOrHex: string) => setChalkColor(colorNameOrHex),
       setBoardColor: () => {},
-      drawForcesDiagram,
-      drawPressureDiagram,
-      drawMagnetDiagram,
-      drawCellDiagram,
-      drawOpticsDiagram,
-      drawAtomDiagram,
-      drawStatesOfMatterDiagram,
-      drawPhotosynthesisDiagram,
-      drawCircuitSeries,
-      drawCircuitParallel,
+      drawSvgDiagram,
       drawGraph,
       drawNumericalSolution,
       drawImageCard,
