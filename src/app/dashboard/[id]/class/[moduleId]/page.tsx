@@ -164,6 +164,70 @@ CONCEPT #${idx + 1}: "${conceptName}"
     .join('\n\n')
 }
 
+/**
+ * Natural language detector for spoken concept transitions by the AI tutor.
+ * Detects phrases like: "Moving on to Concept 2", "Let's move to Concept 3",
+ * "Now moving to Concept 2", "Moving on to cellulose", "Let's talk about cellulose", etc.
+ */
+function detectSpokenConceptTransition(
+  text: string,
+  keyConcepts: string[]
+): { targetIdx: number; conceptTitle: string } | null {
+  if (!text || keyConcepts.length === 0) return null
+
+  // 1. Direct number match: e.g. "moving on to concept 2", "let's move to concept 3", "now moving to concept 2", "turning to concept 2", "starting concept 2", "now for concept 2"
+  const numMatch = text.match(
+    /(?:moving\s+(?:on\s+)?to|let['’]?s\s+move\s+(?:on\s+)?to|now\s+moving\s+to|turn(?:ing)?\s+(?:our\s+attention\s+)?to|next\s+is|next\s+concept\s+is|now\s+for|welcome\s+to|starting)\s+(?:concept\s*(\d+))/i
+  )
+  if (numMatch && numMatch[1]) {
+    const num = parseInt(numMatch[1], 10)
+    if (num >= 1 && num <= keyConcepts.length) {
+      return { targetIdx: num - 1, conceptTitle: keyConcepts[num - 1] }
+    }
+  }
+
+  // 2. Ordinal word match: e.g. "moving on to the second concept", "second concept"
+  const ordinals: Record<string, number> = {
+    first: 1,
+    second: 2,
+    third: 3,
+    fourth: 4,
+    fifth: 5,
+    sixth: 6,
+    seventh: 7,
+    eighth: 8,
+    ninth: 9,
+    tenth: 10,
+  }
+  const ordinalMatch = text.match(
+    /(?:moving\s+(?:on\s+)?to|let['’]?s\s+move\s+(?:on\s+)?to|now\s+moving\s+to|next\s+is)\s+(?:the\s+)?([a-z]+)\s+concept/i
+  )
+  if (ordinalMatch && ordinalMatch[1]) {
+    const word = ordinalMatch[1].toLowerCase()
+    if (ordinals[word] && ordinals[word] <= keyConcepts.length) {
+      const idx = ordinals[word] - 1
+      return { targetIdx: idx, conceptTitle: keyConcepts[idx] }
+    }
+  }
+
+  // 3. Spoken topic title match: e.g. "moving on to cellulose", "let's talk about cellulose", "let's explore cellulose"
+  for (let i = 0; i < keyConcepts.length; i++) {
+    const c = keyConcepts[i]
+    const cleanC = c.replace(/[^a-zA-Z0-9\s]/g, '').trim().toLowerCase()
+    if (cleanC.length < 3) continue
+    const escaped = cleanC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = new RegExp(
+      `(?:moving\\s+(?:on\\s+)?to|let['’]?s\\s+move\\s+(?:on\\s+)?to|now\\s+moving\\s+to|let['’]?s\\s+talk\\s+about|turn(?:ing)?\\s+to|next\\s+up\\s+is)\\s+${escaped}`,
+      'i'
+    )
+    if (pattern.test(text)) {
+      return { targetIdx: i, conceptTitle: keyConcepts[i] }
+    }
+  }
+
+  return null
+}
+
 export default function ModuleClassroomPage() {
   const router = useRouter()
   const params = useParams()
@@ -278,6 +342,10 @@ export default function ModuleClassroomPage() {
     currentConceptIndexRef.current = currentConceptIndex
   }, [currentConceptIndex])
   const [completedConcepts, setCompletedConcepts] = useState<string[]>([])
+  const completedConceptsRef = useRef<string[]>([])
+  useEffect(() => {
+    completedConceptsRef.current = completedConcepts
+  }, [completedConcepts])
   const [lastCoveredConcept, setLastCoveredConcept] = useState<string>('')
 
   // Chapter Notes state, AI optimization & auto-save to Supabase
@@ -469,7 +537,9 @@ export default function ModuleClassroomPage() {
             setCurrentConceptIndex(progress.current_concept_index)
           }
           if (Array.isArray(progress.completed_concepts)) {
-            setCompletedConcepts(parseKeyConcepts(progress.completed_concepts))
+            const loaded = parseKeyConcepts(progress.completed_concepts)
+            completedConceptsRef.current = loaded
+            setCompletedConcepts(loaded)
           }
           if (progress.last_covered_concept) {
             setLastCoveredConcept(progress.last_covered_concept)
@@ -586,25 +656,39 @@ export default function ModuleClassroomPage() {
         }
       }
 
-      // Check for [CONCEPT_DONE: ...] or [CONCEPT_DONE]
-      const doneMatches = Array.from(latest.text.matchAll(/\[(?:CONCEPT_DONE|CONCEPT_MASTERED|MASTERED)(?::\s*([^\]]*))?\]/gi))
+      // Check for [CONCEPT_DONE: ...] or [CONCEPT_DONE] or write_chalkboard(action="concept_done")
+      const doneMatches = Array.from(latest.text.matchAll(/\[(?:CONCEPT_DONE|CONCEPT_MASTERED|MASTERED)(?::\s*([^\]]*))?\]|write_chalkboard\s*\(\s*(?:action\s*=\s*)?["']?(?:concept_done|concept_mastered)["']?(?:\s*,\s*(?:content\s*=\s*)?["']?([^"'\)]*)["']?)?/gi))
       for (const dm of doneMatches) {
         const tag = dm[0]
         const key = `${transcriptId}:${tag}`
         if (!executedSceneDirectivesRef.current.has(key)) {
           executedSceneDirectivesRef.current.add(key)
-          handleConceptDone(dm[1] || '')
+          handleConceptDone(dm[1] || dm[2] || '')
         }
       }
 
-      // Check for [CONCEPT_FOCUS: ...] or [FOCUS: ...]
-      const focusMatches = Array.from(latest.text.matchAll(/\[(?:CONCEPT_FOCUS|FOCUS):\s*([^\]]+)\]/gi))
+      // Check for [CONCEPT_FOCUS: ...] or [FOCUS: ...] or write_chalkboard(action="concept_focus")
+      const focusMatches = Array.from(latest.text.matchAll(/\[(?:CONCEPT_FOCUS|FOCUS):\s*([^\]]+)\]|write_chalkboard\s*\(\s*(?:action\s*=\s*)?["']?(?:concept_focus|focus)["']?\s*,\s*(?:content\s*=\s*)?["']?([^"'\)]+)["']?/gi))
       for (const fm of focusMatches) {
         const tag = fm[0]
         const key = `${transcriptId}:${tag}`
         if (!executedSceneDirectivesRef.current.has(key)) {
           executedSceneDirectivesRef.current.add(key)
-          handleConceptFocus(fm[1] || '')
+          handleConceptFocus(fm[1] || fm[2] || '')
+        }
+      }
+
+      // Check for natural spoken transitions like "Moving on to Concept 2, let's talk about cellulose...", "Now let's move to Concept 2..."
+      const keyConceptsList = parseKeyConcepts(activeModule?.key_concepts)
+      const spokenTransition = detectSpokenConceptTransition(latest.text, keyConceptsList)
+      if (spokenTransition) {
+        const spokenKey = `${transcriptId}:spoken_concept_${spokenTransition.targetIdx}`
+        if (!executedSceneDirectivesRef.current.has(spokenKey)) {
+          executedSceneDirectivesRef.current.add(spokenKey)
+          if (spokenTransition.targetIdx > currentConceptIndexRef.current) {
+            console.log(`[Spoken Concept Transition] Advancing from Concept ${currentConceptIndexRef.current + 1} to Concept ${spokenTransition.targetIdx + 1}: "${spokenTransition.conceptTitle}"`)
+            handleConceptFocus(spokenTransition.conceptTitle)
+          }
         }
       }
     }
@@ -974,10 +1058,6 @@ export default function ModuleClassroomPage() {
 
   // 6. Concept Tracking Callbacks: auto-save progress and resume state
   const handleConceptFocus = (conceptName: string) => {
-    if (isAwaitingStudentAnswerRef.current || isReviewingVerdictRef.current) {
-      console.log('[Page Guard] Blocked premature concept_focus while awaiting answer / reviewing verdict on current page:', conceptName)
-      return
-    }
     const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
     if (keyConcepts.length === 0) return
 
@@ -1012,31 +1092,34 @@ export default function ModuleClassroomPage() {
     }
 
     if (targetIdx === -1) {
-      targetIdx = currentConceptIndex
+      targetIdx = currentConceptIndexRef.current
     }
+
+    // Always release page guard when focusing / advancing concepts
+    isAwaitingStudentAnswerRef.current = false
+    setIsAwaitingStudentAnswer(false)
+    isReviewingVerdictRef.current = false
+    setIsReviewingVerdict(false)
 
     const canonicalConcept = keyConcepts[targetIdx] || conceptName
 
-    // If tutor advances to concept N (e.g. Concept 2), all prior concepts (0..N-1) are completed
-    let updatedCompleted: string[] = []
-    setCompletedConcepts((prev) => {
-      let updated = [...prev]
-      for (let i = 0; i < targetIdx; i++) {
-        const prevConcept = keyConcepts[i]
-        if (prevConcept && !updated.some((u) => norm(u) === norm(prevConcept))) {
-          updated.push(prevConcept)
-        }
+    // If tutor advances to concept N (e.g. Concept 2 at index 1), all prior concepts (0..N-1) are completed
+    const updatedCompleted: string[] = [...completedConceptsRef.current]
+    for (let i = 0; i < targetIdx; i++) {
+      const prevConcept = keyConcepts[i]
+      if (prevConcept && !updatedCompleted.some((u) => norm(u) === norm(prevConcept))) {
+        updatedCompleted.push(prevConcept)
       }
-      updatedCompleted = updated
-      return updated
-    })
+    }
+    completedConceptsRef.current = updatedCompleted
+    setCompletedConcepts(updatedCompleted)
 
     currentConceptIndexRef.current = targetIdx
     setCurrentConceptIndex(targetIdx)
     setLastCoveredConcept(canonicalConcept)
 
     // Whiteboard 1-Concept-Per-Page: Dedicated page per concept (0 -> Page 1, 1 -> Page 2...)
-    chalkboardRef.current?.goToPage?.(targetIdx)
+    chalkboardRef.current?.goToPage?.(targetIdx, canonicalConcept)
 
     autoTriggerVisualForConcept(targetIdx)
 
@@ -1060,10 +1143,12 @@ export default function ModuleClassroomPage() {
   }
 
   const handleConceptDone = (conceptName: string) => {
-    if (isAwaitingStudentAnswerRef.current || isReviewingVerdictRef.current) {
-      console.log('[Page Guard] Blocked premature concept_done while awaiting answer / reviewing verdict on current page:', conceptName)
-      return
-    }
+    // Release page guard
+    isAwaitingStudentAnswerRef.current = false
+    setIsAwaitingStudentAnswer(false)
+    isReviewingVerdictRef.current = false
+    setIsReviewingVerdict(false)
+
     const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
     if (keyConcepts.length === 0) return
 
@@ -1098,59 +1183,59 @@ export default function ModuleClassroomPage() {
     }
 
     if (matchedIdx === -1) {
-      matchedIdx = currentConceptIndex
+      matchedIdx = currentConceptIndexRef.current
     }
 
-    const canonicalConcept = keyConcepts[matchedIdx] || keyConcepts[currentConceptIndex]
+    const canonicalConcept = keyConcepts[matchedIdx] || keyConcepts[currentConceptIndexRef.current]
     if (!canonicalConcept) return
 
-    setCompletedConcepts((prev) => {
-      const alreadyDone = prev.some((p) => norm(p) === norm(canonicalConcept))
-      const updated = alreadyDone ? prev : [...prev, canonicalConcept]
+    const prevList = completedConceptsRef.current
+    const alreadyDone = prevList.some((p) => norm(p) === norm(canonicalConcept))
+    const updated = alreadyDone ? prevList : [...prevList, canonicalConcept]
+    completedConceptsRef.current = updated
+    setCompletedConcepts(updated)
 
-      const nextIdx = Math.min(
-        matchedIdx + 1,
-        Math.max(0, keyConcepts.length - 1)
+    const nextIdx = Math.min(
+      matchedIdx + 1,
+      Math.max(0, keyConcepts.length - 1)
+    )
+    currentConceptIndexRef.current = nextIdx
+    setCurrentConceptIndex(nextIdx)
+    setLastCoveredConcept(canonicalConcept)
+
+    if (nextIdx > matchedIdx && nextIdx < keyConcepts.length) {
+      // Whiteboard 1-Concept-Per-Page: Advance to next concept's page
+      const nextConceptTitle = keyConcepts[nextIdx]
+      chalkboardRef.current?.goToPage?.(nextIdx, nextConceptTitle)
+      setTimeout(() => {
+        autoTriggerVisualForConcept(nextIdx)
+      }, 500)
+    }
+
+    const isAllDone = keyConcepts.length > 0 && updated.length >= keyConcepts.length
+
+    const supabase = createClient()
+    supabase
+      .from('user_progress')
+      .upsert(
+        {
+          user_id: userId,
+          syllabus_module_id: moduleId,
+          current_concept_index: nextIdx,
+          completed_concepts: updated,
+          last_covered_concept: canonicalConcept,
+          status: isCompletedBefore || isAllDone ? 'completed' : 'in_progress',
+          ...(isAllDone ? { completed_at: new Date().toISOString() } : {}),
+        },
+        { onConflict: 'user_id,syllabus_module_id' }
       )
-      currentConceptIndexRef.current = nextIdx
-      setCurrentConceptIndex(nextIdx)
-      setLastCoveredConcept(canonicalConcept)
+      .then(({ error }) => {
+        if (error) console.error('Failed to persist completed concept:', error)
+      })
 
-      if (nextIdx > matchedIdx && nextIdx < keyConcepts.length) {
-        // Whiteboard 1-Concept-Per-Page: Advance to next concept's page
-        chalkboardRef.current?.goToPage?.(nextIdx)
-        setTimeout(() => {
-          autoTriggerVisualForConcept(nextIdx)
-        }, 800)
-      }
-
-      const isAllDone = keyConcepts.length > 0 && updated.length >= keyConcepts.length
-
-      const supabase = createClient()
-      supabase
-        .from('user_progress')
-        .upsert(
-          {
-            user_id: userId,
-            syllabus_module_id: moduleId,
-            current_concept_index: nextIdx,
-            completed_concepts: updated,
-            last_covered_concept: canonicalConcept,
-            status: isCompletedBefore || isAllDone ? 'completed' : 'in_progress',
-            ...(isAllDone ? { completed_at: new Date().toISOString() } : {}),
-          },
-          { onConflict: 'user_id,syllabus_module_id' }
-        )
-        .then(({ error }) => {
-          if (error) console.error('Failed to persist completed concept:', error)
-        })
-
-      if (isAllDone && !isCompletedBefore && !isMarkingCompleteRef.current) {
-        markModuleAsCompleted()
-      }
-
-      return updated
-    })
+    if (isAllDone && !isCompletedBefore && !isMarkingCompleteRef.current) {
+      markModuleAsCompleted()
+    }
   }
 
   // 7. Rewind / Concept Jump Navigation (Bidirectional sync with Supabase and UI)
@@ -1184,15 +1269,21 @@ export default function ModuleClassroomPage() {
     const newCompleted = keyConcepts.slice(0, targetIdx)
     const targetConceptName = keyConcepts[targetIdx] || activeModule?.title || 'Concept'
 
+    isAwaitingStudentAnswerRef.current = false
+    setIsAwaitingStudentAnswer(false)
+    isReviewingVerdictRef.current = false
+    setIsReviewingVerdict(false)
+
     currentConceptIndexRef.current = targetIdx
     setCurrentConceptIndex(targetIdx)
+    completedConceptsRef.current = newCompleted
     setCompletedConcepts(newCompleted)
     setLastCoveredConcept(targetConceptName)
     setIsCompletedBefore(false)
     setModuleCompletedSuccess(false)
 
     // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page
-    chalkboardRef.current?.goToPage?.(targetIdx)
+    chalkboardRef.current?.goToPage?.(targetIdx, targetConceptName)
 
     // Trigger visual for target concept only if not already rendered to prevent overlapping
     if (!renderedVisualConceptsRef.current.has(targetIdx)) {
@@ -1464,13 +1555,6 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           renderedVisualConceptsRef.current.add(currentConceptIndexRef.current)
         }
         if (chalkboardRef.current) {
-          // Whiteboard 1-Concept-Per-Page: Only switch page when concept explicitly changes
-          if (['concept_focus', 'concept_goto', 'goto_concept'].includes(action)) {
-            if (!isAwaitingStudentAnswerRef.current && !isReviewingVerdictRef.current) {
-              chalkboardRef.current.goToPage?.(currentConceptIndexRef.current)
-            }
-          }
-
           if (action === 'set_color' || action === 'chalk_color') {
             chalkboardRef.current.setChalkColor(color || content)
           }
@@ -1579,11 +1663,19 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             markModuleAsCompleted(content)
           }
           else if (action === 'concept_focus') {
+            isReviewingVerdictRef.current = false
+            setIsReviewingVerdict(false)
+            isAwaitingStudentAnswerRef.current = false
+            setIsAwaitingStudentAnswer(false)
             const cleanContent = content.replace(/^[\s\(\[\{]+|[\s\)\]\}]+$/g, '').trim()
             if (cleanContent) {
               handleConceptFocus(cleanContent)
             }
           } else if (action === 'concept_done') {
+            isReviewingVerdictRef.current = false
+            setIsReviewingVerdict(false)
+            isAwaitingStudentAnswerRef.current = false
+            setIsAwaitingStudentAnswer(false)
             handleConceptDone(content)
           } else if (action === 'concept_goto' || action === 'goto_concept') {
             handleConceptGoto(content)

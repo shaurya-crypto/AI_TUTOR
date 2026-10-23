@@ -265,10 +265,12 @@ export class GeminiLiveClient {
                         "draw_flowchart",
                         "draw_table",
                         "draw_rough_work",
+                        "concept_done",
+                        "concept_focus",
                         "set_color",
                         "new_page",
                       ],
-                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_flowchart, draw_table, draw_rough_work, set_color, new_page)",
+                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_flowchart, draw_table, draw_rough_work, concept_done, concept_focus, set_color, new_page)",
                     },
                     content: {
                       type: Type.STRING,

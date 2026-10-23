@@ -375,5 +375,19 @@ html.lenis, html.lenis body {
   box-shadow: none;
 }
 
+/* Suppress Excalidraw Zen Mode Button and Prompts */
+.excalidraw .zen-mode-transition,
+.excalidraw .zen-mode-visibility,
+.excalidraw button[aria-label*="Zen mode" i],
+.excalidraw button[title*="Zen mode" i],
+.excalidraw [data-testid="zen-mode-button"],
+.excalidraw .App-bottom-bar,
+.excalidraw .layer-ui__wrapper .zen-mode-transition {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
 
 

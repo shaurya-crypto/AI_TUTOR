@@ -3410,7 +3410,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
                 currentItemStrokeColor: INK_PRIMARY,
                 currentItemFontFamily: 1,
                 currentItemRoughness: 0,
-                zenModeEnabled: true,
+                zenModeEnabled: false,
                 viewModeEnabled: true,
                 zoom: { value: 0.7 as any },
               },
