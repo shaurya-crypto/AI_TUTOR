@@ -41,6 +41,7 @@ export function VisualizationViewport({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sceneInstanceRef = useRef<IInteractiveScene | null>(null)
   const [activeType, setActiveType] = useState<VisualizationSceneType>(sceneType || 'geometry_3d')
+  const [activeTitle, setActiveTitle] = useState<string | undefined>(title)
   const [params, setParams] = useState<Record<string, any>>(initialParams || {})
   const [isPaused, setIsPaused] = useState(false)
   const [controlsExpanded, setControlsExpanded] = useState(true)
@@ -72,9 +73,18 @@ export function VisualizationViewport({
     }
   }, [sceneType, activeType])
 
+  useEffect(() => {
+    if (title) {
+      setActiveTitle(title)
+    }
+  }, [title])
+
   // Sync incoming dynamic parameter updates from AI
   useEffect(() => {
     if (initialParams && Object.keys(initialParams).length > 0) {
+      if (initialParams.title) {
+        setActiveTitle(initialParams.title)
+      }
       setParams((prev) => {
         const next = { ...prev, ...initialParams }
         if (sceneInstanceRef.current) {
@@ -155,7 +165,7 @@ export function VisualizationViewport({
           <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
           <div className="flex flex-col min-w-0">
             <h4 className="text-xs font-semibold text-emerald-100 tracking-wide truncate">
-              {title || meta.title}
+              {activeTitle || title || meta.title}
             </h4>
             <span className="text-[10px] text-cyan-300/80 font-mono truncate">
               {meta.subject} • Interactive 3D Model

@@ -1,7 +1,8 @@
 'use client'
 
 import React, { forwardRef, useState, useEffect } from 'react'
-import { GreenChalkboard, GreenChalkboardRef } from './GreenChalkboard'
+import { GreenChalkboard, GreenChalkboardRef, WritingPositionInfo } from './GreenChalkboard'
+import { SobiCompanion } from './SobiCompanion'
 import { VisualizationViewport } from './VisualizationViewport'
 import { VisualizationSceneType } from './scenes/sceneTypes'
 import { resolveSceneType } from './scenes/sceneRegistry'
@@ -43,6 +44,11 @@ export interface WhiteboardWorkspaceProps {
   initialStepIndex?: number
   onStepChange?: (stepIndex: number, step: LessonStep) => void
   onSaveProgress?: (stepIndex: number, completedStepIds: string[]) => void
+  latestTranscript?: string
+  isTeacherSpeaking?: boolean
+  isListening?: boolean
+  onSubmitStudentAnswer?: (answer: string) => void
+  onVoiceStudentAnswer?: (answer: string) => void
 }
 
 export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWorkspaceProps>(
@@ -71,11 +77,19 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       initialStepIndex = 0,
       onStepChange,
       onSaveProgress,
+      latestTranscript = '',
+      isTeacherSpeaking = false,
+      isListening = true,
+      onSubmitStudentAnswer,
+      onVoiceStudentAnswer,
     },
     ref
   ) => {
     // Resolved canonical scene type via alias resolver
     const resolvedScene = activeSceneType ? resolveSceneType(activeSceneType) : null
+
+    // Sobi Whiteboard Companion writing position tracking
+    const [writingPosition, setWritingPosition] = useState<WritingPositionInfo | null>(null)
 
     // 3D Scene In-Whiteboard Display Mode:
     // 'box_in_board' (embedded container box right on the whiteboard) | 'docked_split' (side-by-side) | 'minimized'
@@ -107,6 +121,12 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       else if (action === 'clear_rough') board.clearRough()
       else if (action === 'clear_notes') board.clearNotes()
       else if (action === 'draw_question') board.drawQuestion(content)
+      else if (action === 'draw_student_answer') board.drawStudentAnswer?.(content)
+      else if (action === 'draw_answer_verdict') board.drawAnswerVerdict?.(content)
+      else if (action === 'draw_exam_question') board.drawExamQuestion?.(content)
+      else if (action === 'draw_shape' || action === 'shape' || action === 'draw_rectangle' || action === 'draw_circle' || action === 'draw_triangle') {
+        board.drawShape?.(content)
+      }
       else if (action === 'draw_flowchart') board.drawFlowchart(content)
       else if (action === 'draw_table' || action === 'table') board.drawTable?.(content)
       else if (action === 'draw_geometry' || action === 'geometry') board.drawGeometry?.(content)
@@ -238,6 +258,34 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
               onModuleComplete={onModuleComplete}
               onConfirmEndChapter={onConfirmEndChapter}
               onStartQuiz={onStartQuiz}
+              onWritingPositionChange={setWritingPosition}
+            />
+
+            {/* Sobi Whiteboard Companion: Glides alongside writing and points to questions */}
+            <SobiCompanion
+              writingPosition={writingPosition}
+              latestTranscript={latestTranscript}
+              isTeacherSpeaking={isTeacherSpeaking}
+              isListening={isListening}
+              activeConceptTitle={
+                keyConcepts && typeof activeConceptIndex === 'number'
+                  ? keyConcepts[activeConceptIndex] || moduleTitle
+                  : moduleTitle
+              }
+              onSubmitAnswer={(ans) => {
+                if (onSubmitStudentAnswer) {
+                  onSubmitStudentAnswer(ans)
+                } else if (ref && typeof ref !== 'function' && ref.current) {
+                  ref.current.drawStudentAnswer?.(ans)
+                }
+              }}
+              onVoiceAnswer={(ans) => {
+                if (onVoiceStudentAnswer) {
+                  onVoiceStudentAnswer(ans)
+                } else if (ref && typeof ref !== 'function' && ref.current) {
+                  ref.current.drawStudentAnswer?.(ans)
+                }
+              }}
             />
 
             {/* In-Whiteboard 3D Simulation Box (Rendered directly inside whiteboard area) */}

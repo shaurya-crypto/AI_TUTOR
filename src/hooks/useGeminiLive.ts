@@ -121,9 +121,7 @@ export function useGeminiLive() {
         },
         () => {
           console.log("[useGeminiLive] Student started speaking");
-          if (audioPlayerRef.current) {
-            audioPlayerRef.current.stopAndClear();
-          }
+          // Non-destructive: do not stop teacher audio on general speech start. Deliberate barge-in is handled above.
           setConnectionState((prev) => (prev !== "MUTED" ? "LISTENING" : "MUTED"));
         },
         () => {
@@ -289,6 +287,13 @@ export function useGeminiLive() {
     }
   }, []);
 
+  const sendTextMessage = useCallback((text: string) => {
+    if (geminiClientRef.current && text?.trim()) {
+      geminiClientRef.current.sendTextMessage(text.trim());
+      addTranscript(text.trim(), "user");
+    }
+  }, [addTranscript]);
+
   useEffect(() => {
     return () => {
       endCall();
@@ -309,5 +314,6 @@ export function useGeminiLive() {
     endCall,
     resetToIdle,
     sendBoardContext,
+    sendTextMessage,
   };
 }

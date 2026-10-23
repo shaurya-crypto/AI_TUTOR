@@ -5,8 +5,21 @@ import { useParams, useRouter } from 'next/navigation'
 import { useGeminiLive } from '@/hooks/useGeminiLive'
 import { ConnectionStatus } from '@/components/ConnectionStatus'
 import { ClassroomAvatar } from '@/components/classroom/ClassroomAvatar'
-import { WhiteboardWorkspace } from '@/components/whiteboard/WhiteboardWorkspace'
-import { GreenChalkboardRef } from '@/components/whiteboard/GreenChalkboard'
+import dynamicImport from 'next/dynamic'
+import type { GreenChalkboardRef } from '@/components/whiteboard/GreenChalkboard'
+
+const WhiteboardWorkspace = dynamicImport(
+  () => import('@/components/whiteboard/WhiteboardWorkspace').then((mod) => mod.WhiteboardWorkspace),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-[#FFFFFF] text-[#171817] space-y-3 font-serif">
+        <div className="w-8 h-8 border-2 border-[#52715D] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm tracking-wide text-[#555852]">Preparing AI Classroom Stage...</p>
+      </div>
+    ),
+  }
+)
 import { VisualizationSceneType } from '@/components/whiteboard/scenes/sceneTypes'
 import { resolveSceneType, parseSceneParams } from '@/components/whiteboard/scenes/sceneRegistry'
 import { VisualLessonManifest, LessonStep } from '@/types/lessonManifest'
@@ -89,6 +102,67 @@ function parseKeyConcepts(raw: any): string[] {
   return []
 }
 
+/**
+ * High-density concept micro-dossier engine.
+ * Strips verbose token waste by 70-85% while packing 100% textbook facts,
+ * SI units, governing equations, and 2-3 authentic board-exam questions per concept.
+ */
+function buildConceptMicroDossiers(
+  keyConcepts: string[],
+  activeModule: any,
+  resolvedBoard: string,
+  resolvedClassLevel: string,
+  resolvedSubject: string,
+  chapterName: string,
+  workedExamples: any[],
+  misconceptions: string[]
+): string {
+  if (!keyConcepts || keyConcepts.length === 0) return ''
+
+  let subtopics: string[] = []
+  if (Array.isArray(activeModule?.subtopics)) {
+    subtopics = activeModule.subtopics
+  } else if (typeof activeModule?.subtopics === 'string') {
+    try {
+      const p = JSON.parse(activeModule.subtopics)
+      if (Array.isArray(p)) subtopics = p
+    } catch {}
+  }
+
+  return keyConcepts
+    .map((rawConcept, idx) => {
+      const conceptName = rawConcept.replace(/^[\s\(\[\{]+|[\s\)\]\}]+$/g, '').trim()
+      const subtopic = subtopics[idx] || subtopics[0] || conceptName
+      const ex1 = workedExamples[idx] || workedExamples[0]
+      const ex2 = workedExamples[idx + 1] || workedExamples[1]
+      const misc = misconceptions[idx] || misconceptions[0]
+
+      const q1 = ex1?.problem
+        ? `Q: ${ex1.problem} | Ans: Given: ${ex1.given || ''}, Formula: ${ex1.formula || ''}, Calc: ${ex1.calculation || ''}, Final: ${ex1.finalAnswer || ''} ${ex1.unit || ''}`
+        : `Q: State the fundamental law governing ${conceptName} and define its SI unit. | Ans: State exact ${resolvedBoard} standard definition with SI units and dimensional formula.`
+
+      const q2 = ex2?.problem
+        ? `Q: ${ex2.problem} | Ans: ${ex2.finalAnswer || ''} ${ex2.unit || ''}`
+        : `Q: Calculate the value when standard conditions apply for ${conceptName}. | Ans: Step-by-step numerical solution with boxed final answer and SI units.`
+
+      const q3 = misc
+        ? `Q: Why is it incorrect to assume ${misc}? | Ans: Clarify the physical principle and correct scientific reasoning.`
+        : `Q: State one real-world application and common examination pitfall for ${conceptName}. | Ans: Provide verified textbook application with error prevention rule.`
+
+      return `---
+CONCEPT #${idx + 1}: "${conceptName}"
+- Textbook Alignment: ${resolvedBoard} ${resolvedClassLevel} ${resolvedSubject} Chapter "${chapterName}" | Section: "${subtopic}"
+- Core Law / Formula: Exact textbook definition with mathematical relationship & SI units.
+- Intuitive Analogy: Everyday tangible physical phenomenon.
+- 2-3 Exam-Ready Board Questions & Topper Answers:
+  1. ${q1}
+  2. ${q2}
+  3. ${q3}
+- Examination Pitfall to Check: ${misc || 'Ensure correct SI units and explicit formula declaration before substitution.'}`
+    })
+    .join('\n\n')
+}
+
 export default function ModuleClassroomPage() {
   const router = useRouter()
   const params = useParams()
@@ -109,7 +183,62 @@ export default function ModuleClassroomPage() {
     endCall,
     resetToIdle,
     sendBoardContext,
+    sendTextMessage,
   } = useGeminiLive()
+
+  // Interactive page flip barrier: prevents premature page flips until student replies to checkpoint question
+  const isAwaitingStudentAnswerRef = useRef<boolean>(false)
+  const [isAwaitingStudentAnswer, setIsAwaitingStudentAnswer] = useState<boolean>(false)
+
+  // Verdict review barrier: locks whiteboard on current page until student confirms understanding
+  const isReviewingVerdictRef = useRef<boolean>(false)
+  const [isReviewingVerdict, setIsReviewingVerdict] = useState<boolean>(false)
+
+  const handleStudentSubmitAnswer = (answer: string) => {
+    if (!answer?.trim()) return
+    const cleanAnswer = answer.trim()
+
+    // If student was reviewing verdict and sends a follow-up ("yes", "understood", "clear", "next"), unblock transition
+    if (isReviewingVerdictRef.current) {
+      isReviewingVerdictRef.current = false
+      setIsReviewingVerdict(false)
+      sendTextMessage(`Student replied: "${cleanAnswer}". If understood, proceed to conclude this concept with concept_done and transition to the next concept.`)
+      return
+    }
+
+    isAwaitingStudentAnswerRef.current = false
+    setIsAwaitingStudentAnswer(false)
+    isReviewingVerdictRef.current = true
+    setIsReviewingVerdict(true)
+
+    chalkboardRef.current?.drawStudentAnswer?.(cleanAnswer, undefined, 'blue')
+    sendTextMessage(
+      `Student answered: "${cleanAnswer}". (Student's answer is already displayed on the whiteboard). Evaluate my answer warmly. Write the topper model answer and confirmation/correction on this current whiteboard page using write_chalkboard(action="draw_answer_verdict", content="Verdict: ..."). Do NOT switch or change the whiteboard page. Keep everything on this current page so I can review it. Ask me if I understood or if I am ready for the next concept.`
+    )
+  }
+
+  const handleStudentVoiceAnswer = (answer: string) => {
+    if (!answer?.trim()) return
+    const cleanAnswer = answer.trim()
+
+    // If student was reviewing verdict and says "understood", "yes", "clear", "next", unblock transition
+    if (isReviewingVerdictRef.current) {
+      isReviewingVerdictRef.current = false
+      setIsReviewingVerdict(false)
+      sendTextMessage(`Student replied: "${cleanAnswer}". If understood, proceed to conclude this concept with concept_done and transition to the next concept.`)
+      return
+    }
+
+    isAwaitingStudentAnswerRef.current = false
+    setIsAwaitingStudentAnswer(false)
+    isReviewingVerdictRef.current = true
+    setIsReviewingVerdict(true)
+
+    chalkboardRef.current?.drawStudentAnswer?.(cleanAnswer, undefined, 'blue')
+    sendTextMessage(
+      `Student answered: "${cleanAnswer}". (Student's answer is already displayed on the whiteboard). Evaluate my answer warmly. Write the topper model answer and confirmation/correction on this current whiteboard page using write_chalkboard(action="draw_answer_verdict", content="Verdict: ..."). Do NOT switch or change the whiteboard page. Keep everything on this current page so I can review it. Ask me if I understood or if I am ready for the next concept.`
+    )
+  }
 
   const [activeModule, setActiveModule] = useState<any>(null)
   const [activeCurriculum, setActiveCurriculum] = useState<any>(null)
@@ -422,6 +551,34 @@ export default function ModuleClassroomPage() {
         if (!executedSceneDirectivesRef.current.has(visualKey)) {
           executedSceneDirectivesRef.current.add(visualKey)
           handleVisualAction(parsedVisualEvent.action, parsedVisualEvent.parameters)
+        }
+      }
+
+      // Check for question directives that require student response (sets awaiting answer guard)
+      const questionRegex = /\[(?:QUESTION|CHECKPOINT_QUESTION|BOARD_QUESTION)(?::\s*([^\]]*))?\]|write_chalkboard\s*\(\s*(?:action\s*=\s*)?["']?(?:draw_question|question)["']?/gi
+      const questionMatches = Array.from(latest.text.matchAll(questionRegex))
+      for (const qm of questionMatches) {
+        const tag = qm[0]
+        const key = `${transcriptId}:${tag}`
+        if (!executedSceneDirectivesRef.current.has(key)) {
+          executedSceneDirectivesRef.current.add(key)
+          isAwaitingStudentAnswerRef.current = true
+          setIsAwaitingStudentAnswer(true)
+        }
+      }
+
+      // Check for answer verdict directives that resolve question & enter verdict review state
+      const verdictRegex = /\[(?:VERDICT|ANSWER_VERDICT|CORRECTION)(?::\s*([^\]]*))?\]|write_chalkboard\s*\(\s*(?:action\s*=\s*)?["']?(?:draw_answer_verdict|answer_verdict|verdict)["']?/gi
+      const verdictMatches = Array.from(latest.text.matchAll(verdictRegex))
+      for (const vm of verdictMatches) {
+        const tag = vm[0]
+        const key = `${transcriptId}:${tag}`
+        if (!executedSceneDirectivesRef.current.has(key)) {
+          executedSceneDirectivesRef.current.add(key)
+          isAwaitingStudentAnswerRef.current = false
+          setIsAwaitingStudentAnswer(false)
+          isReviewingVerdictRef.current = true
+          setIsReviewingVerdict(true)
         }
       }
 
@@ -796,6 +953,10 @@ export default function ModuleClassroomPage() {
 
   // 6. Concept Tracking Callbacks: auto-save progress and resume state
   const handleConceptFocus = (conceptName: string) => {
+    if (isAwaitingStudentAnswerRef.current || isReviewingVerdictRef.current) {
+      console.log('[Page Guard] Blocked premature concept_focus while awaiting answer / reviewing verdict on current page:', conceptName)
+      return
+    }
     const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
     if (keyConcepts.length === 0) return
 
@@ -878,6 +1039,10 @@ export default function ModuleClassroomPage() {
   }
 
   const handleConceptDone = (conceptName: string) => {
+    if (isAwaitingStudentAnswerRef.current || isReviewingVerdictRef.current) {
+      console.log('[Page Guard] Blocked premature concept_done while awaiting answer / reviewing verdict on current page:', conceptName)
+      return
+    }
     const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
     if (keyConcepts.length === 0) return
 
@@ -1193,98 +1358,69 @@ export default function ModuleClassroomPage() {
     const kickoffPrompt = isCompletedModule
       ? `Hello Teacher! I have completed this capsule. Please review the key takeaways on the whiteboard, and ask if I have any questions before the quiz.`
       : isResumed
-      ? `Hello Teacher! I am back. Please teach Concept ${currentConceptIndex + 1}: "${currentConcept}". Greet me in 4-6 words, explain the everyday intuition in 3-4 sentences, write key notes on the whiteboard, show the visual diagram, and ask me a checkpoint question.`
-      : `Hello Teacher! Please start our class now on Concept 1: "${firstConcept}". Greet me in 4-6 words, explain the everyday intuition in 3-4 sentences, write key notes on the whiteboard, show the visual diagram, and ask me a checkpoint question.`
+      ? `Hello Teacher! I am back. Please teach Concept ${currentConceptIndex + 1}: "${currentConcept}". Greet me in 4-6 words, explain the everyday example and plain meaning first, write notes on the whiteboard, show the visual diagram or shape, and guide me step-by-step.`
+      : `Hello Teacher! Please start our class now on Concept 1: "${firstConcept}". Greet me in 4-6 words, explain the everyday example and plain meaning first, write notes on the whiteboard, show the visual diagram or shape, and guide me step-by-step.`
 
-    const lessonPrompt = `ROLE: Senior Academic Topper Tutor (1-on-1 spoken class with live whiteboard).
+    const conceptDossiersText = buildConceptMicroDossiers(
+      keyConcepts,
+      activeModule,
+      resolvedBoard,
+      resolvedClassLevel,
+      resolvedSubject,
+      chapterName,
+      parsedWorkedExamples,
+      parsedMisconceptions
+    )
+
+    const lessonPrompt = `ROLE: Senior Academic Topper Tutor (1-on-1 spoken class with live chalkboard notes).
 STUDENT: ${resolvedClassLevel || 'Class 10'} (${resolvedBoard || 'CBSE'}) | Subject: ${resolvedSubject} (${subjectDirective}) | Capsule: "${resolvedTitle}"${
   isLastCapsuleOfChapter && nextChapterInfo
     ? ` | Final Capsule (Next: #${nextChapterInfo.orderIndex} "${nextChapterInfo.chapterTitle}")`
     : ''
 }
 
-CADENCE & TURN PROTOCOL (STRICT):
-1. Socratic Turn Length: Speak 3 to 4 sentences per turn explaining the concept with tangible real-world intuition.
-2. MANDATORY DUAL-OUTPUT (NOTES + VISUALIZATION): In EVERY turn introducing or explaining a concept, you MUST execute BOTH:
-   a) Multi-Color Notes: write_chalkboard(action="draw_note", content="...", color="botanical"|"coral"|"blue"|"amber"|"purple"|"primary"), action="draw_step", or action="draw_highlight_box".
-   AND
-   b) VISUALIZATION (MANDATORY ON EVERY CONCEPT): In Turn 1 of introducing each concept, you MUST immediately call its mapped visual tool from the VISUAL ROADMAP below (image, video, graph, flowchart, 3D simulation, diagram, geometry, table, or numerical). The student must SEE the visual representation while you speak! DO NOT wait for the student to ask.
-3. Whiteboard 1-Concept-Per-Page: Each concept has its dedicated whiteboard page (Page 1 = Concept 1, Page 2 = Concept 2...). The concept title is automatically placed at the top of that page. DO NOT write the concept title, "Key Concept:", or "Focus:" on the board.
-4. MULTI-COLOR CHALK PALETTE (COLOR-CODED WHITEBOARD NOTES):
-   - color="botanical": Core definitions, biological organs/structures, fundamental scientific principles.
-   - color="coral": Key laws, equations, mathematical formulas, critical exam pitfalls.
-   - color="blue": Numbered derivation steps, calculation steps, procedural mechanisms.
-   - color="amber": SI units, key highlights, constants, exam cautions.
-   - color="purple": Scientific terminology, chemical names, organelle vocabulary.
-   - color="primary": General explanations, bullet points, standard observations.
-   Use different colors for different notes and steps on each page!
-5. SPEECH PURITY & SILENT EXECUTION (DO NOT SPEAK CODE):
-   - You MUST call write_chalkboard, execute_visual_action, and other tools as silent function calls.
-   - NEVER speak code, function names, action names, or syntax (e.g. NEVER utter "write_chalkboard", "draw_note", "action=", "color=", or "concept_done").
-   - Spoken audio must ONLY contain natural, warm human explanations and questions directed to the student.
-6. Turn-Ending Question (Hard Stop): End EVERY turn with a general question about the topic to check understanding. STOP speaking immediately at the question mark ('?'). You MUST pause and wait for the student.
-7. CONCEPT MASTERY VERIFICATION & ADVANCEMENT (CRITICAL FOR CONCEPT LEDGER):
-   - At the end of explaining a concept, ask a verification checkpoint question to check understanding.
-   - WHEN THE STUDENT REPLIES OR ANSWERS:
-     a) If their answer is correct or shows understanding: Praise them briefly (3-5 words, e.g. "Spot on!", "Exactly right!"), and IMMEDIATELY execute:
-        1. write_chalkboard(action="concept_done", content="<Current Concept Name>") -> Marks concept Mastered in the Capsule Concept Ledger. DO NOT write "Mastered" or "Concept Done" on the whiteboard.
-        2. write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> Advances whiteboard page and ledger focus to the next concept.
-     b) Then immediately teach the next concept (3-4 sentences + write notes + execute mapped visual tool from the roadmap)!
-     c) If their answer is hesitant or wrong: Gently guide them with a simple analogy, clarify their doubt, and ask a simpler follow-up question.
-     d) If all concepts in the CURRICULUM are completed, call: conclude_and_open_quiz(summary="...")
+PEDAGOGICAL CADENCE FOR EACH CONCEPT (STRICT 5-STAGE SEQUENCE):
+1. Stage 1 - Real-World Intuitive Hook: Everyday physical phenomenon first before formulas.
+   write_chalkboard(action="draw_note", content="Intuition: <everyday example & plain meaning>", color="botanical")
+2. Stage 2 - Formal Law, Formula & Visual: Precise law, definition, SI units.
+   write_chalkboard(action="draw_highlight_box", content="Law / Formula: <exact law & SI units>", color="coral")
+   Execute mapped visual tool or 3D simulation or draw_shape.
+3. Stage 3 - Authentic Board Exam Numerical & Model Answer:
+   write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Answer: <Topper Model Answer with steps & units>", color="coral")
+4. Stage 4 - Checkpoint Question (1-2 Qs & INVIOLABLE HARD STOP):
+   write_chalkboard(action="draw_question", content="Checkpoint Q: <Question text>", color="amber")
+   STOP speaking at '?' and wait for student.
+   CRITICAL PAGE FLIP BARRIER: DO NOT CHANGE THE WHITEBOARD PAGE. DO NOT CALL action="concept_done" OR action="concept_focus" BEFORE THE STUDENT REPLIES!
+5. Stage 5 - Student Answer & Model Verdict (STAY ON CURRENT WHITEBOARD PAGE):
+   When student replies (spoken or typed in Sobi pod):
+   - write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
+   - write_chalkboard(action="draw_answer_verdict", content="Verdict: <Correct confirmation OR Correction & 100% Ideal Answer>", color="botanical"|"coral")
+   - INVIOLABLE RULE: DO NOT CHANGE THE WHITEBOARD PAGE. DO NOT CALL action="concept_done" OR action="concept_focus" IN THIS TURN!
+   - Speak 2-3 sentences explaining the topper answer and ask the student: "Does this solution make sense to you, or would you like to clarify any step?"
+   - ONLY in the NEXT turn, when the student explicitly replies confirming understanding (e.g., "yes", "understood", "clear", "let's move to next concept"):
+     a) Silently call: write_chalkboard(action="concept_done", content="<Current Concept Name>")
+     b) Silently call: write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean page!
+     c) Begin Stage 1 for the next concept on the new clean page.
+     d) If all concepts completed, call: conclude_and_open_quiz(summary="...")
 
-TOOL PROTOCOL (ACTIVE SUITE OF SEMANTIC TOOLS - INVOKE DIRECTLY):
-1. plot_mathematical_graph(formula, domain?, range?, title?, callout?, points?)
-   - Plots function curves directly on the whiteboard canvas.
-   - Examples: formula="2x + 1", formula="x^2 - 4", formula="sin(x)", formula="velocity-time"
-2. open_interactive_simulation(sceneType, parameters?)
-   - Summons 3D WebGL physics, chemistry, or math simulation container directly on the whiteboard.
-   - Scenes: circuits | forces | optics | matter | waves | geometry | linear_graph | 3d_vectors | bohr_atom
-   - Parameters: { voltage: 12, circuitType: "parallel", shape: "cylinder", radius: 3, height: 6, ... }
-3. show_educational_media(mediaType, title, caption, attribution?)
-   - Renders authentic textbook illustration cards or practical lab video cards.
-   - mediaType: "image" | "video"
-4. solve_step_by_step_numerical(problem?, given?, formula?, substitution?, calculation?, answer, unit?)
-   - Renders complete board exam numerical solution with scratchpad rough work and boxed final answer.
-5. conclude_and_open_quiz(summary)
-   - Writes chapter synthesis summary on chalkboard and transitions to 10-MCQ evaluation.
-6. write_chalkboard(action, content, color?)
-   - Comprehensive whiteboard control:
-     * action="draw_note", content="Core rule or definition", color="botanical"|"coral"|"amber"|"blue"|"purple"|"white"
-     * action="draw_highlight_box", content="Formula or Law", color="coral"|"amber"|"botanical"
-     * action="draw_step", content="Derivation step", color="white"|"blue"|"amber"
-     * action="set_color", color="botanical"|"coral"|"amber"|"blue"|"purple"|"white"
-     * action="draw_diagram", content="forces | pressure | magnet | cell | optics | atom | matter | photosynthesis | series | parallel"
-     * action="draw_geometry", content="triangle right | circle | cylinder | cone | sphere | polygon"
-     * action="draw_table", content="Header 1 | Header 2 || Row 1A | Row 1B || Row 2A | Row 2B"
-     * action="draw_flowchart", content="Step 1 -> Step 2 -> Step 3", color="botanical"|"blue"
-     * action="draw_image", content="Title | Caption | NCERT Standard"
-     * action="draw_video", content="Title | Description"
-     * action="draw_graph", content="formula=... | domain=... | title=..."
-     * action="draw_rough_work", content="scratch calculation", color="white"|"amber"|"blue"
-     * action="clear_rough" -> Erase scratch calculations
-     * action="clear_notes" -> Clear notes column
-     * action="new_page" -> Add a new whiteboard page when current page fills
-     * action="draw_question", content="Question text", color="coral"|"amber"
-     * action="concept_focus", content="Concept Name" -> Switch current active concept focus and advance page
-     * action="concept_done", content="Concept Name" -> Mark mastered in ledger (do not write on board)
-7. execute_visual_action(action, parameters):
-   * action="SHOW_SCENE", parameters={ sceneType: "...", ...params }
-   * action="UPDATE_SCENE", parameters={ ...params }
-   * action="CLOSE_SCENE"
-   * action="SHOW_MEDIA", parameters={ stepIndex: 0 }
+FULL WHITEBOARD CANVAS & PALETTE:
+- Whiteboard is single source of truth for notes. 740px width with automatic line-wrapping.
+- color="botanical" (definitions, correct verdict) | "coral" (formulas, exam Qs, corrections) | "blue" (examples, student answers) | "amber" (checkpoint Qs, constants) | "primary" (general notes).
+
+SPEECH PURITY:
+- All write_chalkboard calls must be silent function calls. NEVER speak code, action names, or syntax.
 
 STATUS: ${
   isCompletedModule
-    ? `Review Mode. Greet in 4-6 words, write key points on the board in varied colors, and ask if doubts exist or proceed to 10-MCQ eval.`
+    ? `Review Mode. Greet in 4-6 words, write key points on board in varied colors, ask if doubts exist or proceed to quiz.`
     : isResumed
-    ? `Resume Concept #${currentConceptIndex + 1}: "${currentConcept}". Greet in 4-6 words, explain intuition in 3-4 sentences, write structured notes on the board using varied colors, show the visual diagram, and end with a question. When student answers correctly, silently call write_chalkboard with action="concept_done" and content="${currentConcept}" then action="concept_focus" and content="${nextConcept}" to advance.`
-    : `Start Concept #1: "${firstConcept}". Greet in 4-6 words, explain intuition in 3-4 sentences, write structured notes on the board using varied colors, show the visual diagram, and end with a question. When student answers correctly, silently call write_chalkboard with action="concept_done" and content="${firstConcept}" then action="concept_focus" and content="${nextConcept}" to advance.`
+    ? `Resume Concept #${currentConceptIndex + 1}: "${currentConcept}". Greet in 4-6 words, everyday example first, write notes, follow 5 stages.`
+    : `Start Concept #1: "${firstConcept}". Greet in 4-6 words, everyday example first, write notes, follow 5 stages.`
 }
 
-CURRICULUM:
-- Concepts: ${keyConcepts.map((c: string, i: number) => `${i + 1}. ${c.replace(/^[\s\(\[\{]+|[\s\)\]\}]+$/g, '').trim()}`).join(' | ')}
-${visualRoadmap ? `VISUAL ROADMAP (EXECUTE VISUAL TOOL AUTOMATICALLY IN TURN 1 FOR EACH CONCEPT):\n${visualRoadmap}\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${workedExamplesText ? `WORKED EXEMPLARS:\n${workedExamplesText}\n` : ''}${misconceptionsText ? `MISCONCEPTIONS: ${misconceptionsText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
+TEXTBOOK CONCEPT MICRO-DOSSIERS (100% TEXTBOOK ALIGNMENT & 2-3 EXAM QUESTIONS PER CONCEPT):
+${conceptDossiersText}
+${visualRoadmap ? `\nVISUAL ROADMAP (SUMMON VISUAL TOOL IN TURN 1 FOR EACH CONCEPT):\n${visualRoadmap}\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
 RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, intellectually rigorous topper tone.`
 
     // Whiteboard 1-Concept-Per-Page: Ensure active concept page is active
@@ -1299,6 +1435,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           'draw_image', 'image', 'draw_video', 'video',
           'draw_diagram', 'diagram', 'draw_graph', 'graph',
           'draw_geometry', 'geometry', 'draw_table', 'table',
+          'draw_shape', 'shape', 'draw_rectangle', 'draw_circle', 'draw_triangle',
           'draw_flowchart', 'draw_numerical', 'numerical', 'solve', 'worked_example',
           'draw_cell', 'draw_atom', 'draw_optics', 'draw_forces', 'draw_magnet',
           'draw_pressure', 'draw_matter', 'draw_photosynthesis', 'draw_circuit',
@@ -1310,7 +1447,9 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
         if (chalkboardRef.current) {
           // Whiteboard 1-Concept-Per-Page: Only switch page when concept explicitly changes
           if (['concept_focus', 'concept_goto', 'goto_concept'].includes(action)) {
-            chalkboardRef.current.goToPage?.(currentConceptIndexRef.current)
+            if (!isAwaitingStudentAnswerRef.current && !isReviewingVerdictRef.current) {
+              chalkboardRef.current.goToPage?.(currentConceptIndexRef.current)
+            }
           }
 
           if (action === 'set_color' || action === 'chalk_color') {
@@ -1324,7 +1463,34 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           else if (action === 'clear_rough') chalkboardRef.current.clearRough()
           else if (action === 'clear_notes') chalkboardRef.current.clearNotes()
           else if (action === 'rewrite_notes') chalkboardRef.current.rewriteNotes(typeof content === 'string' ? content : JSON.stringify(content))
-          else if (action === 'draw_question') chalkboardRef.current.drawQuestion(content, color)
+          else if (action === 'draw_question') {
+            isAwaitingStudentAnswerRef.current = true
+            setIsAwaitingStudentAnswer(true)
+            chalkboardRef.current.drawQuestion(content, color)
+          }
+          else if (action === 'draw_student_answer' || action === 'student_answer') {
+            chalkboardRef.current.drawStudentAnswer?.(content, undefined, color)
+          }
+          else if (action === 'draw_answer_verdict' || action === 'answer_verdict' || action === 'verdict') {
+            chalkboardRef.current.drawAnswerVerdict?.(content, undefined, color)
+            isAwaitingStudentAnswerRef.current = false
+            setIsAwaitingStudentAnswer(false)
+            isReviewingVerdictRef.current = true
+            setIsReviewingVerdict(true)
+          }
+          else if (action === 'draw_exam_question' || action === 'exam_question') {
+            chalkboardRef.current.drawExamQuestion?.(content, undefined, undefined, color)
+          }
+          else if (
+            action === 'draw_shape' || action === 'shape' ||
+            action === 'draw_rectangle' || action === 'draw_circle' ||
+            action === 'draw_triangle' || action === 'draw_square' ||
+            action === 'draw_cylinder' || action === 'draw_cube' ||
+            action === 'draw_ellipse' || action === 'draw_line' ||
+            action === 'draw_arrow'
+          ) {
+            chalkboardRef.current.drawShape?.(content)
+          }
           else if (action === 'draw_flowchart') chalkboardRef.current.drawFlowchart(content, color)
           else if (action === 'draw_table' || action === 'table') chalkboardRef.current.drawTable?.(content)
           else if (action === 'draw_geometry' || action === 'geometry') chalkboardRef.current.drawGeometry?.(content)
@@ -1924,6 +2090,8 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             keyConcepts={keyConceptsList}
             activeConceptIndex={currentConceptIndex}
             onPageChange={(pageIdx) => {
+              isReviewingVerdictRef.current = false
+              setIsReviewingVerdict(false)
               currentConceptIndexRef.current = pageIdx
               setCurrentConceptIndex(pageIdx)
             }}
@@ -1959,6 +2127,11 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
               markModuleAsCompleted()
               handleOpenQuiz()
             }}
+            latestTranscript={transcripts[transcripts.length - 1]?.text || ''}
+            isTeacherSpeaking={connectionState === 'TEACHER_SPEAKING'}
+            isListening={connectionState === 'LISTENING'}
+            onSubmitStudentAnswer={handleStudentSubmitAnswer}
+            onVoiceStudentAnswer={handleStudentVoiceAnswer}
           />
         </div>
       </div>

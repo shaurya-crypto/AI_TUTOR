@@ -101,6 +101,20 @@ export class GeminiLiveClient {
       this.handleSingleToolCall("show_educational_media", { mediaType, title, caption, attribution });
     }
 
+    // 3b. Match draw_shape(...)
+    const shapeRegex = /draw_shape\s*\(\s*([^()]+)\)/gi;
+    let sm;
+    while ((sm = shapeRegex.exec(rawText)) !== null) {
+      const argStr = sm[1];
+      try {
+        if (argStr.trim().startsWith('{')) {
+          this.handleSingleToolCall("draw_shape", JSON.parse(argStr.trim()));
+        } else {
+          this.handleSingleToolCall("draw_shape", { shape: argStr.trim() });
+        }
+      } catch {}
+    }
+
     // 4. Strip any leaked tool calls and bracket directives from spoken transcript text
     const stripCall = (name: string) => new RegExp(`${name}\\s*\\((?:'[^']*'|"[^"]*"|[^()]*|\\([^()]*\\))*\\)`, "gi");
     return rawText
@@ -109,6 +123,8 @@ export class GeminiLiveClient {
       .replace(stripCall("show_educational_media"), "")
       .replace(stripCall("plot_mathematical_graph"), "")
       .replace(stripCall("open_interactive_simulation"), "")
+      .replace(stripCall("update_interactive_simulation"), "")
+      .replace(stripCall("draw_shape"), "")
       .replace(stripCall("solve_step_by_step_numerical"), "")
       .replace(stripCall("conclude_and_open_quiz"), "")
       .replace(/\[[A-Z_]+(?::\s*[^\]]*)?\]/gi, "")
@@ -149,7 +165,14 @@ export class GeminiLiveClient {
     } else if (name === "open_interactive_simulation") {
       const sceneType = args.sceneType || "geometry";
       const parameters = args.parameters || {};
-      this.callbacks.onVisualAction?.("SHOW_SCENE", { sceneType, ...parameters });
+      const title = args.title || parameters.title;
+      this.callbacks.onVisualAction?.("SHOW_SCENE", { sceneType, title, ...parameters });
+    } else if (name === "update_interactive_simulation") {
+      const parameters = args.parameters || args;
+      const title = args.title || parameters.title;
+      this.callbacks.onVisualAction?.("UPDATE_SCENE", { title, ...parameters });
+    } else if (name === "draw_shape") {
+      this.callbacks.onChalkboardToolCall?.("draw_shape", args, args.color);
     } else if (name === "show_educational_media") {
       if (args.mediaType === "video") {
         this.callbacks.onChalkboardToolCall?.("draw_video", `${args.title || "Demonstration"} | ${args.caption || ""}`);
@@ -245,7 +268,13 @@ export class GeminiLiveClient {
                         "concept_done",
                         "concept_goto",
                         "worked_example",
-                        "numerical",
+                        "draw_shape",
+                        "draw_student_answer",
+                        "draw_answer_verdict",
+                        "draw_exam_question",
+                        "draw_rectangle",
+                        "draw_circle",
+                        "draw_triangle",
                         "table",
                         "geometry",
                         "graph",
@@ -254,7 +283,7 @@ export class GeminiLiveClient {
                         "video",
                         "set_color",
                       ],
-                      description: "The chalkboard action to perform",
+                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_shape, new_page, concept_focus, concept_done)",
                     },
                     content: {
                       type: Type.STRING,
@@ -351,8 +380,69 @@ export class GeminiLiveClient {
                 },
               },
               {
+                name: "draw_shape",
+                description: "Draw custom 2D or 3D geometric shapes (rectangle, square, circle, ellipse, triangle, right_triangle, cylinder, cube, polygon, line, arrow) on the whiteboard with complete control over width, height, radius, labels, and colors.",
+                behavior: Behavior.NON_BLOCKING,
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    shape: {
+                      type: Type.STRING,
+                      enum: [
+                        "rectangle",
+                        "square",
+                        "circle",
+                        "ellipse",
+                        "triangle",
+                        "right_triangle",
+                        "cylinder",
+                        "cube",
+                        "cuboid",
+                        "polygon",
+                        "line",
+                        "arrow",
+                      ],
+                      description: "The geometric shape to draw",
+                    },
+                    width: {
+                      type: Type.NUMBER,
+                      description: "Width in pixels (e.g. 80 to 720)",
+                    },
+                    height: {
+                      type: Type.NUMBER,
+                      description: "Height in pixels (e.g. 40 to 450)",
+                    },
+                    radius: {
+                      type: Type.NUMBER,
+                      description: "Radius in pixels for circle or cylinder (e.g. 30 to 200)",
+                    },
+                    label: {
+                      type: Type.STRING,
+                      description: "Educational formula, dimension callout, or label (e.g. 'Length = 30cm, Breadth = 15cm | Area = 450cm²')",
+                    },
+                    color: {
+                      type: Type.STRING,
+                      enum: [
+                        "botanical",
+                        "coral",
+                        "blue",
+                        "amber",
+                        "purple",
+                        "white",
+                      ],
+                      description: "Chalk stroke color",
+                    },
+                    fillColor: {
+                      type: Type.STRING,
+                      description: "Optional background fill color",
+                    },
+                  },
+                  required: ["shape"],
+                },
+              },
+              {
                 name: "open_interactive_simulation",
-                description: "Summon an interactive 3D WebGL physics, chemistry, or math simulation container directly on the whiteboard stage.",
+                description: "Summon an interactive 3D WebGL physics, chemistry, biology, or math simulation container directly on the whiteboard stage with full control over title, values, and parameters.",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -380,12 +470,34 @@ export class GeminiLiveClient {
                       ],
                       description: "The 3D interactive simulation scene to open",
                     },
+                    title: {
+                      type: Type.STRING,
+                      description: "Custom title for the 3D model simulation (e.g. 'Parallel Circuit: 12V Battery', 'Bohr Atom: Carbon Shell Model')",
+                    },
                     parameters: {
                       type: Type.OBJECT,
-                      description: "Dynamic simulation parameters (e.g. voltage, resistance, circuitType, shape, radius, height, temperature)",
+                      description: "Dynamic simulation parameters and values (e.g. { voltage: 12, circuitType: 'parallel', r1: 6, r2: 12, mass: 10, temperature: 400, shape: 'cylinder', radius: 4, height: 8 })",
                     },
                   },
                   required: ["sceneType"],
+                },
+              },
+              {
+                name: "update_interactive_simulation",
+                description: "Update values, variables, sliders, or title of the currently active 3D simulation scene in real time (e.g. adjust voltage, change solid shape, alter temperature, update angle).",
+                behavior: Behavior.NON_BLOCKING,
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: {
+                      type: Type.STRING,
+                      description: "Updated title for the simulation",
+                    },
+                    parameters: {
+                      type: Type.OBJECT,
+                      description: "Updated parameters and values to apply to the 3D model",
+                    },
+                  },
                 },
               },
               {
@@ -645,6 +757,29 @@ export class GeminiLiveClient {
         this.session.sendRealtimeInput({ text });
       } catch (fallbackErr) {
         console.warn("[GeminiLive] Failed to send kickoff fallback:", fallbackErr);
+      }
+    }
+  }
+
+  public sendTextMessage(text: string): void {
+    if (!this.session || !text?.trim()) return;
+    try {
+      console.log("[GeminiLive] Dispatching text turn to model:", text.slice(0, 100));
+      this.session.sendClientContent({
+        turns: [
+          {
+            role: "user",
+            parts: [{ text: text.trim() }],
+          },
+        ],
+        turnComplete: true,
+      });
+    } catch (err) {
+      console.warn("[GeminiLive] Failed to send text message via sendClientContent, trying sendRealtimeInput fallback:", err);
+      try {
+        this.session.sendRealtimeInput({ text: text.trim() });
+      } catch (fallbackErr) {
+        console.warn("[GeminiLive] Failed to send text fallback:", fallbackErr);
       }
     }
   }

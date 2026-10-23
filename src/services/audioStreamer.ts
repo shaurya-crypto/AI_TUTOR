@@ -14,6 +14,7 @@ export class AudioStreamer {
   private analyser: AnalyserNode | null = null;
   private isMuted: boolean = false;
   private isTeacherSpeaking: boolean = false;
+  private teacherSpeechStartTime: number = 0;
   private lastSpeechTime: number = 0;
   private consecutiveBargeInFrames: number = 0;
   private wasSpeechActive: boolean = false;
@@ -152,16 +153,25 @@ export class AudioStreamer {
     }
     const rms = Math.sqrt(sum / inputData.length);
 
-    // 1. TEACHER SPEAKING (SPEAKER SUPPRESSION & INTELLIGENT DUAL-THRESHOLD BARGE-IN):
+    // 1. TEACHER SPEAKING (SPEAKER SUPPRESSION & HIGH-FIDELITY DELIBERATE BARGE-IN):
     if (this.isTeacherSpeaking) {
-      const BARGE_IN_THRESHOLD = 0.025;
+      const now = Date.now();
+      // Grace period: First 1000ms after teacher begins speaking, protect against audio transients & speaker ramp-up
+      if (now - this.teacherSpeechStartTime < 1000) {
+        this.consecutiveBargeInFrames = 0;
+        return;
+      }
+
+      // Deliberate barge-in requires sustained human speech well above room noise and speaker bleed
+      const BARGE_IN_THRESHOLD = 0.075;
       if (rms >= BARGE_IN_THRESHOLD) {
         this.consecutiveBargeInFrames++;
-        if (this.consecutiveBargeInFrames >= 2) {
-          console.log(`[AudioStreamer] Student barge-in detected (RMS: ${rms.toFixed(4)})! Stopping teacher speech.`);
+        // Require at least 8 consecutive frames (~160-200ms) of sustained loud voice before interrupting teacher
+        if (this.consecutiveBargeInFrames >= 8) {
+          console.log(`[AudioStreamer] Deliberate student barge-in detected (RMS: ${rms.toFixed(4)})! Stopping teacher speech.`);
           this.isTeacherSpeaking = false;
           this.consecutiveBargeInFrames = 0;
-          this.lastSpeechTime = Date.now();
+          this.lastSpeechTime = now;
           this.wasSpeechActive = true;
           this.onBargeIn?.();
           this.onSpeechStart?.();
@@ -178,7 +188,7 @@ export class AudioStreamer {
 
     // 2. ADAPTIVE NOISE GATING & SPEECH HANGOVER:
     const now = Date.now();
-    const NOISE_GATE_THRESHOLD = 0.008;
+    const NOISE_GATE_THRESHOLD = 0.015;
     const SPEECH_HANGOVER_MS = 650;
 
     if (rms >= NOISE_GATE_THRESHOLD) {
@@ -210,9 +220,10 @@ export class AudioStreamer {
 
   public setTeacherSpeaking(speaking: boolean): void {
     this.isTeacherSpeaking = speaking;
-    if (!speaking) {
-      this.consecutiveBargeInFrames = 0;
+    if (speaking) {
+      this.teacherSpeechStartTime = Date.now();
     }
+    this.consecutiveBargeInFrames = 0;
   }
 
   public setMuted(muted: boolean): void {

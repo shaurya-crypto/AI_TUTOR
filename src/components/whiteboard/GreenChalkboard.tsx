@@ -66,12 +66,19 @@ export interface GreenChalkboardRef {
   drawVideoCard?: (title: string, description?: string) => void
   drawTable?: (tableStr: string) => void
   drawGeometry?: (geomStr: string) => void
+  drawShape?: (shapeDef: any) => void
+  drawStudentAnswer?: (answerText: string, isCorrect?: boolean, color?: string) => void
+  drawAnswerVerdict?: (verdictText: string, isCorrect?: boolean, color?: string) => void
+  drawExamQuestion?: (questionText: string, modelAnswer?: string, marks?: string, color?: string) => void
   addNewPage?: () => void
   goToPage: (pageIndex: number, title?: string) => void
   clearNotes: () => void
   rewriteNotes: (newNotes: string) => Promise<void>
   getBoardSummary: () => { notesText: string; roughText: string; fullSummary: string }
   handleAiDirective: (directive: string, transcriptId?: string) => void
+  getActiveQuestion?: () => { text: string; y: number; height: number; pageIndex: number } | null
+  getNextY?: () => number
+  getCurrentPageIndex?: () => number
 }
 
 interface WhiteboardPage {
@@ -79,6 +86,14 @@ interface WhiteboardPage {
   elements: any[]
   nextY: number
   roughY: number
+}
+
+export interface WritingPositionInfo {
+  nextY: number
+  pageIndex: number
+  lastAction?: string
+  lastText?: string
+  activeQuestion?: { text: string; y: number; height: number; pageIndex: number } | null
 }
 
 interface GreenChalkboardProps {
@@ -97,6 +112,7 @@ interface GreenChalkboardProps {
   onModuleComplete?: (summary?: string) => void
   onConfirmEndChapter?: (question: string) => void
   onStartQuiz?: () => void
+  onWritingPositionChange?: (pos: WritingPositionInfo) => void
 }
 
 import {
@@ -140,6 +156,9 @@ import {
 } from './chalkboardFilter'
 export { normalizeTitle, isRedundantConceptOrMasteredText }
 
+import { wrapText } from './textWrapper'
+export { wrapText }
+
 export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardProps>(
   (
     {
@@ -158,6 +177,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       onModuleComplete,
       onConfirmEndChapter,
       onStartQuiz,
+      onWritingPositionChange,
     },
     ref
   ) => {
@@ -177,6 +197,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const boardElementsRef = useRef<any[]>([])
     const nextYRef = useRef(140)
     const roughYRef = useRef(140)
+    const activeQuestionRef = useRef<{ text: string; y: number; height: number; pageIndex: number } | null>(null)
     const convertElementsRef = useRef<any>(null)
     const executedDirectivesRef = useRef<Set<string>>(new Set())
     const executedTextHistoryRef = useRef<Set<string>>(new Set())
@@ -185,6 +206,17 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const operationQueueRef = useRef<Promise<any>>(Promise.resolve())
     const [activeChalkColor, setActiveChalkColor] = useState<string>(INK_PRIMARY)
     const activeChalkColorRef = useRef<string>(INK_PRIMARY)
+    const lastDrawnStudentAnswerRef = useRef<{ text: string; time: number } | null>(null)
+
+    const notifyPositionChange = (lastAction?: string, lastText?: string) => {
+      onWritingPositionChange?.({
+        nextY: nextYRef.current,
+        pageIndex: currentPageIndexRef.current,
+        lastAction,
+        lastText,
+        activeQuestion: activeQuestionRef.current,
+      })
+    }
 
     const setChalkColor = (colorNameOrHex: string) => {
       const resolved = resolveChalkColor(colorNameOrHex, INK_PRIMARY)
@@ -260,6 +292,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       setPages([...pagesRef.current])
       excalidrawAPI?.updateScene({ elements })
       persistScene(elements)
+      notifyPositionChange()
     }
 
     const checkIsRedundant = (text: string): boolean =>
@@ -317,33 +350,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           type: 'line',
           x: 60,
           y: 95,
-          width: 420,
+          width: 760,
           height: 0,
-          points: [[0, 0], [420, 0]],
+          points: [[0, 0], [760, 0]],
           strokeColor: BORDER_SUBTLE,
           strokeStyle: 'dashed',
-          customData: { isHeader: true },
-        },
-        {
-          id: `header_divider_v_p${pageNum}`,
-          type: 'line',
-          x: 500,
-          y: 35,
-          points: [[0, 0], [0, 850]],
-          strokeColor: BORDER_SUBTLE,
-          strokeWidth: 1.5,
-          strokeStyle: 'dashed',
-          customData: { isHeader: true },
-        },
-        {
-          id: `header_rough_label_p${pageNum}`,
-          type: 'text',
-          x: 520,
-          y: 95,
-          text: 'ROUGH / WORKING SCRATCHPAD',
-          fontSize: 11,
-          fontFamily: 1,
-          strokeColor: INK_MUTED,
           customData: { isHeader: true },
         },
       ]
@@ -397,7 +408,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
 
       const allNotes: string[] = []
-      const allRough: string[] = []
 
       pagesRef.current.forEach((page, pIdx) => {
         const pageElements = page.elements || []
@@ -409,12 +419,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         for (const el of textElements) {
           const text = (el.text || '').trim()
           if (!text) continue
-          const isRough = el.customData?.isRough === true || el.id?.startsWith('rough_') || (el.x || 0) >= 500
-          if (isRough) {
-            allRough.push(text.replace(/^\[Scratch\]\s*/, ''))
-          } else {
-            pageNotes.push(text)
-          }
+          pageNotes.push(text)
         }
 
         if (pageNotes.length > 0) {
@@ -424,18 +429,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       })
 
       const notesText = allNotes.join('\n')
-      const roughText = allRough.join('\n')
+      const roughText = ''
 
-      const fullSummary = [
-        allNotes.length > 0
-          ? `MASTER NOTES ON BOARD:\n${allNotes.map((n) => (n.startsWith('---') ? n : `• ${n}`)).join('\n')}`
-          : 'MASTER NOTES: (Module header initialized)',
-        allRough.length > 0
-          ? `SCRATCHPAD WORK:\n${allRough.map((r) => `[Scratch] ${r}`).join('\n')}`
-          : '',
-      ]
-        .filter(Boolean)
-        .join('\n\n')
+      const fullSummary = allNotes.length > 0
+        ? `MASTER NOTES ON BOARD:\n${allNotes.map((n) => (n.startsWith('---') ? n : `• ${n}`)).join('\n')}`
+        : 'MASTER NOTES: (Module header initialized)'
 
       return { notesText, roughText, fullSummary }
     }
@@ -538,6 +536,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         })
 
         persistScene(initialElements)
+        notifyPositionChange('add_new_page')
         onNoteRecorded?.(`--- New Whiteboard Page ${newPageNum} Created ---`)
       } catch (err) {
         console.error('addNewPage error:', err)
@@ -641,6 +640,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!targetHasTitle && (conceptTitle || keyConcepts?.[targetIdx])) {
         await drawTitle(conceptTitle || keyConcepts[targetIdx])
       }
+      notifyPositionChange('go_to_page')
     }
 
     // Switch between pages and notify parent to update concept tracking
@@ -650,11 +650,12 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       onConceptGoto?.(targetIdx + 1)
     }
 
-    // Check if vertical space is filled; if so, automatically advance to next page
-    const checkAutoPageOverflow = async (requiredHeight = 60) => {
-      if (nextYRef.current + requiredHeight > 780) {
-        await addNewPage()
-      }
+    // 1-Concept-Per-Page invariant: The chalkboard canvas scrolls smoothly vertically.
+    // We never auto-flip pages mid-concept so questions, student answers, and verdicts
+    // remain permanently together on the concept's dedicated page.
+    const checkAutoPageOverflow = async (_requiredHeight = 60) => {
+      // Intentionally no-op: page flips are governed strictly by concept progression, not arbitrary pixel heights.
+      return
     }
 
     // Initialize board: restore from localStorage or build initial page
@@ -786,7 +787,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (executedTextHistoryRef.current.has(clean.toLowerCase())) return
       executedTextHistoryRef.current.add(clean.toLowerCase())
 
-      await checkAutoPageOverflow(50)
+      const lines = wrapText(clean, 62)
+      const lineHeight = 24
+      const totalH = Math.max(30, lines.length * lineHeight)
+
+      await checkAutoPageOverflow(totalH + 16)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
         const y = customY !== undefined ? customY : getDynamicNextY(15)
@@ -797,7 +802,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             type: 'text',
             x,
             y,
-            text: clean,
+            text: lines.join('\n'),
             fontSize: 18,
             fontFamily: 1,
             strokeColor: chosenColor,
@@ -807,7 +812,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
 
         const currentElements = getCurrentElements()
         const merged = [...currentElements, ...newElements]
-        updateCurrentPageElements(merged, y + 45)
+        updateCurrentPageElements(merged, y + totalH + 12)
+        notifyPositionChange('draw_text', clean)
         onNoteRecorded?.(clean)
       } catch (err) {
         console.error('drawText error:', err)
@@ -899,7 +905,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (executedTextHistoryRef.current.has(clean.toLowerCase())) return
       executedTextHistoryRef.current.add(clean.toLowerCase())
 
-      await checkAutoPageOverflow(46)
+      const lines = wrapText(clean, 64)
+      const lineHeight = 22
+      const totalH = Math.max(28, lines.length * lineHeight)
+
+      await checkAutoPageOverflow(totalH + 16)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
         const startX = 60
@@ -923,7 +933,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             type: 'text',
             x: startX + 16,
             y: startY,
-            text: clean,
+            text: lines.join('\n'),
             fontSize: 16,
             fontFamily: 1,
             strokeColor: noteColor,
@@ -933,7 +943,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
 
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 38)
+        updateCurrentPageElements(merged, startY + totalH + 12)
+        notifyPositionChange('draw_note', clean)
         onNoteRecorded?.(`• ${clean}`)
       } catch (err) {
         console.error('drawNote error:', err)
@@ -945,7 +956,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!excalidrawAPI || !stepText?.trim()) return
       const clean = stepText.trim()
       if (checkIsRedundant(clean)) return
-      await checkAutoPageOverflow(44)
+      const lines = wrapText(clean, 60)
+      const lineHeight = 21
+      const totalH = Math.max(26, lines.length * lineHeight)
+
+      await checkAutoPageOverflow(totalH + 16)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
         const startX = 60
@@ -957,7 +972,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             type: 'text',
             x: startX,
             y: startY,
-            text: `->  ${clean}`,
+            text: lines.map((l, i) => (i === 0 ? `->  ${l}` : `    ${l}`)).join('\n'),
             fontSize: 15,
             fontFamily: 1,
             strokeColor: stepColor,
@@ -967,7 +982,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
 
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 36)
+        updateCurrentPageElements(merged, startY + totalH + 12)
+        notifyPositionChange('draw_step', clean)
         onNoteRecorded?.(`  -> ${clean}`)
       } catch (err) {
         console.error('drawStep error:', err)
@@ -979,13 +995,17 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!excalidrawAPI || !text?.trim()) return
       const clean = text.trim()
       if (checkIsRedundant(clean)) return
-      await checkAutoPageOverflow(68)
+      const lines = wrapText(clean, 60)
+      const boxWidth = 740
+      const lineHeight = 22
+      const textHeight = Math.max(1, lines.length) * lineHeight
+      const boxHeight = Math.max(54, 16 + textHeight + 16)
+
+      await checkAutoPageOverflow(boxHeight + 20)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
         const startX = 60
         const startY = getDynamicNextY(16)
-        const boxWidth = Math.min(Math.max(clean.length * 11 + 36, 260), 400)
-        const boxHeight = 44
         const boxStroke = resolveChalkColor(color, INK_CORAL)
         const boxBg = boxStroke === INK_CORAL ? INK_CORAL_SOFT : '#F8F6F0'
 
@@ -1006,8 +1026,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           {
             type: 'text',
             x: startX + 16,
-            y: startY + 12,
-            text: clean,
+            y: startY + 14,
+            text: lines.join('\n'),
             fontSize: 16,
             fontFamily: 1,
             strokeColor: INK_PRIMARY,
@@ -1018,17 +1038,25 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + boxHeight + 14)
+        notifyPositionChange('draw_highlight_box', clean)
         onNoteRecorded?.(`**[Key Principle]**: ${clean}`)
       } catch (err) {
         console.error('drawHighlightBox error:', err)
       }
     }
 
-    // Draw Exam Question Callout
+    // Draw Exam / Checkpoint Question Callout (Full Width, Crisp Layout)
     const drawQuestion = async (questionText: string, color?: string) => {
       if (!excalidrawAPI || !questionText?.trim()) return
       const clean = questionText.trim()
-      await checkAutoPageOverflow(70)
+      const lines = wrapText(clean, 64)
+      const lineHeight = 22
+      const paddingTop = 28
+      const textHeight = Math.max(1, lines.length) * lineHeight
+      const paddingBottom = 20
+      const qHeight = Math.max(68, paddingTop + textHeight + paddingBottom)
+
+      await checkAutoPageOverflow(qHeight + 20)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
         const startX = 60
@@ -1040,8 +1068,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             type: 'rectangle',
             x: startX,
             y: startY,
-            width: 400,
-            height: 52,
+            width: 740,
+            height: qHeight,
             strokeColor: qStroke,
             backgroundColor: '#FFF8F6',
             fillStyle: 'solid',
@@ -1051,8 +1079,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           },
           {
             type: 'text',
-            x: startX + 12,
-            y: startY + 6,
+            x: startX + 16,
+            y: startY + 8,
             text: 'CHECKPOINT QUESTION:',
             fontSize: 11,
             fontFamily: 1,
@@ -1061,9 +1089,93 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           },
           {
             type: 'text',
-            x: startX + 12,
-            y: startY + 24,
-            text: clean,
+            x: startX + 16,
+            y: startY + 28,
+            text: lines.join('\n'),
+            fontSize: 15,
+            fontFamily: 1,
+            strokeColor: INK_PRIMARY,
+            customData: { isRough: false },
+          },
+        ])
+
+        activeQuestionRef.current = {
+          text: clean,
+          y: startY,
+          height: qHeight,
+          pageIndex: currentPageIndexRef.current,
+        }
+
+        const current = getCurrentElements()
+        const merged = [...current, ...elements]
+        updateCurrentPageElements(merged, startY + qHeight + 14)
+        notifyPositionChange('draw_question', clean)
+        onNoteRecorded?.(`? **Question**: ${clean}`)
+      } catch (err) {
+        console.error('drawQuestion error:', err)
+      }
+    }
+
+    // Draw Student's Spoken Answer on Whiteboard
+    const drawStudentAnswer = async (answerText: string, isCorrect?: boolean, color?: string) => {
+      if (!excalidrawAPI || !answerText?.trim()) return
+      const clean = answerText.trim()
+
+      // Deduplicate recent identical or redundant student responses within 30 seconds
+      const cleanLower = clean.toLowerCase().replace(/^(?:student(?:'s)?\s*answer:?\s*)+/i, '').trim()
+      if (lastDrawnStudentAnswerRef.current) {
+        const prevLower = lastDrawnStudentAnswerRef.current.text.toLowerCase().replace(/^(?:student(?:'s)?\s*answer:?\s*)+/i, '').trim()
+        const isRecent = Date.now() - lastDrawnStudentAnswerRef.current.time < 30000
+        if (isRecent && (cleanLower === prevLower || cleanLower.includes(prevLower) || prevLower.includes(cleanLower))) {
+          console.log('[Chalkboard] Skipping duplicate student answer render:', clean)
+          return
+        }
+      }
+      lastDrawnStudentAnswerRef.current = { text: clean, time: Date.now() }
+
+      const lines = wrapText(`"${clean}"`, 64)
+      const lineHeight = 20
+      const paddingTop = 26
+      const textHeight = Math.max(1, lines.length) * lineHeight
+      const paddingBottom = 18
+      const boxHeight = Math.max(64, paddingTop + textHeight + paddingBottom)
+
+      await checkAutoPageOverflow(boxHeight + 18)
+      try {
+        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
+        const startX = 60
+        const startY = getDynamicNextY(14)
+        const ansStroke = resolveChalkColor(color, INK_BLUE)
+
+        const elements = convertToExcalidrawElements([
+          {
+            type: 'rectangle',
+            x: startX,
+            y: startY,
+            width: 740,
+            height: boxHeight,
+            strokeColor: ansStroke,
+            backgroundColor: '#F0F7FF',
+            fillStyle: 'solid',
+            strokeWidth: 1.5,
+            roundness: { type: 3 },
+            customData: { isRough: false },
+          },
+          {
+            type: 'text',
+            x: startX + 16,
+            y: startY + 8,
+            text: "STUDENT'S RESPONSE:",
+            fontSize: 11,
+            fontFamily: 1,
+            strokeColor: ansStroke,
+            customData: { isRough: false },
+          },
+          {
+            type: 'text',
+            x: startX + 16,
+            y: startY + 26,
+            text: lines.join('\n'),
             fontSize: 14,
             fontFamily: 1,
             strokeColor: INK_PRIMARY,
@@ -1073,10 +1185,608 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
 
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 66)
-        onNoteRecorded?.(`? **Question**: ${clean}`)
+        updateCurrentPageElements(merged, startY + boxHeight + 14)
+        notifyPositionChange('draw_student_answer', clean)
+        onNoteRecorded?.(`**Student**: "${clean}"`)
       } catch (err) {
-        console.error('drawQuestion error:', err)
+        console.error('drawStudentAnswer error:', err)
+      }
+    }
+
+    // Draw Answer Verdict / Correction on Whiteboard
+    const drawAnswerVerdict = async (verdictText: string, isCorrect?: boolean, color?: string) => {
+      if (!excalidrawAPI || !verdictText?.trim()) return
+      const clean = verdictText.trim()
+      const looksCorrect =
+        isCorrect === true ||
+        /^(correct|spot on|perfect|exactly|well done|excellent|right|yes)\b/i.test(clean) ||
+        /\b(correct|spot on|perfect|well done)\b/i.test(clean)
+      const lines = wrapText(clean, 64)
+      const lineHeight = 20
+      const paddingTop = 26
+      const textHeight = Math.max(1, lines.length) * lineHeight
+      const paddingBottom = 18
+      const boxHeight = Math.max(64, paddingTop + textHeight + paddingBottom)
+
+      await checkAutoPageOverflow(boxHeight + 18)
+      try {
+        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
+        const startX = 60
+        const startY = getDynamicNextY(14)
+        const vStroke = resolveChalkColor(
+          color,
+          looksCorrect ? INK_BOTANICAL : INK_CORAL
+        )
+        const vBg = looksCorrect ? '#F0FDF4' : '#FFF1F2'
+
+        const elements = convertToExcalidrawElements([
+          {
+            type: 'rectangle',
+            x: startX,
+            y: startY,
+            width: 740,
+            height: boxHeight,
+            strokeColor: vStroke,
+            backgroundColor: vBg,
+            fillStyle: 'solid',
+            strokeWidth: 1.5,
+            roundness: { type: 3 },
+            customData: { isRough: false },
+          },
+          {
+            type: 'text',
+            x: startX + 16,
+            y: startY + 8,
+            text: looksCorrect ? 'VERDICT: CORRECT & COMPLETE' : 'MODEL CORRECTION & REFINED ANSWER:',
+            fontSize: 11,
+            fontFamily: 1,
+            strokeColor: vStroke,
+            customData: { isRough: false },
+          },
+          {
+            type: 'text',
+            x: startX + 16,
+            y: startY + 26,
+            text: lines.join('\n'),
+            fontSize: 14,
+            fontFamily: 1,
+            strokeColor: INK_PRIMARY,
+            customData: { isRough: false },
+          },
+        ])
+
+        // Question resolved
+        activeQuestionRef.current = null
+
+        const current = getCurrentElements()
+        const merged = [...current, ...elements]
+        updateCurrentPageElements(merged, startY + boxHeight + 14)
+        notifyPositionChange('draw_answer_verdict', clean)
+        onNoteRecorded?.(`**Verdict**: ${clean}`)
+      } catch (err) {
+        console.error('drawAnswerVerdict error:', err)
+      }
+    }
+
+    // Draw Exam Question & Model Answer on Whiteboard
+    const drawExamQuestion = async (
+      question: string,
+      modelAnswer?: string,
+      marks?: string,
+      color?: string
+    ) => {
+      if (!excalidrawAPI || !question?.trim()) return
+
+      // Support "question | model answer" in single string if modelAnswer omitted
+      let qText = question.trim()
+      let aText = (modelAnswer || '').trim()
+      if (!aText && qText.includes('|')) {
+        const parts = qText.split('|').map((s) => s.trim())
+        qText = parts[0]
+        aText = parts.slice(1).join(' | ').replace(/^answer:\s*/i, '')
+      }
+
+      const qLines = wrapText(qText, 60)
+      const qLineHeight = 22
+      const qTextHeight = qLines.length * qLineHeight
+      let aLines: string[] = []
+      let aTextHeight = 0
+      if (aText) {
+        aLines = wrapText(aText, 58)
+        aTextHeight = aLines.length * 20
+      }
+
+      const cardHeight = 28 + qTextHeight + (aText ? 12 + 24 + aTextHeight : 0) + 24
+      await checkAutoPageOverflow(cardHeight + 20)
+
+      try {
+        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
+        const startX = 60
+        const startY = getDynamicNextY(16)
+        const exStroke = resolveChalkColor(color, INK_AMBER)
+
+        const skeletons: any[] = [
+          {
+            type: 'rectangle',
+            x: startX,
+            y: startY,
+            width: 740,
+            height: cardHeight,
+            strokeColor: exStroke,
+            backgroundColor: '#FDFCF7',
+            fillStyle: 'solid',
+            strokeWidth: 2,
+            roundness: { type: 3 },
+            customData: { isRough: false },
+          },
+          {
+            type: 'text',
+            x: startX + 16,
+            y: startY + 10,
+            text: `BOARD EXAM QUESTION ${marks ? `[${marks}]` : '[Typical Board Pattern]'}:`,
+            fontSize: 11,
+            fontFamily: 1,
+            strokeColor: exStroke,
+            customData: { isRough: false },
+          },
+          {
+            type: 'text',
+            x: startX + 16,
+            y: startY + 28,
+            text: `Q: ${qLines.join('\n   ')}`,
+            fontSize: 15,
+            fontFamily: 1,
+            strokeColor: INK_PRIMARY,
+            customData: { isRough: false },
+          },
+        ]
+
+        let curY = startY + 28 + qTextHeight + 12
+
+        if (aText) {
+          skeletons.push(
+            {
+              type: 'line',
+              x: startX + 16,
+              y: curY,
+              points: [[0, 0], [708, 0]],
+              strokeColor: BORDER_SUBTLE,
+              strokeWidth: 1,
+              strokeStyle: 'dashed',
+              customData: { isRough: false },
+            },
+            {
+              type: 'text',
+              x: startX + 16,
+              y: curY + 6,
+              text: 'TOPPER MODEL ANSWER:',
+              fontSize: 11,
+              fontFamily: 1,
+              strokeColor: INK_BOTANICAL,
+              customData: { isRough: false },
+            },
+            {
+              type: 'text',
+              x: startX + 16,
+              y: curY + 24,
+              text: `Ans: ${aLines.join('\n     ')}`,
+              fontSize: 14,
+              fontFamily: 1,
+              strokeColor: INK_PRIMARY,
+              customData: { isRough: false },
+            }
+          )
+        }
+
+        const elements = convertToExcalidrawElements(skeletons)
+        const current = getCurrentElements()
+        const merged = [...current, ...elements]
+        updateCurrentPageElements(merged, startY + cardHeight + 16)
+        notifyPositionChange('draw_exam_question', qText)
+        onNoteRecorded?.(`**Exam Question**: ${qText}\n**Model Answer**: ${aText}`)
+      } catch (err) {
+        console.error('drawExamQuestion error:', err)
+      }
+    }
+
+    // Helper parser for custom shapes with dynamic sizing
+    const parseShapeInput = (input: any): {
+      shape: string
+      width: number
+      height: number
+      radius?: number
+      label?: string
+      color?: string
+      fillColor?: string
+    } => {
+      if (typeof input === 'object' && input !== null) {
+        const shape = String(input.shape || input.type || 'rectangle').toLowerCase().trim()
+        const width = Number(input.width || input.w || input.dimension1 || input.length || 260)
+        const height = Number(input.height || input.h || input.dimension2 || 140)
+        const radius = input.radius !== undefined ? Number(input.radius) : undefined
+        return {
+          shape,
+          width,
+          height,
+          radius,
+          label: input.label || input.title || input.text || '',
+          color: input.color,
+          fillColor: input.fillColor || input.fill || input.bg,
+        }
+      }
+
+      const str = String(input || '').trim()
+      if (str.startsWith('{') && str.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(str)
+          return parseShapeInput(parsed)
+        } catch {}
+      }
+
+      let shape = 'rectangle'
+      let width = 260
+      let height = 140
+      let radius: number | undefined
+      let label = ''
+      let color: string | undefined
+      let fillColor: string | undefined
+
+      const lower = str.toLowerCase()
+      if (lower.includes('circle')) shape = 'circle'
+      else if (lower.includes('right_triangle') || lower.includes('right triangle')) shape = 'right_triangle'
+      else if (lower.includes('triangle')) shape = 'triangle'
+      else if (lower.includes('ellipse')) shape = 'ellipse'
+      else if (lower.includes('cylinder')) shape = 'cylinder'
+      else if (lower.includes('cube') || lower.includes('cuboid') || lower.includes('box')) shape = 'cube'
+      else if (lower.includes('square')) shape = 'square'
+      else if (lower.includes('polygon')) shape = 'polygon'
+      else if (lower.includes('arrow') || lower.includes('line')) shape = 'arrow'
+      else if (lower.includes('rectangle')) shape = 'rectangle'
+
+      const wMatch = str.match(/\b(?:width|w|length|len)[:=]\s*(\d+(?:\.\d+)?)/i)
+      if (wMatch) width = parseFloat(wMatch[1])
+
+      const hMatch = str.match(/\b(?:height|h|breadth|b)[:=]\s*(\d+(?:\.\d+)?)/i)
+      if (hMatch) height = parseFloat(hMatch[1])
+
+      const rMatch = str.match(/\b(?:radius|rad|r)[:=]\s*(\d+(?:\.\d+)?)/i)
+      if (rMatch) radius = parseFloat(rMatch[1])
+
+      const labelMatch = str.match(/\b(?:label|title|text)[:=]\s*(?:"([^"]+)"|'([^']+)'|([^|;\n]+))/i)
+      if (labelMatch) label = (labelMatch[1] || labelMatch[2] || labelMatch[3] || '').trim()
+
+      const colMatch = str.match(/\b(?:color|stroke)[:=]\s*([a-zA-Z#0-9]+)/i)
+      if (colMatch) color = colMatch[1].trim()
+
+      const fillMatch = str.match(/\b(?:fill|fillColor|bg)[:=]\s*([a-zA-Z#0-9]+)/i)
+      if (fillMatch) fillColor = fillMatch[1].trim()
+
+      if (!label && str.includes('|')) {
+        const parts = str.split('|').map((p) => p.trim())
+        if (parts.length > 1 && !parts[1].includes(':') && !parts[1].includes('=')) {
+          label = parts[1]
+        }
+      }
+
+      return { shape, width, height, radius, label, color, fillColor }
+    }
+
+    // Draw Geometric Shape with Complete Size, Dimension & Label Control
+    const drawShape = async (shapeInput: any) => {
+      if (!excalidrawAPI) return
+      const { shape, width, height, radius, label, color, fillColor } = parseShapeInput(shapeInput)
+      const stroke = resolveChalkColor(color, INK_BOTANICAL)
+      const bg = fillColor || (stroke === INK_CORAL ? INK_CORAL_SOFT : '#F0F6F2')
+
+      const startX = 70
+      let w = Math.min(Math.max(width, 40), 720)
+      let h = Math.min(Math.max(height, 30), 450)
+      if (shape === 'square') {
+        w = Math.min(w, h)
+        h = w
+      }
+
+      await checkAutoPageOverflow(h + (label ? 60 : 30))
+
+      try {
+        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
+        const startY = getDynamicNextY(16)
+        const skeletons: any[] = []
+
+        if (shape === 'rectangle' || shape === 'square' || shape === 'box') {
+          skeletons.push({
+            type: 'rectangle',
+            x: startX,
+            y: startY,
+            width: w,
+            height: h,
+            strokeColor: stroke,
+            backgroundColor: bg,
+            fillStyle: 'solid',
+            strokeWidth: 2,
+            roundness: { type: 3 },
+            customData: { isRough: false },
+          })
+
+          skeletons.push({
+            type: 'text',
+            x: startX + Math.max(Math.floor(w / 2) - 35, 10),
+            y: startY - 18,
+            text: `w: ${w}px`,
+            fontSize: 12,
+            fontFamily: 1,
+            strokeColor: INK_MUTED,
+            customData: { isRough: false },
+          })
+
+          skeletons.push({
+            type: 'text',
+            x: startX + w + 8,
+            y: startY + Math.floor(h / 2) - 8,
+            text: `h: ${h}px`,
+            fontSize: 12,
+            fontFamily: 1,
+            strokeColor: INK_MUTED,
+            customData: { isRough: false },
+          })
+        } else if (shape === 'circle') {
+          const r = radius ? radius : Math.floor(Math.min(w, h) / 2)
+          const diam = r * 2
+          skeletons.push(
+            {
+              type: 'ellipse',
+              x: startX,
+              y: startY,
+              width: diam,
+              height: diam,
+              strokeColor: stroke,
+              backgroundColor: bg,
+              fillStyle: 'solid',
+              strokeWidth: 2,
+              customData: { isRough: false },
+            },
+            {
+              type: 'ellipse',
+              x: startX + r - 3,
+              y: startY + r - 3,
+              width: 6,
+              height: 6,
+              strokeColor: stroke,
+              backgroundColor: stroke,
+              fillStyle: 'solid',
+              customData: { isRough: false },
+            },
+            {
+              type: 'line',
+              x: startX + r,
+              y: startY + r,
+              points: [[0, 0], [r, 0]],
+              strokeColor: INK_CORAL,
+              strokeWidth: 2,
+              customData: { isRough: false },
+            },
+            {
+              type: 'text',
+              x: startX + r + Math.floor(r / 2) - 8,
+              y: startY + r - 16,
+              text: `r: ${r}`,
+              fontSize: 12,
+              fontFamily: 1,
+              strokeColor: INK_CORAL,
+              customData: { isRough: false },
+            }
+          )
+          w = diam
+          h = diam
+        } else if (shape === 'ellipse') {
+          skeletons.push({
+            type: 'ellipse',
+            x: startX,
+            y: startY,
+            width: w,
+            height: h,
+            strokeColor: stroke,
+            backgroundColor: bg,
+            fillStyle: 'solid',
+            strokeWidth: 2,
+            customData: { isRough: false },
+          })
+        } else if (shape === 'triangle' || shape === 'right_triangle') {
+          const isRight = shape === 'right_triangle'
+          const pts = isRight
+            ? [[0, 0], [w, 0], [0, -h], [0, 0]]
+            : [[0, 0], [w, 0], [Math.floor(w / 2), -h], [0, 0]]
+
+          skeletons.push(
+            {
+              type: 'line',
+              x: startX,
+              y: startY + h,
+              points: pts,
+              strokeColor: stroke,
+              strokeWidth: 2,
+              backgroundColor: bg,
+              fillStyle: 'solid',
+              customData: { isRough: false },
+            },
+            {
+              type: 'text',
+              x: startX - 14,
+              y: startY + h + 2,
+              text: 'A',
+              fontSize: 13,
+              fontFamily: 1,
+              strokeColor: INK_CORAL,
+              customData: { isRough: false },
+            },
+            {
+              type: 'text',
+              x: startX + w + 4,
+              y: startY + h + 2,
+              text: 'B',
+              fontSize: 13,
+              fontFamily: 1,
+              strokeColor: INK_CORAL,
+              customData: { isRough: false },
+            },
+            {
+              type: 'text',
+              x: isRight ? startX - 14 : startX + Math.floor(w / 2) - 6,
+              y: startY - 14,
+              text: 'C',
+              fontSize: 13,
+              fontFamily: 1,
+              strokeColor: INK_CORAL,
+              customData: { isRough: false },
+            }
+          )
+        } else if (shape === 'cylinder') {
+          const r = radius ? radius : Math.floor(w / 4)
+          const cylW = r * 2
+          const topH = Math.max(Math.floor(r * 0.6), 18)
+          skeletons.push(
+            {
+              type: 'ellipse',
+              x: startX,
+              y: startY + h - topH,
+              width: cylW,
+              height: topH * 2,
+              strokeColor: stroke,
+              backgroundColor: bg,
+              fillStyle: 'solid',
+              strokeWidth: 2,
+              customData: { isRough: false },
+            },
+            {
+              type: 'line',
+              x: startX,
+              y: startY + topH,
+              points: [[0, 0], [0, h - topH]],
+              strokeColor: stroke,
+              strokeWidth: 2,
+              customData: { isRough: false },
+            },
+            {
+              type: 'line',
+              x: startX + cylW,
+              y: startY + topH,
+              points: [[0, 0], [0, h - topH]],
+              strokeColor: stroke,
+              strokeWidth: 2,
+              customData: { isRough: false },
+            },
+            {
+              type: 'ellipse',
+              x: startX,
+              y: startY,
+              width: cylW,
+              height: topH * 2,
+              strokeColor: stroke,
+              backgroundColor: bg,
+              fillStyle: 'solid',
+              strokeWidth: 2,
+              customData: { isRough: false },
+            },
+            {
+              type: 'text',
+              x: startX + cylW + 12,
+              y: startY + Math.floor(h / 2),
+              text: `Height = ${h}px`,
+              fontSize: 12,
+              fontFamily: 1,
+              strokeColor: INK_MUTED,
+              customData: { isRough: false },
+            }
+          )
+          w = cylW
+        } else if (shape === 'cube' || shape === 'cuboid') {
+          const offset = 24
+          skeletons.push(
+            {
+              type: 'rectangle',
+              x: startX + offset,
+              y: startY,
+              width: w,
+              height: h,
+              strokeColor: BORDER_SUBTLE,
+              strokeWidth: 1.5,
+              strokeStyle: 'dashed',
+              customData: { isRough: false },
+            },
+            {
+              type: 'rectangle',
+              x: startX,
+              y: startY + offset,
+              width: w,
+              height: h,
+              strokeColor: stroke,
+              backgroundColor: bg,
+              fillStyle: 'solid',
+              strokeWidth: 2,
+              roundness: { type: 3 },
+              customData: { isRough: false },
+            },
+            {
+              type: 'line',
+              x: startX,
+              y: startY + offset,
+              points: [[0, 0], [offset, -offset]],
+              strokeColor: stroke,
+              strokeWidth: 1.5,
+              customData: { isRough: false },
+            },
+            {
+              type: 'line',
+              x: startX + w,
+              y: startY + offset,
+              points: [[0, 0], [offset, -offset]],
+              strokeColor: stroke,
+              strokeWidth: 1.5,
+              customData: { isRough: false },
+            },
+            {
+              type: 'line',
+              x: startX + w,
+              y: startY + offset + h,
+              points: [[0, 0], [offset, -offset]],
+              strokeColor: stroke,
+              strokeWidth: 1.5,
+              customData: { isRough: false },
+            }
+          )
+        } else if (shape === 'arrow' || shape === 'line') {
+          skeletons.push({
+            type: 'arrow',
+            x: startX,
+            y: startY + 15,
+            points: [[0, 0], [w, 0]],
+            strokeColor: stroke,
+            strokeWidth: 3,
+            customData: { isRough: false },
+          })
+          h = 30
+        }
+
+        if (label) {
+          skeletons.push({
+            type: 'text',
+            x: startX,
+            y: startY + h + 14,
+            text: label,
+            fontSize: 15,
+            fontFamily: 1,
+            strokeColor: INK_PRIMARY,
+            customData: { isRough: false },
+          })
+        }
+
+        const elements = convertToExcalidrawElements(skeletons)
+        const current = getCurrentElements()
+        const merged = [...current, ...elements]
+        updateCurrentPageElements(merged, startY + h + (label ? 42 : 24))
+        onNoteRecorded?.(`[Shape: ${shape}] ${label || `${w}x${h}`}`)
+      } catch (err) {
+        console.error('drawShape error:', err)
       }
     }
 
@@ -1161,7 +1871,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         if (rows.length === 0) return
 
         const numCols = Math.max(...rows.map((r) => r.length), 1)
-        const colWidth = Math.min(180, Math.floor(400 / numCols))
+        const colWidth = Math.min(260, Math.floor(740 / numCols))
         const rowHeight = 32
 
         const skeletons: any[] = []
@@ -1212,222 +1922,52 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     // Universal 2D Geometry & Shapes on Whiteboard (Mathematics, Physics, Engineering)
     const drawGeometry = async (geomStr: string) => {
       if (!excalidrawAPI || !geomStr?.trim()) return
-      await checkAutoPageOverflow(190)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 75
-        const startY = getDynamicNextY(18)
-        const lower = geomStr.toLowerCase()
-
-        const skeletons: any[] = []
-
-        if (lower.includes('triangle')) {
-          const isRight = lower.includes('right')
-          skeletons.push(
-            {
-              type: 'text',
-              x: startX,
-              y: startY,
-              text: isRight ? 'Right-Angled Triangle (Pythagoras: a^2 + b^2 = c^2)' : 'Geometric Triangle (Angles Sum = 180°)',
-              fontSize: 14,
-              fontFamily: 1,
-              strokeColor: INK_PRIMARY,
-              customData: { isRough: false },
-            },
-            {
-              type: 'line',
-              x: startX + 30,
-              y: startY + 120,
-              points: [[0, 0], [160, 0], [isRight ? 0 : 80, -90], [0, 0]],
-              strokeColor: INK_BOTANICAL,
-              strokeWidth: 2,
-              customData: { isRough: false },
-            },
-            {
-              type: 'text',
-              x: startX + 20,
-              y: startY + 125,
-              text: 'A',
-              fontSize: 13,
-              fontFamily: 1,
-              strokeColor: INK_CORAL,
-              customData: { isRough: false },
-            },
-            {
-              type: 'text',
-              x: startX + 195,
-              y: startY + 125,
-              text: 'B',
-              fontSize: 13,
-              fontFamily: 1,
-              strokeColor: INK_CORAL,
-              customData: { isRough: false },
-            },
-            {
-              type: 'text',
-              x: startX + (isRight ? 20 : 105),
-              y: startY + 18,
-              text: 'C',
-              fontSize: 13,
-              fontFamily: 1,
-              strokeColor: INK_CORAL,
-              customData: { isRough: false },
-            }
-          )
-        } else if (lower.includes('circle')) {
-          skeletons.push(
-            {
-              type: 'text',
-              x: startX,
-              y: startY,
-              text: 'Circle: Area = pi * r^2 | Circumference = 2 * pi * r',
-              fontSize: 14,
-              fontFamily: 1,
-              strokeColor: INK_PRIMARY,
-              customData: { isRough: false },
-            },
-            {
-              type: 'ellipse',
-              x: startX + 40,
-              y: startY + 25,
-              width: 110,
-              height: 110,
-              strokeColor: INK_BOTANICAL,
-              backgroundColor: '#F0F6F2',
-              fillStyle: 'solid',
-              strokeWidth: 2,
-              customData: { isRough: false },
-            },
-            {
-              type: 'line',
-              x: startX + 95,
-              y: startY + 80,
-              points: [[0, 0], [55, 0]],
-              strokeColor: INK_CORAL,
-              strokeWidth: 2,
-              customData: { isRough: false },
-            },
-            {
-              type: 'text',
-              x: startX + 115,
-              y: startY + 62,
-              text: 'r',
-              fontSize: 13,
-              fontFamily: 1,
-              strokeColor: INK_CORAL,
-              customData: { isRough: false },
-            },
-            {
-              type: 'text',
-              x: startX + 85,
-              y: startY + 82,
-              text: 'O',
-              fontSize: 11,
-              fontFamily: 1,
-              strokeColor: INK_PRIMARY,
-              customData: { isRough: false },
-            }
-          )
-        } else {
-          skeletons.push(
-            {
-              type: 'text',
-              x: startX,
-              y: startY,
-              text: `Geometric Figure: ${geomStr}`,
-              fontSize: 14,
-              fontFamily: 1,
-              strokeColor: INK_PRIMARY,
-              customData: { isRough: false },
-            },
-            {
-              type: 'rectangle',
-              x: startX + 30,
-              y: startY + 30,
-              width: 150,
-              height: 85,
-              strokeColor: INK_BOTANICAL,
-              backgroundColor: '#F0F6F2',
-              fillStyle: 'solid',
-              strokeWidth: 2,
-              customData: { isRough: false },
-            }
-          )
-        }
-
-        const elements = convertToExcalidrawElements(skeletons)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 150)
-        onNoteRecorded?.(`[Geometry]: ${geomStr}`)
-      } catch (err) {
-        console.error('drawGeometry error:', err)
-      }
+      return drawShape(geomStr)
     }
 
-    // Draw Rough Work in the Right Scratchpad Column
+    // Draw Working Calculations in unified board flow
     const drawRoughWork = async (workText: string, color?: string) => {
       if (!excalidrawAPI || !workText?.trim()) return
       const clean = workText.trim()
+      await checkAutoPageOverflow(46)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 520
-        const startY = roughYRef.current
-        const roughColor = resolveChalkColor(color, INK_SECONDARY)
+        const startX = 60
+        const startY = getDynamicNextY(12)
+        const roughColor = resolveChalkColor(color, INK_AMBER)
 
         const elements = convertToExcalidrawElements([
           {
-            id: `rough_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+            id: `work_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
             type: 'text',
             x: startX,
             y: startY,
-            text: `[Scratch] ${clean}`,
+            text: `[Working]: ${clean}`,
             fontSize: 14,
             fontFamily: 1,
             strokeColor: roughColor,
-            customData: { isRough: true },
+            customData: { isRough: false },
           },
         ])
 
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        boardElementsRef.current = merged
-        roughYRef.current = Math.min(startY + 30, 800)
-        const pageIdx = currentPageIndexRef.current
-        if (pagesRef.current[pageIdx]) {
-          pagesRef.current[pageIdx].elements = merged
-          pagesRef.current[pageIdx].roughY = roughYRef.current
-        }
-        setPages([...pagesRef.current])
-        excalidrawAPI.updateScene({ elements: merged })
-        persistScene(merged)
-        enforceLockedZoom(excalidrawAPI)
+        updateCurrentPageElements(merged, startY + 36)
+        onNoteRecorded?.(`  [Working]: ${clean}`)
       } catch (err) {
         console.error('drawRoughWork error:', err)
       }
     }
 
-    // Clear Rough Working Scratchpad only
+    // Clear Working / Scratch calculations
     const clearRough = async () => {
       if (!excalidrawAPI) return
       try {
         const current = getCurrentElements()
         const filtered = current.filter(
-          (el: any) =>
-            el.customData?.isHeader === true ||
-            (el.customData?.isRough !== true && !el.id?.startsWith('rough_') && (el.x || 0) < 500)
+          (el: any) => !el.id?.startsWith('work_') && !el.id?.startsWith('rough_')
         )
-        boardElementsRef.current = filtered
-        roughYRef.current = 140
-        const pageIdx = currentPageIndexRef.current
-        if (pagesRef.current[pageIdx]) {
-          pagesRef.current[pageIdx].elements = filtered
-          pagesRef.current[pageIdx].roughY = 140
-        }
-        setPages([...pagesRef.current])
-        excalidrawAPI.updateScene({ elements: filtered })
-        persistScene(filtered)
-        enforceLockedZoom(excalidrawAPI)
+        updateCurrentPageElements(filtered, nextYRef.current)
       } catch (err) {
         console.error('clearRough error:', err)
       }
@@ -1439,7 +1979,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       try {
         const current = getCurrentElements()
         const filtered = current.filter(
-          (el: any) => el.customData?.isHeader === true || (el.x || 0) >= 500
+          (el: any) => el.customData?.isHeader === true
         )
         updateCurrentPageElements(filtered, 140)
       } catch (err) {
@@ -3199,6 +3739,14 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             setChalkColor(content || color || '');
           } else if (action === 'draw_question' || action === 'question') {
             if (content) await drawQuestion(content, color);
+          } else if (action === 'draw_student_answer' || action === 'student_answer') {
+            if (content) await drawStudentAnswer(content, undefined, color);
+          } else if (action === 'draw_answer_verdict' || action === 'answer_verdict') {
+            if (content) await drawAnswerVerdict(content, undefined, color);
+          } else if (action === 'draw_exam_question' || action === 'exam_question') {
+            if (content) await drawExamQuestion(content, undefined, undefined, color);
+          } else if (action === 'draw_shape' || action === 'shape' || action === 'draw_rectangle' || action === 'draw_circle' || action === 'draw_triangle') {
+            if (content) await drawShape(content);
           } else if (action === 'draw_flowchart' || action === 'flowchart') {
             if (content) await drawFlowchart(content, color);
           } else if (action === 'draw_rough_work' || action === 'rough_work' || action === 'rough') {
@@ -3329,8 +3877,16 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           // 2c. Universal Tables & Geometry
           else if (tagType === 'TABLE' || tagType === 'COMPARISON_TABLE') {
             if (payload) await drawTable(payload)
-          } else if (tagType === 'GEOMETRY' || tagType === 'SHAPE' || tagType === 'POLYGON') {
-            if (payload) await drawGeometry(payload)
+          } else if (tagType === 'GEOMETRY' || tagType === 'SHAPE' || tagType === 'POLYGON' || tagType === 'DRAW_SHAPE') {
+            if (payload) await drawShape(payload)
+          } else if (tagType === 'QUESTION' || tagType === 'CHECKPOINT_QUESTION') {
+            if (payload) await drawQuestion(payload)
+          } else if (tagType === 'STUDENT_ANSWER' || tagType === 'STUDENT_RESPONSE') {
+            if (payload) await drawStudentAnswer(payload)
+          } else if (tagType === 'VERDICT' || tagType === 'ANSWER_VERDICT' || tagType === 'CORRECTION') {
+            if (payload) await drawAnswerVerdict(payload)
+          } else if (tagType === 'EXAM_QUESTION' || tagType === 'BOARD_QUESTION') {
+            if (payload) await drawExamQuestion(payload)
           } else if (tagType === 'TIMELINE') {
             if (payload) await drawFlowchart(payload)
           }
@@ -3474,10 +4030,17 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       drawVideoCard,
       drawTable,
       drawGeometry,
+      drawShape,
+      drawStudentAnswer,
+      drawAnswerVerdict,
+      drawExamQuestion,
       addNewPage,
       goToPage,
       getBoardSummary,
       handleAiDirective,
+      getActiveQuestion: () => activeQuestionRef.current,
+      getNextY: () => nextYRef.current,
+      getCurrentPageIndex: () => currentPageIndexRef.current,
     }))
 
     return (

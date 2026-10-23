@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 import { createAvatar, type AvatarController } from '@bible-strong/avatar-react'
 import '@bible-strong/avatar-react/styles.css'
 import avatarDefinition from '@/avatar.avatar.json'
@@ -38,6 +39,7 @@ const DEFAULT_TIPS = [
 ]
 
 export function Mascot() {
+  const pathname = usePathname()
   const avatarRef = useRef<AvatarController>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
@@ -123,6 +125,7 @@ export function Mascot() {
   }, [isSleeping, prefersReducedMotion, safeExpression, safePlay])
 
   useEffect(() => {
+    if (pathname?.includes('/class/') || pathname === '/') return
     const events = ['mousemove', 'keydown', 'scroll', 'touchstart']
     events.forEach((ev) => window.addEventListener(ev, handleUserActivity, { passive: true }))
     handleUserActivity()
@@ -133,10 +136,11 @@ export function Mascot() {
       if (returnToIdleTimerRef.current) clearTimeout(returnToIdleTimerRef.current)
       if (autoDismissTimerRef.current) clearTimeout(autoDismissTimerRef.current)
     }
-  }, [handleUserActivity])
+  }, [handleUserActivity, pathname])
 
   // 5. Intelligent Guidance Event Listener (moves ball to anchor & delivers dialogue)
   useEffect(() => {
+    if (pathname?.includes('/class/') || pathname === '/') return
     const handleCompanionGuide = (e: Event) => {
       const customEvent = e as CustomEvent<CompanionGuideDetail>
       const { targetSelector, targetElementId, message, animation, expression, mood = 'normal', autoDismissMs } = customEvent.detail
@@ -218,10 +222,11 @@ export function Mascot() {
 
     window.addEventListener('companion-guide', handleCompanionGuide)
     return () => window.removeEventListener('companion-guide', handleCompanionGuide)
-  }, [safePlay, safeExpression, returnToDock])
+  }, [safePlay, safeExpression, returnToDock, pathname])
 
   // 6. Global Reaction Listener (backward compatibility)
   useEffect(() => {
+    if (pathname?.includes('/class/') || pathname === '/') return
     const handleGlobalReaction = (e: Event) => {
       const customEvent = e as CustomEvent<string>
       const reaction = customEvent.detail
@@ -241,7 +246,7 @@ export function Mascot() {
 
     window.addEventListener('mascot-react', handleGlobalReaction)
     return () => window.removeEventListener('mascot-react', handleGlobalReaction)
-  }, [safePlay, safeExpression, resetToIdle])
+  }, [safePlay, safeExpression, resetToIdle, pathname])
 
   // Click on mascot -> laughing + cycle speech tip
   const handleMascotClick = () => {
@@ -285,6 +290,11 @@ export function Mascot() {
   // Mood-based halos and themes
   const isSuspicious = currentMood === 'suspicious' || currentMood === 'warning'
   const isCelebrate = currentMood === 'celebrate'
+
+  // Never render on landing page or in active classroom sessions
+  if (pathname?.includes('/class/') || pathname === '/') {
+    return null
+  }
 
   return (
     <aside

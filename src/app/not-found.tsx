@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 
 export default function NotFound() {
   return (
@@ -15,10 +14,11 @@ export default function NotFound() {
       <p className="text-sm text-[#555852] max-w-sm mb-6">
         The classroom or module you are looking for does not exist or has been relocated.
       </p>
-      <Link href="/login">
-        <Button className="rounded-xl bg-[#C85A43] hover:bg-[#A94734] text-white">
-          Return to Portal
-        </Button>
+      <Link
+        href="/login"
+        className="inline-flex items-center justify-center rounded-xl bg-[#C85A43] hover:bg-[#A94734] text-white px-5 py-2.5 text-sm font-medium transition-colors"
+      >
+        Return to Portal
       </Link>
     </div>
   )

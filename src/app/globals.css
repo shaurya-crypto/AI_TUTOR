@@ -33,6 +33,62 @@
     --ring: 120 2% 9%;
 
     --radius: 0.5rem;
+
+    /* Classical Intelligence × Modern Learning Tokens */
+    --canvas-ivory: #F8F6F0;
+    --surface-white: #FFFFFF;
+    --surface-soft: #FCFBF8;
+
+    --border-subtle: #E5E3DB;
+    --border-strong: #D5D2C8;
+
+    --ink-primary: #171817;
+    --ink-secondary: #555852;
+    --ink-muted: #7A7C75;
+
+    --coral-primary: #C85A43;
+    --coral-hover: #A94734;
+    --coral-soft: #FFF8F6;
+    --coral-border: #F5D5CE;
+
+    --botanical-primary: #52715D;
+    --botanical-dark: #3E5D4B;
+    --botanical-soft: #F0F7F1;
+    --botanical-border: #C8E0CE;
+
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+
+    --shadow-soft: 0 4px 20px -4px rgba(23, 24, 23, 0.05);
+    --shadow-card: 0 10px 30px -10px rgba(23, 24, 23, 0.06);
+
+    --transition-smooth: 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+}
+
+/* Archival Fine Paper Background Texture */
+.landing-paper-bg {
+  background-color: var(--canvas-ivory, #F8F6F0);
+  background-image: url('/landing_images/bg.jpg');
+  background-repeat: repeat;
+  background-size: 1000px auto;
+  background-attachment: scroll;
+}
+
+/* Editorial Typography */
+.font-editorial {
+  font-family: 'Instrument Serif', 'Newsreader', Georgia, serif;
+}
+
+/* Accessible Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -121,4 +177,203 @@
   border-radius: 1rem !important;
   background-color: #FFFFFF !important;
 }
+
+/* Lenis Smooth Scroll Recommended Rules */
+html.lenis, html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+/* Classical Cinematic Animations & Glow */
+@keyframes kenburns {
+  0% {
+    transform: scale(1) translate(0, 0);
+  }
+  50% {
+    transform: scale(1.05) translate(-1%, -0.5%);
+  }
+  100% {
+    transform: scale(1) translate(0, 0);
+  }
+}
+
+@keyframes cloudDrift {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-35px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes cloudDriftReverse {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(30px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes nameGlow {
+  0%, 100% {
+    text-shadow: 0 0 24px rgba(200, 90, 67, 0.25), 0 0 45px rgba(200, 90, 67, 0.15);
+  }
+  50% {
+    text-shadow: 0 0 35px rgba(200, 90, 67, 0.45), 0 0 65px rgba(200, 90, 67, 0.25);
+  }
+}
+
+@keyframes goldGlow {
+  0%, 100% {
+    text-shadow: 0 0 18px rgba(212, 175, 55, 0.3), 0 0 36px rgba(212, 175, 55, 0.15);
+  }
+  50% {
+    text-shadow: 0 0 30px rgba(212, 175, 55, 0.5), 0 0 55px rgba(212, 175, 55, 0.25);
+  }
+}
+
+.animate-kenburns {
+  animation: kenburns 35s ease-in-out infinite;
+}
+
+.animate-cloud-drift {
+  animation: cloudDrift 28s ease-in-out infinite;
+}
+
+.animate-cloud-drift-reverse {
+  animation: cloudDriftReverse 32s ease-in-out infinite;
+}
+
+.animate-name-glow {
+  animation: nameGlow 4s ease-in-out infinite;
+}
+
+.animate-gold-glow {
+  animation: goldGlow 4.5s ease-in-out infinite;
+}
+
+.font-cursive {
+  font-family: 'Alex Brush', 'Caveat', cursive, handwriting;
+}
+
+.text-glow-white {
+  text-shadow: 0 0 10px #FFFFFF, 0 0 25px rgba(255, 255, 255, 1), 0 0 50px rgba(255, 255, 255, 0.8), 0 0 85px rgba(255, 255, 255, 0.5);
+}
+
+.text-glow-cinematic {
+  color: #FFFFFF !important;
+  text-shadow:
+    0 0 12px #FFFFFF,
+    0 0 24px #FFFFFF,
+    0 0 45px rgba(255, 255, 255, 0.95),
+    0 0 80px rgba(255, 255, 255, 0.8),
+    0 2px 4px rgba(0, 0, 0, 0.95),
+    0 4px 14px rgba(0, 0, 0, 0.9),
+    0 10px 35px rgba(0, 0, 0, 0.85);
+}
+
+/* =========================================================================
+   HeyAristotle Signature Navbar & Button Styles
+   ========================================================================= */
+
+/* Glare sweep across primary CTA on hover */
+@keyframes aristotleGlareSweep {
+  0% {
+    transform: translate3d(-220%, 0, 0) skewX(-20deg);
+  }
+  100% {
+    transform: translate3d(220%, 0, 0) skewX(-20deg);
+  }
+}
+
+.btn-aristotle-primary {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--coral-primary, #C85A43);
+  background-image: radial-gradient(ellipse at center, #D66149 0%, #C85A43 78%, #B24630 100%);
+  box-shadow:
+    inset 0 -2px 4px 0 rgba(0, 0, 0, 0.2),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.45),
+    0 2px 10px rgba(200, 90, 67, 0.22);
+  transition: transform 0.18s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.btn-aristotle-primary::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  left: 0;
+  width: 48%;
+  background: linear-gradient(105deg, transparent 15%, rgba(255, 255, 255, 0.08) 35%, rgba(255, 255, 255, 0.35) 50%, rgba(255, 255, 255, 0.08) 65%, transparent 85%);
+  transform: translate3d(-220%, 0, 0) skewX(-20deg);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.btn-aristotle-primary:hover::after {
+  animation: aristotleGlareSweep 0.7s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+.btn-aristotle-primary:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow:
+    inset 0 2px 5px 0 rgba(0, 0, 0, 0.3),
+    inset 0 -1px 2px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Staggered mobile links slide-in */
+@keyframes aristotleMobileLinkIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-aristotle-link {
+  animation: aristotleMobileLinkIn 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* Refined Liquid Glass Navbar states */
+.liquid-glass-active {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background-color: rgba(253, 253, 252, 0.82);
+  border-bottom: 1px solid rgba(23, 24, 23, 0.06);
+  box-shadow:
+    0 4px 20px -4px rgba(23, 24, 23, 0.04),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.75);
+}
+
+.liquid-glass-top {
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  background-color: transparent;
+  border-bottom: 1px solid transparent;
+  box-shadow: none;
+}
+
+
 
