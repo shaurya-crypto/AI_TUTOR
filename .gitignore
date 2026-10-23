@@ -50,3 +50,6 @@ public/*.zip
 supabase/.temp/
 scratch_curriculums.json
 
+
+# Playwright CLI temp files
+.playwright-cli/
