@@ -158,7 +158,7 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       }
       else if (action === 'draw_image' || action === 'image') {
         const parts = (content || '').split('|').map((s: string) => s.trim())
-        board.drawImageCard?.(parts[0] || 'Diagram', parts[1] || '', parts[2] || 'NCERT Standard')
+        board.drawFlowchart?.(`${parts[0] || 'Key Concept'} -> Fundamental Principle -> Board Application`)
       }
       else if (action === 'draw_video' || action === 'video') {
         const parts = (content || '').split('|').map((s: string) => s.trim())

@@ -368,22 +368,22 @@ export class GeminiLiveClient {
               },
               {
                 name: "render_svg_diagram",
-                description: "Render a clean, high-precision vector SVG educational diagram on the chalkboard (e.g. physics apparatus, ray diagrams, chemical apparatus, biological structures, or mathematical geometric figures).",
+                description: "Render a clean, high-precision vector SVG educational diagram directly on the chalkboard. Use this in Stage 2 of every concept to illustrate biology (cellular anatomy, membranes, organelles), physics (ray optics, circuits, forces, wave mechanics, apparatus setups), chemistry (molecular geometry, bonding, lab apparatus), or mathematics. MUST be an authentic, detailed vector graphic.",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
                   properties: {
                     title: {
                       type: Type.STRING,
-                      description: "Title of the diagram (e.g. 'Reflection of Light at Plane Mirror', 'Structure of Plant Cell', 'Electrolysis of Water')",
+                      description: "Concise academic title of the diagram (e.g. 'Plant Cell Wall & Cellulose Microfibrils', 'Reflection of Light at Plane Mirror', 'Simple Resistor-Battery Circuit')",
                     },
                     svg: {
                       type: Type.STRING,
-                      description: "Well-formed XML SVG markup string with viewBox, paths, rects, circles, lines, and text labels with contrasting colors (e.g. #171817, #52715D, #C85A43, #D97706, #0284C7).",
+                      description: "Complete, well-formed XML <svg> element. Must use viewBox='0 0 540 280', shape-rendering='geometricPrecision', text-rendering='geometricPrecision'. Include <defs> with arrow marker (<marker id='arrow' viewBox='0 0 10 10' refX='5' refY='5' markerWidth='6' markerHeight='6' orient='auto-start-reverse'><path d='M 0 0 L 10 5 L 0 10 z' fill='#C85A43'/></marker>). Draw authentic paths, smooth curves, organelle contours, or optical rays with leader lines and crisp <text> labels (font-size='12', font-family='sans-serif', font-weight='600'). Use high-contrast colors: ink '#171817', botanical '#52715D', coral '#C85A43', cyan/blue '#0284C7', amber '#D97706', pastel fills ('#F0F7F1', '#FFF8F6', '#EFF6FF'). NEVER render flat stacked colored rectangles.",
                     },
                     caption: {
                       type: Type.STRING,
-                      description: "Optional pedagogical caption, law explanation, or annotation note.",
+                      description: "1-2 sentence pedagogical explanation or key takeaway highlighting the governing law or anatomical feature.",
                     },
                   },
                   required: ["title", "svg"],

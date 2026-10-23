@@ -53,7 +53,6 @@ export interface GreenChalkboardRef {
     answer: string
     unit?: string
   }) => void
-  drawImageCard?: (title: string, caption?: string, attribution?: string) => void
   drawVideoCard?: (title: string, description?: string) => void
   drawTable?: (tableStr: string) => void
   drawGeometry?: (geomStr: string) => void
@@ -441,10 +440,17 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           }
           return `data:image/svg+xml;base64,${window.btoa(binary)}`
         }
-        return `data:image/svg+xml;base64,${Buffer.from(svgString, 'utf-8').toString('base64')}`
+        if (typeof Buffer !== 'undefined') {
+          return `data:image/svg+xml;base64,${Buffer.from(svgString, 'utf-8').toString('base64')}`
+        }
+        return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svgString)))}`
       } catch (err) {
         console.warn('svgToBase64DataUrl conversion error:', err)
-        return `data:image/svg+xml;base64,${Buffer.from(svgString, 'utf-8').toString('base64')}`
+        try {
+          return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svgString)))}`
+        } catch {
+          return 'data:image/svg+xml;base64,'
+        }
       }
     }
 
@@ -1955,62 +1961,113 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Universal Comparison / Data Table on Whiteboard (Any Subject)
+    // Universal Responsive & Auto-Wrapping Whiteboard Table Renderer
     const drawTable = async (tableStr: string) => {
       if (!excalidrawAPI || !tableStr?.trim()) return
-      await checkAutoPageOverflow(180)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(18)
+        const startX = 60
+        const totalTableWidth = 720
 
-        // Parse: "Header 1 | Header 2 || Row1A | Row1B || Row2A | Row2B"
-        const rows = tableStr.split('||').map((r) => r.split('|').map((c) => c.trim()))
+        // 1. Robust multiformat row parser: handles '||', '\n', and markdown table syntax
+        const rawLines = tableStr.includes('||')
+          ? tableStr.split('||')
+          : tableStr.split(/\r?\n/)
+
+        const rows: string[][] = []
+        for (const line of rawLines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          // Skip markdown divider rows like |---|---| or |:---:|
+          if (/^\|?[\s\-:]+(\|[\s\-:]+)+\|?$/.test(trimmed)) continue
+
+          // Remove leading and trailing pipe if present
+          const cleanLine = trimmed.replace(/^\|/, '').replace(/\|$/, '')
+          const cells = cleanLine.split('|').map((c) => c.trim())
+          if (cells.some((c) => c.length > 0)) {
+            rows.push(cells)
+          }
+        }
+
         if (rows.length === 0) return
 
         const numCols = Math.max(...rows.map((r) => r.length), 1)
-        const colWidth = Math.min(260, Math.floor(740 / numCols))
-        const rowHeight = 32
+        const colWidth = Math.floor(totalTableWidth / numCols)
+        // Approximate chars per line based on column width (average character is ~7.5px in Excalidraw font 1)
+        const maxCharsPerCellLine = Math.max(12, Math.floor((colWidth - 20) / 7.8))
 
-        const skeletons: any[] = []
+        // 2. Measure and pre-wrap all cells, computing dynamic row heights
+        const wrappedRows: { cellText: string; lines: string[] }[][] = []
+        const rowHeights: number[] = []
 
         rows.forEach((row, rowIdx) => {
-          const y = startY + rowIdx * rowHeight
-          const isHeader = rowIdx === 0
+          let maxLinesInRow = 1
+          const wrappedCells: { cellText: string; lines: string[] }[] = []
 
-          row.forEach((cell, colIdx) => {
+          // Pad row to have numCols
+          for (let colIdx = 0; colIdx < numCols; colIdx++) {
+            const rawCell = row[colIdx] || ''
+            const lines = rawCell ? wrapText(rawCell, maxCharsPerCellLine) : ['-']
+            if (lines.length > maxLinesInRow) {
+              maxLinesInRow = lines.length
+            }
+            wrappedCells.push({ cellText: rawCell, lines })
+          }
+
+          wrappedRows.push(wrappedCells)
+          // Line height: 16px per line + 14px vertical padding
+          const dynamicHeight = Math.max(34, 14 + maxLinesInRow * 16)
+          rowHeights.push(dynamicHeight)
+        })
+
+        const totalTableHeight = rowHeights.reduce((a, b) => a + b, 0)
+        await checkAutoPageOverflow(totalTableHeight + 24)
+        const startY = getDynamicNextY(16)
+
+        const skeletons: any[] = []
+        let currentY = startY
+
+        wrappedRows.forEach((row, rowIdx) => {
+          const isHeader = rowIdx === 0
+          const currentRowHeight = rowHeights[rowIdx]
+
+          row.forEach((cellData, colIdx) => {
             const x = startX + colIdx * colWidth
 
+            // Cell background box
             skeletons.push({
               type: 'rectangle',
               x,
-              y,
+              y: currentY,
               width: colWidth,
-              height: rowHeight,
-              strokeColor: isHeader ? INK_BOTANICAL : '#E5E3DB',
-              backgroundColor: isHeader ? '#E8F0EA' : rowIdx % 2 === 1 ? '#FFFFFF' : '#F9F8F5',
+              height: currentRowHeight,
+              strokeColor: isHeader ? INK_BOTANICAL : '#D5D2C8',
+              backgroundColor: isHeader ? '#EBF2ED' : rowIdx % 2 === 1 ? '#FFFFFF' : '#FAF9F6',
               fillStyle: 'solid',
-              strokeWidth: 1,
+              strokeWidth: isHeader ? 1.5 : 1,
               customData: { isRough: false },
             })
 
+            // Wrapped cell text
             skeletons.push({
               type: 'text',
-              x: x + 8,
-              y: y + 8,
-              text: cell || '-',
+              x: x + 10,
+              y: currentY + 8,
+              text: cellData.lines.join('\n'),
               fontSize: isHeader ? 12 : 11,
               fontFamily: 1,
               strokeColor: isHeader ? INK_PRIMARY : '#2E302D',
               customData: { isRough: false },
             })
           })
+
+          currentY += currentRowHeight
         })
 
         const elements = convertToExcalidrawElements(skeletons)
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + rows.length * rowHeight + 20)
+        updateCurrentPageElements(merged, currentY + 20)
         onNoteRecorded?.(`[Table]: ${rows[0]?.join(' | ')}`)
       } catch (err) {
         console.error('drawTable error:', err)
@@ -2613,70 +2670,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Draw Board Book Illustration Frame directly on Whiteboard
-    const drawImageCard = async (title: string, caption = '', attribution = 'NCERT / Board Standard') => {
-      if (!excalidrawAPI || !title?.trim()) return
-      await checkAutoPageOverflow(165)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'rectangle',
-            x: startX,
-            y: startY,
-            width: 390,
-            height: 110,
-            strokeColor: INK_BOTANICAL,
-            backgroundColor: '#FBF9F7',
-            fillStyle: 'solid',
-            strokeWidth: 1.5,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 14,
-            y: startY + 10,
-            text: `[BOARD BOOK FIGURE]: ${title.toUpperCase()}`,
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 14,
-            y: startY + 38,
-            text: caption || `Authentic textbook schematic illustration for ${title}.`,
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 14,
-            y: startY + 82,
-            text: `Source: ${attribution}`,
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_MUTED,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 130)
-        onNoteRecorded?.(`[Figure]: ${title} (${attribution})`)
-      } catch (err) {
-        console.error('drawImageCard error:', err)
-      }
-    }
-
     // Draw Dynamic Vector SVG Diagram Card directly on Whiteboard
     const drawSvgDiagram = async (title: string, svgMarkup: string, caption = '') => {
       if (!excalidrawAPI || !title?.trim() || !svgMarkup?.trim()) return
@@ -2690,16 +2683,24 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         let cleanSvg = svgMarkup.trim().replace(/^```(?:xml|svg|html)?\s*/i, '').replace(/\s*```$/i, '').trim()
         cleanSvg = cleanSvg.replace(/<script[\s\S]*?<\/script>/gi, '')
 
-        // Ensure outer svg tag and xmlns
+        // Ensure outer svg tag and xmlns with razor-sharp geometricPrecision rendering
         if (!cleanSvg.toLowerCase().includes('<svg')) {
-          cleanSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">${cleanSvg}</svg>`
-        } else if (!cleanSvg.includes('xmlns=')) {
-          cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"')
+          cleanSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">${cleanSvg}</svg>`
+        } else {
+          if (!cleanSvg.includes('xmlns=')) {
+            cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"')
+          }
+          if (!cleanSvg.includes('shape-rendering=')) {
+            cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg shape-rendering="geometricPrecision"')
+          }
+          if (!cleanSvg.includes('text-rendering=')) {
+            cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg text-rendering="geometricPrecision"')
+          }
         }
 
         // Determine dimensions from viewBox or width/height
-        let svgWidth = 440
-        let svgHeight = 240
+        let svgWidth = 500
+        let svgHeight = 260
         const viewBoxMatch = cleanSvg.match(/viewBox\s*=\s*["']([^"']+)["']/i)
         if (viewBoxMatch) {
           const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(Number)
@@ -2707,7 +2708,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             const vbW = parts[2]
             const vbH = parts[3]
             const aspect = vbH / vbW
-            svgWidth = Math.min(480, Math.max(260, vbW))
+            svgWidth = Math.min(520, Math.max(300, vbW))
             svgHeight = Math.round(svgWidth * aspect)
           }
         } else {
@@ -2718,19 +2719,19 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             const parsedH = parseInt(hMatch[1], 10)
             if (parsedW > 0 && parsedH > 0) {
               const aspect = parsedH / parsedW
-              svgWidth = Math.min(480, Math.max(260, parsedW))
+              svgWidth = Math.min(520, Math.max(300, parsedW))
               svgHeight = Math.round(svgWidth * aspect)
             }
           }
         }
 
         // Clamp height for whiteboard balance
-        if (svgHeight > 380) {
-          const ratio = 380 / svgHeight
-          svgHeight = 380
+        if (svgHeight > 340) {
+          const ratio = 340 / svgHeight
+          svgHeight = 340
           svgWidth = Math.round(svgWidth * ratio)
         }
-        if (svgHeight < 120) svgHeight = 160
+        if (svgHeight < 140) svgHeight = 160
 
         const fileId = `svg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` as any
         const dataURL = svgToBase64DataUrl(cleanSvg) as any
@@ -2938,7 +2939,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             if (content) await drawGeometry(content);
           } else if (action === 'draw_image' || action === 'image') {
             const parts = (content || '').split('|').map((s) => s.trim());
-            await drawImageCard(parts[0] || 'Diagram', parts[1] || '', parts[2] || 'NCERT Standard');
+            await drawFlowchart(`${parts[0] || 'Key Concept'} -> Fundamental Principle -> Board Application`);
           } else if (action === 'draw_video' || action === 'video') {
             const parts = (content || '').split('|').map((s) => s.trim());
             await drawVideoCard(parts[0] || 'Demonstration', parts[1] || '');
@@ -3184,20 +3185,20 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
               await drawGeometry(payload)
             } else if (diag.includes('table') || diag.includes('compare') || diag.includes('vs')) {
               if (payload.includes('|')) await drawTable(payload)
-              else await drawImageCard(payload, 'Comparison Matrix', 'Board Standard')
+              else await drawFlowchart(payload)
             } else if (diag.includes('timeline') || diag.includes('flow')) {
               await drawFlowchart(payload)
             } else if (diag.includes('graph') || diag.includes('ohm') || diag.includes('linear') || diag.includes('velocity') || diag.includes('speed') || diag.includes('distance') || diag.includes('wave') || diag.includes('parabola') || diag.includes('quad') || diag.includes('boyle') || diag.includes('curve') || diag.includes('plot') || diag.includes('=')) {
               await drawGraph(diag)
             } else {
-              // Universal for ANY syllabus subject (History, Geography, Economics, Mathematics, Chemistry, Biology, Social Science, English)
-              await drawImageCard(payload || 'Curriculum Schematic', `Authentic textbook illustration and conceptual schematic for ${payload}.`, 'NCERT / Board Standard')
+              // Universal dynamic pathway flowchart for any syllabus subject
+              await drawFlowchart(payload || 'Curriculum Pathway')
             }
           }
-          // 4. Board Book Illustrations & Videos
+          // 4. Board Videos & Dynamic Flowcharts
           else if (tagType === 'IMAGE' || tagType === 'DRAW_IMAGE') {
-            const [imgTitle, imgCaption] = payload.split('|').map((s) => s.trim())
-            await drawImageCard(imgTitle || 'Textbook Diagram', imgCaption || '')
+            const [imgTitle] = payload.split('|').map((s) => s.trim())
+            await drawFlowchart(`${imgTitle || 'Key Concept'} -> Core Mechanism -> Exam Application`)
           } else if (tagType === 'VIDEO' || tagType === 'DRAW_VIDEO') {
             const [vidTitle, vidDesc] = payload.split('|').map((s) => s.trim())
             await drawVideoCard(vidTitle || 'Visual Demonstration', vidDesc || '')
@@ -3276,7 +3277,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       drawSvgDiagram,
       drawGraph,
       drawNumericalSolution,
-      drawImageCard,
       drawVideoCard,
       drawTable,
       drawGeometry,

@@ -156,25 +156,27 @@ export class AudioStreamer {
     // 1. TEACHER SPEAKING (SPEAKER SUPPRESSION & HIGH-FIDELITY DELIBERATE BARGE-IN):
     if (this.isTeacherSpeaking) {
       const now = Date.now();
-      // Grace period: First 1000ms after teacher begins speaking, protect against audio transients & speaker ramp-up
-      if (now - this.teacherSpeechStartTime < 1000) {
+      // Brief grace period (100ms) after teacher starts speaking to ignore initial speaker activation transients
+      if (now - this.teacherSpeechStartTime < 100) {
         this.consecutiveBargeInFrames = 0;
         return;
       }
 
-      // Deliberate barge-in requires sustained human speech well above room noise and speaker bleed
-      const BARGE_IN_THRESHOLD = 0.075;
+      // Responsive voice detection threshold: calibrated above ambient room noise (0.015) to catch natural speech
+      const BARGE_IN_THRESHOLD = 0.018;
+      const requiredFrames = this.workletNode ? 4 : 1;
+
       if (rms >= BARGE_IN_THRESHOLD) {
         this.consecutiveBargeInFrames++;
-        // Require at least 8 consecutive frames (~160-200ms) of sustained loud voice before interrupting teacher
-        if (this.consecutiveBargeInFrames >= 8) {
-          console.log(`[AudioStreamer] Deliberate student barge-in detected (RMS: ${rms.toFixed(4)})! Stopping teacher speech.`);
+        if (this.consecutiveBargeInFrames >= requiredFrames) {
+          console.log(`[AudioStreamer] Student voice detected during teacher speech (RMS: ${rms.toFixed(4)}). Triggering instant barge-in.`);
           this.isTeacherSpeaking = false;
           this.consecutiveBargeInFrames = 0;
           this.lastSpeechTime = now;
           this.wasSpeechActive = true;
           this.onBargeIn?.();
           this.onSpeechStart?.();
+          // Fall through to resample & stream this initial spoken chunk immediately
         } else {
           return;
         }

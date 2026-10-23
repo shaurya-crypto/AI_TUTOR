@@ -175,10 +175,10 @@ function detectSpokenConceptTransition(
 ): { targetIdx: number; conceptTitle: string } | null {
   if (!text || keyConcepts.length === 0) return null
 
-  // 1. Direct number match: e.g. "moving on to concept 2", "let's move to concept 3", "now moving to concept 2", "turning to concept 2", "starting concept 2", "now for concept 2"
+  // 1. Direct number match: e.g. "moving on to concept 2", "let's talk about concept 2", "now on to concept 2", "concept 2 is"
   const numMatch = text.match(
-    /(?:moving\s+(?:on\s+)?to|let['’]?s\s+move\s+(?:on\s+)?to|now\s+moving\s+to|turn(?:ing)?\s+(?:our\s+attention\s+)?to|next\s+is|next\s+concept\s+is|now\s+for|welcome\s+to|starting)\s+(?:concept\s*(\d+))/i
-  )
+    /(?:moving\s+(?:on\s+)?to|let['’]?s\s+(?:move\s+(?:on\s+)?to|talk\s+about|discuss|begin|start)|now\s+(?:moving\s+to|on\s+to|for)|turn(?:ing)?\s+(?:our\s+attention\s+)?to|next\s+(?:is|up\s+is|concept\s+is)|welcome\s+to|starting|onto|in)\s+concept\s*#?\s*(\d+)/i
+  ) || text.match(/\bconcept\s*#?\s*(\d+)\s*(?:is|:|\-)\s*/i)
   if (numMatch && numMatch[1]) {
     const num = parseInt(numMatch[1], 10)
     if (num >= 1 && num <= keyConcepts.length) {
@@ -210,18 +210,26 @@ function detectSpokenConceptTransition(
     }
   }
 
-  // 3. Spoken topic title match: e.g. "moving on to cellulose", "let's talk about cellulose", "let's explore cellulose"
+  // 3. Keyword / topic title match: e.g. "moving on to cellulose", "let's talk about cellulose"
   for (let i = 0; i < keyConcepts.length; i++) {
     const c = keyConcepts[i]
-    const cleanC = c.replace(/[^a-zA-Z0-9\s]/g, '').trim().toLowerCase()
-    if (cleanC.length < 3) continue
-    const escaped = cleanC.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const pattern = new RegExp(
-      `(?:moving\\s+(?:on\\s+)?to|let['’]?s\\s+move\\s+(?:on\\s+)?to|now\\s+moving\\s+to|let['’]?s\\s+talk\\s+about|turn(?:ing)?\\s+to|next\\s+up\\s+is)\\s+${escaped}`,
-      'i'
-    )
-    if (pattern.test(text)) {
-      return { targetIdx: i, conceptTitle: keyConcepts[i] }
+    // Filter significant topic words (length >= 4)
+    const words = c
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 4 && !['what', 'with', 'from', 'this', 'that', 'about', 'basic', 'types', 'cell'].includes(w))
+    for (const word of words) {
+      const isUnique = !keyConcepts.some((other, oIdx) => oIdx !== i && other.toLowerCase().includes(word))
+      if (isUnique) {
+        const pattern = new RegExp(
+          `(?:moving\\s+(?:on\\s+)?to|let['’]?s\\s+(?:move\\s+to|talk\\s+about|discuss)|now\\s+(?:on\\s+to|for)|turn(?:ing)?\\s+to|next\\s+up\\s+is)\\s+${word}`,
+          'i'
+        )
+        if (pattern.test(text)) {
+          return { targetIdx: i, conceptTitle: keyConcepts[i] }
+        }
+      }
     }
   }
 
@@ -687,7 +695,7 @@ export default function ModuleClassroomPage() {
           executedSceneDirectivesRef.current.add(spokenKey)
           if (spokenTransition.targetIdx > currentConceptIndexRef.current) {
             console.log(`[Spoken Concept Transition] Advancing from Concept ${currentConceptIndexRef.current + 1} to Concept ${spokenTransition.targetIdx + 1}: "${spokenTransition.conceptTitle}"`)
-            handleConceptFocus(spokenTransition.conceptTitle)
+            handleConceptGoto(spokenTransition.targetIdx + 1)
           }
         }
       }
@@ -753,17 +761,17 @@ export default function ModuleClassroomPage() {
       if (typeof stepIdx === 'number' && lessonManifest && stepIdx >= 0 && stepIdx < lessonManifest.steps.length) {
         setActiveVisualStepIndex(stepIdx)
         const step = lessonManifest.steps[stepIdx]
-        if (step.type === 'IMAGE' && step.content.image) {
-          chalkboardRef.current?.drawImageCard?.(step.title, step.content.image.caption, step.content.image.attribution)
-        } else if (step.type === 'VIDEO' && step.content.video) {
+        if (step.type === 'VIDEO' && step.content.video) {
           chalkboardRef.current?.drawVideoCard?.(step.title, step.content.video.description)
         } else if (step.type === 'GRAPH') {
           chalkboardRef.current?.drawGraph(step.content.graph?.title || 'linear')
         } else if (step.type === 'DIAGRAM') {
           chalkboardRef.current?.handleAiDirective(`[DIAGRAM: ${step.title}]`)
+        } else {
+          chalkboardRef.current?.drawFlowchart?.(`${step.title} -> Core Concept Formulation -> Board Application`)
         }
       } else if (params.title) {
-        chalkboardRef.current?.drawImageCard?.(params.title, params.caption, params.attribution)
+        chalkboardRef.current?.drawFlowchart?.(`${params.title} -> Socratic Progression`)
       }
     } else if (action === 'UPDATE_GRAPH') {
       const stepIdx = typeof params.stepIndex === 'number' ? params.stepIndex : params.step
@@ -821,20 +829,10 @@ export default function ModuleClassroomPage() {
         chalkboardRef.current.drawGraph(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_geometry' && directive.chalkboardContent) {
         chalkboardRef.current.drawGeometry?.(directive.chalkboardContent)
-      } else if (directive.chalkboardAction === 'draw_image' && directive.chalkboardContent) {
-        const parts = directive.chalkboardContent.split('|').map((s) => s.trim())
-        chalkboardRef.current.drawImageCard?.(
-          parts[0] || 'Textbook Diagram',
-          parts[1] || '',
-          parts[2] || 'NCERT Standard'
-        )
-      } else if (directive.chalkboardAction === 'draw_video' && directive.chalkboardContent) {
-        const parts = directive.chalkboardContent.split('|').map((s) => s.trim())
-        chalkboardRef.current.drawVideoCard?.(
-          parts[0] || 'Demonstration',
-          parts[1] || ''
-        )
+      } else if (directive.chalkboardAction === 'draw_flowchart' && directive.chalkboardContent) {
+        chalkboardRef.current.drawFlowchart(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_table' && directive.chalkboardContent) {
+        chalkboardRef.current.drawTable?.(directive.chalkboardContent)
         chalkboardRef.current.drawTable?.(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_flowchart' && directive.chalkboardContent) {
         chalkboardRef.current.drawFlowchart(directive.chalkboardContent)
@@ -1056,189 +1054,7 @@ export default function ModuleClassroomPage() {
     }
   }
 
-  // 6. Concept Tracking Callbacks: auto-save progress and resume state
-  const handleConceptFocus = (conceptName: string) => {
-    const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
-    if (keyConcepts.length === 0) return
-
-    const norm = (s: string) =>
-      String(s || '')
-        .toLowerCase()
-        .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
-        .replace(/^concept\s*\d*[:\-\s]*/i, '')
-        .replace(/^\d+[\.\:\)\-]\s*/, '')
-        .replace(/[^a-z0-9]/g, '')
-
-    const targetNorm = norm(conceptName)
-
-    let targetIdx = -1
-    const numMatch = String(conceptName || '').match(/\b(\d+)\b/)
-    if (numMatch) {
-      const parsedNum = parseInt(numMatch[1], 10)
-      if (parsedNum >= 1 && parsedNum <= keyConcepts.length) {
-        targetIdx = parsedNum - 1
-      }
-    }
-
-    if (targetIdx === -1 && targetNorm) {
-      targetIdx = keyConcepts.findIndex((c) => {
-        const cNorm = norm(c)
-        return (
-          cNorm === targetNorm ||
-          cNorm.includes(targetNorm) ||
-          targetNorm.includes(cNorm)
-        )
-      })
-    }
-
-    if (targetIdx === -1) {
-      targetIdx = currentConceptIndexRef.current
-    }
-
-    // Always release page guard when focusing / advancing concepts
-    isAwaitingStudentAnswerRef.current = false
-    setIsAwaitingStudentAnswer(false)
-    isReviewingVerdictRef.current = false
-    setIsReviewingVerdict(false)
-
-    const canonicalConcept = keyConcepts[targetIdx] || conceptName
-
-    // If tutor advances to concept N (e.g. Concept 2 at index 1), all prior concepts (0..N-1) are completed
-    const updatedCompleted: string[] = [...completedConceptsRef.current]
-    for (let i = 0; i < targetIdx; i++) {
-      const prevConcept = keyConcepts[i]
-      if (prevConcept && !updatedCompleted.some((u) => norm(u) === norm(prevConcept))) {
-        updatedCompleted.push(prevConcept)
-      }
-    }
-    completedConceptsRef.current = updatedCompleted
-    setCompletedConcepts(updatedCompleted)
-
-    currentConceptIndexRef.current = targetIdx
-    setCurrentConceptIndex(targetIdx)
-    setLastCoveredConcept(canonicalConcept)
-
-    // Whiteboard 1-Concept-Per-Page: Dedicated page per concept (0 -> Page 1, 1 -> Page 2...)
-    chalkboardRef.current?.goToPage?.(targetIdx, canonicalConcept)
-
-    autoTriggerVisualForConcept(targetIdx)
-
-    const supabase = createClient()
-    supabase
-      .from('user_progress')
-      .upsert(
-        {
-          user_id: userId,
-          syllabus_module_id: moduleId,
-          current_concept_index: targetIdx,
-          completed_concepts: updatedCompleted,
-          last_covered_concept: canonicalConcept,
-          status: isCompletedBefore || moduleCompletedSuccess ? 'completed' : 'in_progress',
-        },
-        { onConflict: 'user_id,syllabus_module_id' }
-      )
-      .then(({ error }) => {
-        if (error) console.error('Failed to persist concept focus:', error)
-      })
-  }
-
-  const handleConceptDone = (conceptName: string) => {
-    // Release page guard
-    isAwaitingStudentAnswerRef.current = false
-    setIsAwaitingStudentAnswer(false)
-    isReviewingVerdictRef.current = false
-    setIsReviewingVerdict(false)
-
-    const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
-    if (keyConcepts.length === 0) return
-
-    const norm = (s: string) =>
-      String(s || '')
-        .toLowerCase()
-        .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
-        .replace(/^concept\s*\d*[:\-\s]*/i, '')
-        .replace(/^\d+[\.\:\)\-]\s*/, '')
-        .replace(/[^a-z0-9]/g, '')
-
-    const targetNorm = norm(conceptName)
-
-    let matchedIdx = -1
-    const numMatch = String(conceptName || '').match(/\b(\d+)\b/)
-    if (numMatch) {
-      const parsedNum = parseInt(numMatch[1], 10)
-      if (parsedNum >= 1 && parsedNum <= keyConcepts.length) {
-        matchedIdx = parsedNum - 1
-      }
-    }
-
-    if (matchedIdx === -1 && targetNorm) {
-      matchedIdx = keyConcepts.findIndex((c) => {
-        const cNorm = norm(c)
-        return (
-          cNorm === targetNorm ||
-          cNorm.includes(targetNorm) ||
-          targetNorm.includes(cNorm)
-        )
-      })
-    }
-
-    if (matchedIdx === -1) {
-      matchedIdx = currentConceptIndexRef.current
-    }
-
-    const canonicalConcept = keyConcepts[matchedIdx] || keyConcepts[currentConceptIndexRef.current]
-    if (!canonicalConcept) return
-
-    const prevList = completedConceptsRef.current
-    const alreadyDone = prevList.some((p) => norm(p) === norm(canonicalConcept))
-    const updated = alreadyDone ? prevList : [...prevList, canonicalConcept]
-    completedConceptsRef.current = updated
-    setCompletedConcepts(updated)
-
-    const nextIdx = Math.min(
-      matchedIdx + 1,
-      Math.max(0, keyConcepts.length - 1)
-    )
-    currentConceptIndexRef.current = nextIdx
-    setCurrentConceptIndex(nextIdx)
-    setLastCoveredConcept(canonicalConcept)
-
-    if (nextIdx > matchedIdx && nextIdx < keyConcepts.length) {
-      // Whiteboard 1-Concept-Per-Page: Advance to next concept's page
-      const nextConceptTitle = keyConcepts[nextIdx]
-      chalkboardRef.current?.goToPage?.(nextIdx, nextConceptTitle)
-      setTimeout(() => {
-        autoTriggerVisualForConcept(nextIdx)
-      }, 500)
-    }
-
-    const isAllDone = keyConcepts.length > 0 && updated.length >= keyConcepts.length
-
-    const supabase = createClient()
-    supabase
-      .from('user_progress')
-      .upsert(
-        {
-          user_id: userId,
-          syllabus_module_id: moduleId,
-          current_concept_index: nextIdx,
-          completed_concepts: updated,
-          last_covered_concept: canonicalConcept,
-          status: isCompletedBefore || isAllDone ? 'completed' : 'in_progress',
-          ...(isAllDone ? { completed_at: new Date().toISOString() } : {}),
-        },
-        { onConflict: 'user_id,syllabus_module_id' }
-      )
-      .then(({ error }) => {
-        if (error) console.error('Failed to persist completed concept:', error)
-      })
-
-    if (isAllDone && !isCompletedBefore && !isMarkingCompleteRef.current) {
-      markModuleAsCompleted()
-    }
-  }
-
-  // 7. Rewind / Concept Jump Navigation (Bidirectional sync with Supabase and UI)
+  // 6. Rewind / Concept Jump Navigation (Bidirectional sync with Supabase and UI)
   const handleConceptGoto = async (target: number | string) => {
     const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
     if (keyConcepts.length === 0) return
@@ -1321,6 +1137,87 @@ export default function ModuleClassroomPage() {
       })
     } catch (err) {
       console.error('Failed to rewind concept in database:', err)
+    }
+  }
+
+  // 7. Concept Tracking Callbacks: auto-save progress and resume state
+  const handleConceptFocus = (conceptName: string | number) => {
+    const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
+    if (keyConcepts.length === 0) return
+
+    if (typeof conceptName === 'number') {
+      handleConceptGoto(conceptName)
+      return
+    }
+
+    const raw = String(conceptName || '').trim()
+    const numMatch = raw.match(/(?:concept\s*#?\s*)?(\d+)/i)
+    if (numMatch && numMatch[1]) {
+      const parsedNum = parseInt(numMatch[1], 10)
+      if (parsedNum >= 1 && parsedNum <= keyConcepts.length) {
+        handleConceptGoto(parsedNum)
+        return
+      }
+    }
+
+    const norm = (s: string) =>
+      String(s || '')
+        .toLowerCase()
+        .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
+        .replace(/^concept\s*\d*[:\-\s]*/i, '')
+        .replace(/^\d+[\.\:\)\-]\s*/, '')
+        .replace(/[^a-z0-9]/g, '')
+
+    const targetNorm = norm(raw)
+    if (targetNorm) {
+      const matchedIdx = keyConcepts.findIndex((c) => {
+        const cNorm = norm(c)
+        return cNorm === targetNorm || cNorm.includes(targetNorm) || targetNorm.includes(cNorm)
+      })
+      if (matchedIdx >= 0) {
+        handleConceptGoto(matchedIdx + 1)
+        return
+      }
+    }
+
+    if (currentConceptIndexRef.current < keyConcepts.length - 1) {
+      handleConceptGoto(currentConceptIndexRef.current + 2)
+    }
+  }
+
+  const handleConceptDone = (conceptName?: string) => {
+    isAwaitingStudentAnswerRef.current = false
+    setIsAwaitingStudentAnswer(false)
+    isReviewingVerdictRef.current = false
+    setIsReviewingVerdict(false)
+
+    const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
+    if (keyConcepts.length === 0) return
+
+    let matchedIdx = currentConceptIndexRef.current
+    if (conceptName?.trim()) {
+      const numMatch = String(conceptName).match(/\b(\d+)\b/)
+      if (numMatch) {
+        const parsed = parseInt(numMatch[1], 10)
+        if (parsed >= 1 && parsed <= keyConcepts.length) {
+          matchedIdx = parsed - 1
+        }
+      }
+    }
+
+    const nextIdx = Math.min(matchedIdx + 1, keyConcepts.length - 1)
+    if (nextIdx > currentConceptIndexRef.current) {
+      handleConceptGoto(nextIdx + 1)
+    } else {
+      const canonicalConcept = keyConcepts[matchedIdx]
+      if (canonicalConcept && !completedConceptsRef.current.includes(canonicalConcept)) {
+        const updated = [...completedConceptsRef.current, canonicalConcept]
+        completedConceptsRef.current = updated
+        setCompletedConcepts(updated)
+      }
+      if (keyConcepts.length > 0 && completedConceptsRef.current.length >= keyConcepts.length) {
+        markModuleAsCompleted()
+      }
     }
   }
 
@@ -1494,9 +1391,14 @@ STUDENT: ${resolvedClassLevel || 'Class 10'} (${resolvedBoard || 'CBSE'}) | Subj
 PEDAGOGICAL CADENCE FOR EACH CONCEPT (STRICT 5-STAGE SEQUENCE):
 1. Stage 1 - Real-World Intuitive Hook: Everyday physical phenomenon first before formulas.
    write_chalkboard(action="draw_note", content="Intuition: <everyday example & plain meaning>", color="botanical")
-2. Stage 2 - Formal Law, Formula & Visual: Precise law, definition, SI units.
+2. Stage 2 - Formal Law, Formula & MANDATORY VISUAL EXPLANATION:
    write_chalkboard(action="draw_highlight_box", content="Law / Formula: <exact law & SI units>", color="coral")
-   Execute mapped visual tool or 3D simulation or draw_shape.
+   INVIOLABLE VISUAL REQUIREMENT (EVERY CONCEPT): You MUST execute at least ONE visual tool in Stage 2 for every concept before moving to Stage 3 or asking questions. Choose the most fitting tool:
+   - render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="...") for biology (cell walls, organelles, double membranes, transport), physics (ray optics, circuits, forces, wave mechanics), chemistry (molecular models, setups), or mathematics. Must be high-contrast, razor-sharp vector graphics with labels. NEVER flat colored boxes.
+   - draw_graph(formula="...", domain="[-5, 5]", range="[-5, 5]", title="...") for functions, parabolas, and kinematics curves.
+   - draw_flowchart(steps="...") for biochemical pathways, cycles, and classifications.
+   - draw_table(table="Col1 | Col2 || Row1A | Row1B") for property comparison matrices.
+   - draw_shape(shape="rectangle"|"circle"|"cylinder"|"cube"|"arrow", ...) for geometric solids and dimensioned diagrams.
 3. Stage 3 - Authentic Board Exam Numerical & Model Answer:
    write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Answer: <Topper Model Answer with steps & units>", color="coral")
 4. Stage 4 - Checkpoint Question (1-2 Qs & INVIOLABLE HARD STOP):
@@ -1544,12 +1446,12 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
       kickoffPrompt,
       (action, content, color) => {
         const isVisualAction = [
-          'draw_image', 'image', 'draw_video', 'video',
-          'draw_diagram', 'diagram', 'draw_graph', 'graph',
+          'draw_graph', 'graph',
           'draw_geometry', 'geometry', 'draw_table', 'table',
           'draw_shape', 'shape', 'draw_rectangle', 'draw_circle', 'draw_triangle',
           'draw_flowchart', 'draw_numerical', 'numerical', 'solve', 'worked_example',
           'render_svg_diagram', 'draw_svg', 'draw_svg_diagram',
+          'draw_video', 'video',
         ].includes(action)
         if (isVisualAction) {
           renderedVisualConceptsRef.current.add(currentConceptIndexRef.current)
@@ -1630,7 +1532,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           }
           else if (action === 'draw_image' || action === 'image') {
             const parts = (content || '').split('|').map((s: string) => s.trim())
-            chalkboardRef.current.drawImageCard?.(parts[0] || 'Diagram', parts[1] || '', parts[2] || 'NCERT / Board Standard')
+            chalkboardRef.current.drawFlowchart?.(`${parts[0] || 'Key Concept'} -> Fundamental Principle -> Board Application`)
           }
           else if (action === 'draw_video' || action === 'video') {
             const parts = (content || '').split('|').map((s: string) => s.trim())

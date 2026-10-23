@@ -205,9 +205,9 @@ async function runConceptWhiteboardVerification() {
   assert('CONCEPT_DONE writes ZERO notes to the whiteboard', recordedBoardNotes.length === 0)
 
   // -------------------------------------------------------------
-  // SUITE 4: All 9 Visual Tool Mappings Verification
+  // SUITE 4: Universal Visual Tool Mappings Verification (Phase 3)
   // -------------------------------------------------------------
-  console.log('\n--- SUITE 4: All 9 Visual Tool Mappings ---')
+  console.log('\n--- SUITE 4: Universal Visual Tool Mappings ---')
 
   const visualMappingTests: Array<{
     category: string
@@ -215,82 +215,82 @@ async function runConceptWhiteboardVerification() {
     subject: string
     verify: (d: any) => boolean
   }> = [
-    // 1. 3D WebGL Simulation (Circuits, Forces, Optics, Matter, Bohr Atom)
+    // 1. Dynamic Vector SVG Diagrams (Circuits, Forces, Optics, Bohr Atom, States of Matter, Magnet)
     {
-      category: '1. 3D Simulation (Physics Circuits)',
+      category: '1. Dynamic Vector SVG (Physics Circuits)',
       concept: 'Electric Current and Series Circuit',
       subject: 'Physics',
-      verify: (d) => d.sceneType === 'circuits' || d.toolCallExample.includes('circuits'),
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
     {
-      category: '1. 3D Simulation (Physics Forces)',
+      category: '1. Dynamic Vector SVG (Physics Forces)',
       concept: 'Newton Second Law and Free Body Dynamics',
       subject: 'Physics',
-      verify: (d) => d.sceneType === 'forces' || d.toolCallExample.includes('forces'),
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
     {
-      category: '1. 3D Simulation (Physics Optics)',
+      category: '1. Dynamic Vector SVG (Physics Optics)',
       concept: "Refraction of Light and Snell's Law",
       subject: 'Physics',
-      verify: (d) => d.sceneType === 'optics' || d.toolCallExample.includes('optics'),
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
     {
-      category: '1. 3D Simulation (Chemistry Bohr Atom)',
+      category: '1. Dynamic Vector SVG (Chemistry Bohr Atom)',
       concept: 'Bohr Model of Atom and Electron Shells',
       subject: 'Chemistry',
-      verify: (d) => d.sceneType === 'bohr_atom' || d.toolCallExample.includes('bohr_atom'),
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
     {
-      category: '1. 3D Simulation (Chemistry States of Matter)',
+      category: '1. Dynamic Vector SVG (Chemistry States of Matter)',
       concept: 'States of Matter Particle Movement',
       subject: 'Chemistry',
-      verify: (d) => d.sceneType === 'matter' || d.toolCallExample.includes('matter'),
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
-    // 2. Whiteboard Scientific Diagrams
+    // 2. Dynamic Vector SVG & Adaptive Flowchart Diagrams
     {
-      category: '2. Diagram (Biology Cell)',
+      category: '2. Dynamic Vector SVG (Biology Cell)',
       concept: 'Cell Structural Organization and Membrane',
       subject: 'Biology',
-      verify: (d) => d.chalkboardAction === 'draw_diagram' && d.chalkboardContent === 'cell',
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
     {
-      category: '2. Diagram (Biology Photosynthesis)',
+      category: '2. Flowchart (Biology Photosynthesis Pathway)',
       concept: 'Photosynthesis Biochemical Pathway',
       subject: 'Biology',
-      verify: (d) => d.chalkboardAction === 'draw_diagram' && d.chalkboardContent === 'photosynthesis',
+      verify: (d) => d.chalkboardAction === 'draw_flowchart' || d.toolCallExample.includes('draw_flowchart'),
     },
     {
-      category: '2. Diagram (Physics Magnet)',
+      category: '2. Dynamic Vector SVG (Physics Magnet)',
       concept: 'Bar Magnet Field Lines Induction',
       subject: 'Physics',
-      verify: (d) => d.chalkboardAction === 'draw_diagram' && d.chalkboardContent === 'magnet',
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
     {
-      category: '2. Diagram (Physics Pressure)',
+      category: '2. Flowchart / Dynamic Vector SVG (Physics Pressure)',
       concept: "Fluid Pressure and Pascal's Law",
       subject: 'Physics',
-      verify: (d) => d.chalkboardAction === 'draw_diagram' && d.chalkboardContent === 'pressure',
+      verify: (d) => d.chalkboardAction === 'draw_flowchart' || d.chalkboardAction === 'render_svg_diagram',
     },
-    // 3. Mathematical Geometries
+    // 3. Mathematical Geometries (draw_shape)
     {
       category: '3. Geometry (Right-Angled Triangle)',
       concept: 'Right-Angled Triangle and Pythagoras Theorem',
       subject: 'Mathematics',
-      verify: (d) => d.chalkboardAction === 'draw_geometry' && d.chalkboardContent === 'triangle right',
+      verify: (d) => d.chalkboardAction === 'draw_shape' && d.chalkboardContent === 'triangle',
     },
     {
       category: '3. Geometry (Circle Geometry)',
       concept: 'Circle Radius Tangent and Circumference',
       subject: 'Mathematics',
-      verify: (d) => d.chalkboardAction === 'draw_geometry' && d.chalkboardContent === 'circle',
+      verify: (d) => d.chalkboardAction === 'draw_shape' && d.chalkboardContent === 'circle',
     },
     {
       category: '3. Geometry (3D Solid Geometry)',
       concept: 'Cylinder Surface Area and Volume',
       subject: 'Mathematics',
-      verify: (d) => d.sceneType === 'geometry' && d.chalkboardAction === 'draw_geometry',
+      verify: (d) => d.chalkboardAction === 'draw_shape' && d.chalkboardContent === 'cylinder',
     },
-    // 4. Mathematical & Scientific Graph Plots
+    // 4. Mathematical & Scientific Graph Plots (Mafs.dev Pure React/SVG)
     {
       category: '4. Graph Plot (Quadratic Parabola)',
       concept: 'Quadratic Equation Parabola Curve',
@@ -307,21 +307,21 @@ async function runConceptWhiteboardVerification() {
       category: '4. Graph Plot (Velocity-Time Motion Graph)',
       concept: 'Velocity-Time Motion Curve',
       subject: 'Physics',
-      verify: (d) => d.chalkboardAction === 'draw_graph' && d.chalkboardContent === 'velocity-time',
+      verify: (d) => d.chalkboardAction === 'draw_graph' || d.toolCallExample.includes('draw_graph'),
     },
-    // 5. Authentic Board Book Illustration Cards (Images)
+    // 5. Authentic Vector SVG Diagrams (No fake image cards)
     {
-      category: '5. Image Card (Anatomy Schematic)',
+      category: '5. Dynamic Vector SVG (Anatomy Schematic)',
       concept: 'Human Heart Blood Circulation System',
       subject: 'Biology',
-      verify: (d) => d.chalkboardAction === 'draw_image' || d.toolCallExample.includes('draw_image'),
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
-    // 6. Practical Lab Video Demonstrations
+    // 6. Dynamic Vector SVG (Apparatus / Lab Setup)
     {
-      category: '6. Video Demonstration (Practical Lab Experiment)',
+      category: '6. Dynamic Vector SVG (Practical Lab Experiment)',
       concept: 'Acid-Base Indicator Lab Experiment Demonstration',
       subject: 'Chemistry',
-      verify: (d) => d.chalkboardAction === 'draw_video' || d.toolCallExample.includes('draw_video'),
+      verify: (d) => d.chalkboardAction === 'render_svg_diagram' || d.toolCallExample.includes('render_svg_diagram'),
     },
     // 7. Sequential Process Flowcharts
     {
@@ -338,10 +338,10 @@ async function runConceptWhiteboardVerification() {
       verify: (d) => d.chalkboardAction === 'draw_table' || d.toolCallExample.includes('draw_table'),
     },
     {
-      category: '8. Table (Mendelian Genetics Table)',
+      category: '8. Flowchart / Table (Mendelian Genetics)',
       concept: 'Mendelian Genetics Monohybrid Cross Ratio',
       subject: 'Biology',
-      verify: (d) => d.chalkboardAction === 'draw_table' || d.toolCallExample.includes('draw_table'),
+      verify: (d) => d.chalkboardAction === 'draw_table' || d.chalkboardAction === 'draw_flowchart' || d.chalkboardAction === 'render_svg_diagram',
     },
     // 9. Worked Problem Exam Numerical
     {

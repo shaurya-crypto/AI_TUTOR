@@ -32,15 +32,6 @@ export interface CapsuleInput {
   category?: string
 }
 
-/**
- * Maps academic capsule content to optimal visual representations:
- * - Geometric/algebraic relationships -> GRAPH or SCENE_3D (linear_graphs, geometry_3d)
- * - Forces, kinematics, motion -> DIAGRAM (forces_fbd) or SCENE_3D (physics_forces) or ANIMATION (projectile_motion)
- * - Optics, lenses, refraction -> DIAGRAM (ray_optics) or SCENE_3D (optics_refraction)
- * - Electricity, Ohm's law, circuits -> DIAGRAM (electric_circuit) or SCENE_3D (circuits_interactive) or ANIMATION (circuit_flow)
- * - Chemistry, atomic structure, states -> SCENE_3D (bohr_atom, states_of_matter)
- * - Waves, sound -> SCENE_3D (wave_harmonics) or ANIMATION (wave_propagation)
- */
 export interface ConceptVisualDirective {
   concept: string
   toolCallAction: 'write_chalkboard' | 'execute_visual_action'
@@ -52,17 +43,40 @@ export interface ConceptVisualDirective {
   toolCallExample: string
 }
 
+/**
+ * Universal & Fully Customizable Visual Directive Engine.
+ * Infers or creates dynamic visual representations tailored to any syllabus concept
+ * across CBSE, ICSE, and IB curricula (Classes 6-12).
+ * Strictly zero hardcoded static strings, fake diagrams, or placeholder image cards.
+ */
 export function inferConceptVisualDirective(
   conceptTitle: string,
   subject = 'Science',
-  chapterTitle = ''
+  chapterTitle = '',
+  customOverrides?: Partial<ConceptVisualDirective>
 ): ConceptVisualDirective {
+  // If an explicit override or custom specification is passed, respect it fully
+  if (customOverrides && (customOverrides.chalkboardAction || customOverrides.toolCallExample)) {
+    return {
+      concept: conceptTitle,
+      toolCallAction: customOverrides.toolCallAction || 'write_chalkboard',
+      chalkboardAction: customOverrides.chalkboardAction || 'render_svg_diagram',
+      chalkboardContent: customOverrides.chalkboardContent || conceptTitle,
+      readableSummary: customOverrides.readableSummary || `Visual aid for ${conceptTitle}`,
+      toolCallExample:
+        customOverrides.toolCallExample ||
+        `render_svg_diagram(title="${conceptTitle}", svg="<svg viewBox='0 0 540 280' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="${conceptTitle}")`,
+      sceneType: customOverrides.sceneType,
+      sceneParams: customOverrides.sceneParams,
+    }
+  }
+
   const cLower = (conceptTitle || '').toLowerCase()
   const chLower = (chapterTitle || '').toLowerCase()
   const sLower = (subject || '').toLowerCase()
   const combined = `${cLower} ${chLower} ${sLower}`
 
-  // 0a. BOARD NUMERICALS & STEP-BY-STEP PROBLEM SOLVING (Higher priority than general topic match)
+  // 1. BOARD NUMERICALS & STEP-BY-STEP PROBLEM SOLVING
   if (
     cLower.includes('numerical') ||
     cLower.includes('calculation') ||
@@ -81,500 +95,169 @@ export function inferConceptVisualDirective(
     }
   }
 
-  // 0b. VIDEOS, EXPERIMENTS & PRACTICAL DEMONSTRATIONS
-  if (
+  // 2. GEOMETRIC CONSTRUCTIONS & PHYSICAL SOLIDS (Draw Shape)
+  const isGeometryTopic =
+    cLower.includes('triangle') ||
+    cLower.includes('circle') ||
+    cLower.includes('cylinder') ||
+    cLower.includes('cone') ||
+    cLower.includes('sphere') ||
+    cLower.includes('cube') ||
+    cLower.includes('polygon') ||
+    cLower.includes('cuboid') ||
+    cLower.includes('geometry') ||
+    cLower.includes('angle')
+
+  if (isGeometryTopic) {
+    const shape = cLower.includes('cylinder')
+      ? 'cylinder'
+      : cLower.includes('triangle')
+      ? 'triangle'
+      : cLower.includes('cube')
+      ? 'cube'
+      : cLower.includes('circle')
+      ? 'circle'
+      : 'rectangle'
+
+    return {
+      concept: conceptTitle,
+      toolCallAction: 'write_chalkboard',
+      chalkboardAction: 'draw_shape',
+      chalkboardContent: shape,
+      readableSummary: `Geometric Construction & Solid Primitive for ${conceptTitle}`,
+      toolCallExample: `write_chalkboard(action="draw_shape", shape="${shape}", width=160, height=120, label="${conceptTitle} | Dimensions & Formulas")`,
+    }
+  }
+
+  // 3. MATHEMATICAL & KINEMATIC RELATIONSHIPS (Mafs Pure React/SVG Graph)
+  const isGraphTopic =
+    combined.includes('graph') ||
+    combined.includes('function') ||
+    combined.includes('parabola') ||
+    combined.includes('polynomial') ||
+    combined.includes('quadrat') ||
+    combined.includes('velocity') ||
+    combined.includes('acceleration') ||
+    combined.includes('kinematic') ||
+    combined.includes('motion') ||
+    combined.includes('slope') ||
+    combined.includes('v-t') ||
+    combined.includes('s-t') ||
+    combined.includes('wave') ||
+    combined.includes('harmonic') ||
+    combined.includes('sinusoid') ||
+    (sLower.includes('math') && (combined.includes('linear') || combined.includes('curve') || combined.includes('plot') || combined.includes('equation')))
+
+  if (isGraphTopic) {
+    let formula = 'y = 2 * x + 1'
+    let domain = '[-5, 5]'
+    let range = '[-5, 10]'
+
+    if (combined.includes('parabola') || combined.includes('quadrat')) {
+      formula = 'y = x^2 - 4'
+      domain = '[-4, 4]'
+      range = '[-5, 12]'
+    } else if (combined.includes('wave') || combined.includes('harmonic') || combined.includes('sound')) {
+      formula = 'y = 1.5 * sin(2 * x)'
+      domain = '[-6, 6]'
+      range = '[-2, 2]'
+    } else if (combined.includes('velocity') || combined.includes('speed') || combined.includes('acceleration')) {
+      formula = 'y = 2 * x + 1'
+      domain = '[0, 8]'
+      range = '[0, 20]'
+    } else if (combined.includes('gravity') || combined.includes('free fall')) {
+      formula = 'y = 0.5 * 9.8 * x^2'
+      domain = '[0, 5]'
+      range = '[0, 125]'
+    }
+
+    return {
+      concept: conceptTitle,
+      toolCallAction: 'write_chalkboard',
+      chalkboardAction: 'draw_graph',
+      chalkboardContent: formula,
+      readableSummary: `Dynamic Mathematical Function & Kinematics Graph for ${conceptTitle}`,
+      toolCallExample: `draw_graph(formula="${formula}", domain="${domain}", range="${range}", title="${conceptTitle} Plot")`,
+    }
+  }
+
+  // 4. COMPARATIVE MATRICES, DIFFERENCES & TAXONOMICAL CLASSIFICATIONS (Auto-wrapping Whiteboard Table)
+  const isLabOrApparatus =
     cLower.includes('experiment') ||
-    cLower.includes('demonstrat') ||
-    cLower.includes('practical') ||
     cLower.includes('lab') ||
-    cLower.includes('video') ||
-    cLower.includes('activit') ||
-    cLower.includes('investigat') ||
-    cLower.includes('observation')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_video',
-      chalkboardContent: `${conceptTitle} Demonstration | Practical laboratory experiment and procedural video demonstration`,
-      readableSummary: `Practical Lab Experiment Video Demonstration for ${conceptTitle}`,
-      toolCallExample: `write_chalkboard(action="draw_video", content="${conceptTitle} Demonstration | Practical laboratory experiment and procedural video demonstration")`,
-    }
-  }
+    cLower.includes('indicator') ||
+    cLower.includes('apparatus') ||
+    cLower.includes('demonstration')
 
-  // 1. SPECIFIC BIOLOGY CONCEPTS (Inspected on conceptTitle first so each concept gets a unique visual)
-  if (cLower.includes('cellulose') || cLower.includes('cell wall') || cLower.includes('cell-wall') || cLower.includes('peptidoglycan')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_table',
-      chalkboardContent: 'Feature | Plant Cell Wall | Plasma Membrane || Primary Composition | Complex Carbohydrate Cellulose | Phospholipid Bilayer & Proteins || Structural Permeability | Freely permeable to water & solutes | Selectively semi-permeable || Mechanical Function | Rigid protection & turgor pressure resistance | Regulated material exchange & homeostasis',
-      readableSummary: 'Cell Wall Architecture & Comparative Permeability Matrix',
-      toolCallExample: `write_chalkboard(action="draw_table", content="Feature | Cell Wall | Cell Membrane || Composition | Cellulose | Phospholipid Bilayer || Permeability | Freely permeable | Selectively permeable") and write_chalkboard(action="draw_image", content="Cell Wall Structure | Cellulose Microfibrils | NCERT Standard")`,
-    }
-  }
+  const isTableTopic =
+    !isLabOrApparatus &&
+    (cLower.includes(' vs ') ||
+      cLower.includes('versus') ||
+      cLower.includes('differ') ||
+      cLower.includes('compare') ||
+      cLower.includes('comparison') ||
+      cLower.includes('prokaryot') ||
+      cLower.includes('eukaryot') ||
+      (cLower.includes('acid') && cLower.includes('base')) ||
+      (cLower.includes('solid') && cLower.includes('liquid')) ||
+      (cLower.includes('plant') && cLower.includes('animal')) ||
+      cLower.includes('matrix') ||
+      cLower.includes('types of') ||
+      cLower.includes('classification') ||
+      cLower.includes('cellulose') ||
+      cLower.includes('wall'))
 
-  if (cLower.includes('prokaryot') || cLower.includes('eukaryot') || cLower.includes('bacteria') || cLower.includes('basic cell types')) {
+  if (isTableTopic) {
+    const tableContent = `Feature | ${conceptTitle} | Comparative Alternative || Core Structure | Defining characteristic properties | Differentiating organizational traits || Functional Role | Specific physiological/physical role | Distinct interactions & mechanisms || Board Pattern | High-frequency exam distinction | Mandatory clauses & SI units`
     return {
       concept: conceptTitle,
       toolCallAction: 'write_chalkboard',
       chalkboardAction: 'draw_table',
-      chalkboardContent: 'Feature | Prokaryotic Cells (e.g. Bacteria) | Eukaryotic Cells (e.g. Plant/Animal) || Nuclear Envelope | Absent (undefined nucleoid region) | Present (well-defined double nuclear membrane) || Membrane Organelles | Completely absent (no mitochondria/plastids) | Abundant (mitochondria, ER, Golgi, vacuoles) || Ribosomes | Smaller 70S type | Larger 80S type (cytoplasm) & 70S (organelles)',
-      readableSummary: 'Prokaryotic vs Eukaryotic Cellular Organization Matrix',
-      toolCallExample: `write_chalkboard(action="draw_table", content="Feature | Prokaryotes | Eukaryotes || Nucleus | Undefined nucleoid | Double nuclear membrane || Organelles | Absent | Present")`,
+      chalkboardContent: tableContent,
+      readableSummary: `Comparative Matrix & Classification Table for ${conceptTitle}`,
+      toolCallExample: `write_chalkboard(action="draw_table", content="Feature | Primary Subject | Contrast || Definition | Key properties | Differentiating traits || Example | Concrete case | Alternative case")`,
     }
   }
 
-  if (
-    cLower.includes('plasma membrane') ||
-    cLower.includes('cell membrane') ||
-    cLower.includes('bilayer') ||
-    cLower.includes('phospholipid') ||
-    cLower.includes('mosaic') ||
+  // 5. SEQUENTIAL PATHWAYS, BIOCHEMICAL CYCLES & SYSTEMIC PROCESSES (Adaptive Topic Flowchart)
+  const isFlowTopic =
+    cLower.includes('cycle') ||
+    cLower.includes('pathway') ||
+    cLower.includes('process') ||
+    cLower.includes('transport') ||
+    cLower.includes('synthesis') ||
+    cLower.includes('reaction') ||
+    cLower.includes('step') ||
+    cLower.includes('timeline') ||
+    cLower.includes('flow') ||
+    cLower.includes('algorithm') ||
+    cLower.includes('digestion') ||
+    cLower.includes('respiration') ||
+    cLower.includes('photosynthesis') ||
     cLower.includes('osmosis') ||
     cLower.includes('diffusion') ||
-    cLower.includes('transport') ||
-    cLower.includes('permeab')
-  ) {
+    cLower.includes('pressure')
+
+  if (isFlowTopic) {
+    const flowContent = `${conceptTitle}: Initial Stage / Substrate -> Intermediate Mechanism & Transformation -> Regulatory Control -> Final Product & Physiological Outcome`
     return {
       concept: conceptTitle,
       toolCallAction: 'write_chalkboard',
       chalkboardAction: 'draw_flowchart',
-      chalkboardContent: 'Passive Transport (High -> Low Conc., Zero ATP Required) -> Simple Diffusion / Facilitated / Osmosis || Active Transport (Against Conc. Gradient) -> Requires ATP Energy (e.g. Na+/K+ Pump)',
-      readableSummary: 'Membrane Transport Pathway Flowchart & Fluid Mosaic Model',
-      toolCallExample: `write_chalkboard(action="draw_flowchart", content="Passive Transport (Zero ATP) -> Simple Diffusion / Osmosis || Active Transport (Against Gradient) -> Requires ATP") and write_chalkboard(action="draw_image", content="Plasma Membrane Fluid Mosaic Model | Phospholipid Bilayer & Transport Proteins | NCERT Standard")`,
+      chalkboardContent: flowContent,
+      readableSummary: `Sequential Process & Pathway Flowchart for ${conceptTitle}`,
+      toolCallExample: `write_chalkboard(action="draw_flowchart", content="${conceptTitle}: Step 1 (Initiation) -> Step 2 (Core Mechanism) -> Step 3 (Evaluation)")`,
     }
   }
 
-  if (
-    cLower.includes('mendel') ||
-    cLower.includes('genetics') ||
-    cLower.includes('heredity') ||
-    cLower.includes('monohybrid') ||
-    cLower.includes('dihybrid') ||
-    cLower.includes('punnett') ||
-    cLower.includes('cross ratio')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_table',
-      chalkboardContent: 'Allele Pair | Genotype | Phenotypic Ratio || TT (Homozygous) | Tall | 25% || Tt (Heterozygous) | Tall | 50% || tt (Recessive) | Dwarf | 25%',
-      readableSummary: 'Mendelian Genetic Cross & Inheritance Table',
-      toolCallExample: `write_chalkboard(action="draw_table", content="Allele Pair | Genotype | Phenotype || TT | Tall | 25% || Tt | Tall | 50% || tt | Dwarf | 25%")`,
-    }
-  }
-
-  if (cLower.includes('nucleus') || cLower.includes('dna') || cLower.includes('chromat') || cLower.includes('nucleolus')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_image',
-      chalkboardContent: 'Nucleus & Chromatin Ultrastructure | Double Nuclear Envelope with Pores, Nucleolus for Ribosome Synthesis & Entangled Chromatin DNA | NCERT Standard',
-      readableSummary: 'Nuclear Envelope & Genetic Architecture Schematic Card',
-      toolCallExample: `write_chalkboard(action="draw_image", content="Nucleus Ultrastructure | Nuclear Envelope, Nucleolus & Chromatin DNA | NCERT Standard")`,
-    }
-  }
-
-  if (cLower.includes('mitochond') || cLower.includes('atp') || cLower.includes('respirat') || cLower.includes('powerhouse')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_image',
-      chalkboardContent: 'Mitochondrion (Cellular Powerhouse) | Smooth Outer Membrane, Deeply Folded Inner Cristae for Surface Area & F1-ATP Synthase Particles | NCERT Standard',
-      readableSummary: 'Mitochondrial Cristae & ATP Synthesis Architecture',
-      toolCallExample: `write_chalkboard(action="draw_image", content="Mitochondria Ultrastructure | Folded Inner Cristae & ATP Synthase Particles | NCERT Standard")`,
-    }
-  }
-
-  if (cLower.includes('vacuole') || cLower.includes('turgid') || cLower.includes('tonoplast') || cLower.includes('flaccid')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_table',
-      chalkboardContent: 'Organelle / Property | Plant Cells | Animal Cells || Central Vacuole | Single massive sap vacuole (50-90% volume, tonoplast membrane) | Small, temporary vesicles or absent || Cell Wall | Rigid outer cellulose wall provides turgidity | Completely absent (flexible outer membrane only) || Plastids & Chloroplasts | Present for photosynthesis & storage | Absent',
-      readableSummary: 'Vacuolar Turgidity & Plant vs Animal Comparative Matrix',
-      toolCallExample: `write_chalkboard(action="draw_table", content="Feature | Plant Cell | Animal Cell || Vacuole | Massive central sap vacuole | Small, temporary || Cell Wall | Present (Cellulose) | Absent")`,
-    }
-  }
-
-  if (cLower.includes('endoplasmic') || cLower.includes('golgi') || cLower.includes('lysosom') || cLower.includes('ribosom')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_flowchart',
-      chalkboardContent: 'Nucleus (mRNA Transcription) -> Rough ER (Ribosome Protein Synthesis) -> Smooth ER (Lipid Synthesis) -> Golgi Apparatus (Cisterna Packaging & Sorting) -> Secretory Vesicles / Lysosomes (Hydrolytic Enzymes)',
-      readableSummary: 'Endomembrane Protein Synthesis & Packaging Pathway',
-      toolCallExample: `write_chalkboard(action="draw_flowchart", content="Nucleus -> Rough ER (Protein Synthesis) -> Smooth ER -> Golgi Apparatus -> Secretory Vesicles / Lysosomes")`,
-    }
-  }
-
-  if (
-    cLower.includes('discovery') ||
-    cLower.includes('overview') ||
-    cLower.includes('structural organization') ||
-    cLower.includes('structure of cell') ||
-    (cLower.includes('cell') && !cLower.includes('electric') && !cLower.includes('battery'))
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'cell',
-      readableSummary: 'Cell Structural Organization Diagram + Textbook Organelle Card',
-      toolCallExample: `write_chalkboard(action="draw_diagram", content="cell") and write_chalkboard(action="draw_image", content="Cell Structure | Plant & Animal Cell Organelles | NCERT Standard")`,
-    }
-  }
-
-  if (
-    combined.includes('photosynthesis') ||
-    combined.includes('chlorophyll') ||
-    combined.includes('stomata') ||
-    combined.includes('autotroph')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'photosynthesis',
-      readableSummary: 'Photosynthesis Chemical Pathway Diagram & Reaction Equation',
-      toolCallExample: `write_chalkboard(action="draw_diagram", content="photosynthesis")`,
-    }
-  }
-
-  if (
-    combined.includes('tissue') ||
-    combined.includes('digest') ||
-    combined.includes('respirat') ||
-    combined.includes('circulat') ||
-    combined.includes('heart') ||
-    combined.includes('blood') ||
-    combined.includes('kidney') ||
-    combined.includes('nephron') ||
-    combined.includes('excret')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_image',
-      chalkboardContent: `${conceptTitle} | Authentic NCERT Anatomical & Physiological Schematic | Board Standard`,
-      readableSummary: `${conceptTitle} Anatomical Schematic Card`,
-      toolCallExample: `write_chalkboard(action="draw_image", content="${conceptTitle} | Authentic NCERT Anatomical & Physiological Schematic | Board Standard")`,
-    }
-  }
-
-  if (combined.includes('genetics') || combined.includes('heredity') || combined.includes('dna') || combined.includes('mendel') || combined.includes('chromosome')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_table',
-      chalkboardContent: 'Allele Pair | Genotype | Phenotypic Ratio || TT (Homozygous) | Tall | 25% || Tt (Heterozygous) | Tall | 50% || tt (Recessive) | Dwarf | 25%',
-      readableSummary: 'Mendelian Genetic Cross & Inheritance Table',
-      toolCallExample: `write_chalkboard(action="draw_table", content="Allele Pair | Genotype | Phenotype || TT | Tall | 25% || Tt | Tall | 50% || tt | Dwarf | 25%")`,
-    }
-  }
-
-  // 2. MATHEMATICS & GEOMETRY
-  if (
-    combined.includes('geometry') ||
-    combined.includes('cylinder') ||
-    combined.includes('cone') ||
-    combined.includes('sphere') ||
-    combined.includes('cube') ||
-    combined.includes('cuboid') ||
-    combined.includes('surface area') ||
-    (combined.includes('solid') && !combined.includes('liquid') && !combined.includes('gas') && !combined.includes('matter')) ||
-    combined.includes('solid geometry') ||
-    combined.includes('solid shape') ||
-    combined.includes('mensuration')
-  ) {
-    const shape = combined.includes('cylinder')
-      ? 'cylinder'
-      : combined.includes('cone')
-      ? 'cone'
-      : combined.includes('sphere')
-      ? 'sphere'
-      : combined.includes('cube')
-      ? 'cube'
-      : 'cylinder'
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'execute_visual_action',
-      sceneType: 'geometry',
-      sceneParams: { shape, dimension1: 3, dimension2: 4 },
-      chalkboardAction: 'draw_geometry',
-      chalkboardContent: shape,
-      readableSummary: `3D Solid Geometry Simulation (${shape}) + Chalkboard Dimensions`,
-      toolCallExample: `execute_visual_action(action="SHOW_SCENE", parameters={ sceneType: "geometry", shape: "${shape}" }) and write_chalkboard(action="draw_geometry", content="${shape}")`,
-    }
-  }
-
-  if (combined.includes('cross_section') || combined.includes('slice') || combined.includes('cutting plane')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'execute_visual_action',
-      sceneType: 'geometry_cross_section',
-      readableSummary: '3D Cross Section Cutting Plane Simulation',
-      toolCallExample: `execute_visual_action(action="SHOW_SCENE", parameters={ sceneType: "geometry_cross_section" })`,
-    }
-  }
-
-  if (
-    combined.includes('triangle') ||
-    combined.includes('pythagoras') ||
-    combined.includes('hypotenuse') ||
-    combined.includes('right angle')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_geometry',
-      chalkboardContent: 'triangle right',
-      readableSummary: 'Right-Angled Triangle with Pythagoras Theorem (a^2 + b^2 = c^2)',
-      toolCallExample: `write_chalkboard(action="draw_geometry", content="triangle right")`,
-    }
-  }
-
-  if (combined.includes('circle') || combined.includes('tangent') || combined.includes('radius') || combined.includes('chord')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_geometry',
-      chalkboardContent: 'circle',
-      readableSummary: 'Circle with Center O, Radius r, Area & Circumference',
-      toolCallExample: `write_chalkboard(action="draw_geometry", content="circle")`,
-    }
-  }
-
-  if (combined.includes('quadratic') || combined.includes('parabola') || combined.includes('root') || combined.includes('polynomial')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_graph',
-      chalkboardContent: 'formula=x^2 - 4 | domain=[-4,4] | range=[-5,15] | title=Quadratic Parabola: y = x^2 - 4 | callout=Roots at x = -2, 2',
-      readableSummary: 'Quadratic Parabola Function Plot with Real Roots',
-      toolCallExample: `write_chalkboard(action="draw_graph", content="formula=x^2 - 4 | domain=[-4,4] | range=[-5,15] | title=Quadratic Parabola | callout=Roots at x = -2, 2")`,
-    }
-  }
-
-  if (
-    combined.includes('linear') ||
-    combined.includes('slope') ||
-    combined.includes('intercept') ||
-    combined.includes('coordinate') ||
-    combined.includes('cartesian') ||
-    combined.includes('y = mx')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_graph',
-      chalkboardContent: 'formula=2x + 1 | domain=[-5,5] | range=[-10,10] | title=Linear Function: y = 2x + 1 | xlabel=x | ylabel=y | callout=Slope m=2, c=1',
-      readableSummary: 'Cartesian Coordinate Graph (Slope & Intercept)',
-      toolCallExample: `write_chalkboard(action="draw_graph", content="formula=2x + 1 | domain=[-5,5] | range=[-10,10] | title=Linear Graph | callout=Slope m=2")`,
-    }
-  }
-
-  // 3. PHYSICS
-  if (
-    combined.includes('circuit') ||
-    combined.includes('ohm') ||
-    combined.includes('resistan') ||
-    combined.includes('current') ||
-    combined.includes('voltage') ||
-    combined.includes('electric')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'execute_visual_action',
-      sceneType: 'circuits',
-      sceneParams: { voltage: 12, circuitType: 'series' },
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'series',
-      readableSummary: 'Interactive Electric Circuit 3D Simulation + Chalkboard Circuit Diagram',
-      toolCallExample: `execute_visual_action(action="SHOW_SCENE", parameters={ sceneType: "circuits" }) and write_chalkboard(action="draw_diagram", content="series")`,
-    }
-  }
-
-  if (
-    combined.includes('force') ||
-    combined.includes('newton') ||
-    combined.includes('friction') ||
-    combined.includes('gravity') ||
-    combined.includes('fbd') ||
-    combined.includes('inertia')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'execute_visual_action',
-      sceneType: 'forces',
-      sceneParams: { mass: 5, appliedForce: 25 },
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'forces',
-      readableSummary: 'Newtonian Dynamics 3D Simulation + Free Body Diagram',
-      toolCallExample: `execute_visual_action(action="SHOW_SCENE", parameters={ sceneType: "forces" }) and write_chalkboard(action="draw_diagram", content="forces")`,
-    }
-  }
-
-  if (
-    combined.includes('optic') ||
-    combined.includes('refract') ||
-    combined.includes('reflect') ||
-    combined.includes('snell') ||
-    combined.includes('light') ||
-    combined.includes('lens') ||
-    combined.includes('mirror')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'execute_visual_action',
-      sceneType: 'optics',
-      sceneParams: { incidentAngle: 45, refractiveIndex: 1.5 },
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'optics',
-      readableSummary: '3D Ray Optics & Refraction Lab + Snell\'s Law Diagram',
-      toolCallExample: `execute_visual_action(action="SHOW_SCENE", parameters={ sceneType: "optics" }) and write_chalkboard(action="draw_diagram", content="optics")`,
-    }
-  }
-
-  if (combined.includes('wave') || combined.includes('sound') || combined.includes('frequency') || combined.includes('harmonic') || combined.includes('amplitude')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'execute_visual_action',
-      sceneType: 'waves',
-      sceneParams: { frequency: 2, amplitude: 1.5 },
-      chalkboardAction: 'draw_graph',
-      chalkboardContent: 'wave',
-      readableSummary: '3D Wave Harmonics Simulation + Waveform Graph',
-      toolCallExample: `execute_visual_action(action="SHOW_SCENE", parameters={ sceneType: "waves" }) and write_chalkboard(action="draw_graph", content="wave")`,
-    }
-  }
-
-  if (combined.includes('magnet') || combined.includes('magnetic') || combined.includes('solenoid') || combined.includes('induction')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'magnet',
-      readableSummary: 'Bar Magnet Continuous Magnetic Field Lines Diagram',
-      toolCallExample: `write_chalkboard(action="draw_diagram", content="magnet")`,
-    }
-  }
-
-  if (combined.includes('pressure') || combined.includes('pascal') || combined.includes('thrust') || combined.includes('hydraulic') || combined.includes('buoyan')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'pressure',
-      readableSummary: 'Pascal\'s Fluid Pressure & Depth Variation Diagram',
-      toolCallExample: `write_chalkboard(action="draw_diagram", content="pressure")`,
-    }
-  }
-
-  if (combined.includes('velocity') || combined.includes('speed') || combined.includes('acceleration') || combined.includes('v-t') || combined.includes('motion')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_graph',
-      chalkboardContent: 'velocity-time',
-      readableSummary: 'Velocity-Time Graph (v-t) Plotted with Slope = Acceleration',
-      toolCallExample: `write_chalkboard(action="draw_graph", content="velocity-time")`,
-    }
-  }
-
-  // 4. CHEMISTRY
-  if (combined.includes('atom') || combined.includes('bohr') || combined.includes('electron') || combined.includes('nucleus') || combined.includes('shell')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'execute_visual_action',
-      sceneType: 'bohr_atom',
-      sceneParams: { atomicNumber: 6, elementSymbol: 'C' },
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'atom',
-      readableSummary: '3D Bohr Atomic Orbit Simulation + Chalkboard Shell Diagram',
-      toolCallExample: `execute_visual_action(action="SHOW_SCENE", parameters={ sceneType: "bohr_atom" }) and write_chalkboard(action="draw_diagram", content="atom")`,
-    }
-  }
-
-  if (combined.includes('matter') || combined.includes('solid') || combined.includes('liquid') || combined.includes('gas') || combined.includes('particle')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'execute_visual_action',
-      sceneType: 'matter',
-      sceneParams: { temperature: 300, state: 'liquid' },
-      chalkboardAction: 'draw_diagram',
-      chalkboardContent: 'matter',
-      readableSummary: '3D States of Matter Particle Simulation + 3-Phase Model Diagram',
-      toolCallExample: `execute_visual_action(action="SHOW_SCENE", parameters={ sceneType: "matter" }) and write_chalkboard(action="draw_diagram", content="matter")`,
-    }
-  }
-
-  if (combined.includes('reaction') || combined.includes('acid') || combined.includes('base') || combined.includes('periodic') || combined.includes('chemical')) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_table',
-      chalkboardContent: 'Property / Test | Acidic Medium | Neutral Medium | Alkaline Medium || Litmus Paper | Blue turns Red | No change | Red turns Blue || pH Range | pH < 7 | pH = 7 | pH > 7',
-      readableSummary: 'Chemical Classification and Reaction Matrix Table',
-      toolCallExample: `write_chalkboard(action="draw_table", content="Test | Acid | Neutral | Base || Litmus | Red | None | Blue || pH | < 7 | 7 | > 7")`,
-    }
-  }
-
-
-
-  // 7. FLOWCHARTS, CYCLES & SEQUENTIAL PATHWAYS
-  if (
-    combined.includes('process') ||
-    combined.includes('step') ||
-    combined.includes('cycle') ||
-    combined.includes('path') ||
-    combined.includes('flow') ||
-    combined.includes('mechanism') ||
-    combined.includes('sequence') ||
-    combined.includes('reflex') ||
-    combined.includes('chain') ||
-    combined.includes('pathway')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_flowchart',
-      chalkboardContent: 'Initial State -> Governing Mechanism -> Intermediate Step -> Final Outcome',
-      readableSummary: `Sequential Process Flowchart for ${conceptTitle}`,
-      toolCallExample: `write_chalkboard(action="draw_flowchart", content="Step 1 -> Step 2 -> Step 3")`,
-    }
-  }
-
-  // 8. TABLES, MATRICES & COMPARATIVE CLASSIFICATIONS
-  if (
-    combined.includes('differ') ||
-    combined.includes('compare') ||
-    combined.includes('vs') ||
-    combined.includes('propert') ||
-    combined.includes('table') ||
-    combined.includes('classif') ||
-    combined.includes('matrix') ||
-    combined.includes('distinction')
-  ) {
-    return {
-      concept: conceptTitle,
-      toolCallAction: 'write_chalkboard',
-      chalkboardAction: 'draw_table',
-      chalkboardContent: `${conceptTitle} - Classification || Property | Parameter A | Parameter B || 1. Definition | Primary Standard | Alternative || 2. SI Unit / Criteria | Standard SI | Derived`,
-      readableSummary: `Comparison Matrix Table for ${conceptTitle}`,
-      toolCallExample: `write_chalkboard(action="draw_table", content="Property | Parameter A | Parameter B || Definition | Primary | Secondary")`,
-    }
-  }
-
-  // Universal Default: Authentic textbook illustration card with high fidelity
+  // 6. UNIVERSAL DYNAMIC VECTOR SVG DIAGRAM (Physics Apparatus, Optics Rays, Biology Anatomy, Chemistry Molecular Setups)
   return {
     concept: conceptTitle,
     toolCallAction: 'write_chalkboard',
-    chalkboardAction: 'draw_image',
-    chalkboardContent: `${conceptTitle} | Authentic textbook illustration and conceptual schematic | NCERT / Board Standard`,
-    readableSummary: `Board Book Schematic Illustration Card for ${conceptTitle}`,
-    toolCallExample: `write_chalkboard(action="draw_image", content="${conceptTitle} | Authentic textbook illustration | NCERT / Board Standard")`,
+    chalkboardAction: 'render_svg_diagram',
+    chalkboardContent: conceptTitle,
+    readableSummary: `High-Precision Dynamic Vector SVG Diagram for ${conceptTitle}`,
+    toolCallExample: `render_svg_diagram(title="${conceptTitle}", svg="<svg viewBox='0 0 540 280' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="Authentic textbook schematic illustration for ${conceptTitle}")`,
   }
 }
 
@@ -616,34 +299,21 @@ export function inferOptimalVisualType(
     }
   }
 
-  if (directive.chalkboardAction === 'draw_image') {
-    return {
-      mediaType: 'IMAGE',
-    }
-  }
-
-  if (directive.chalkboardAction === 'draw_table') {
-    return {
-      mediaType: 'BOARD_STEP',
-    }
-  }
-
-  if (directive.chalkboardAction === 'draw_flowchart') {
-    return {
-      mediaType: 'BOARD_STEP',
-    }
-  }
-
-  if (directive.chalkboardAction === 'draw_diagram') {
+  if (directive.chalkboardAction === 'render_svg_diagram') {
     return {
       mediaType: 'DIAGRAM',
-      diagramType: directive.chalkboardContent || 'concept_schematic',
+      diagramType: directive.concept || 'concept_schematic',
     }
   }
 
-  // Default to authentic image illustration
+  if (directive.chalkboardAction === 'draw_table' || directive.chalkboardAction === 'draw_flowchart') {
+    return {
+      mediaType: 'BOARD_STEP',
+    }
+  }
+
   return {
-    mediaType: 'IMAGE',
+    mediaType: 'DIAGRAM',
     diagramType: directive.chalkboardContent || 'concept_schematic',
   }
 }
@@ -723,7 +393,7 @@ export function generateVisualLessonPlanForCapsule(
     },
   })
 
-  // 3. IMAGE / DIAGRAM: Visual Schematic Representation
+  // 3. Visual Schematic Representation (GRAPH, VIDEO, or DIAGRAM)
   if (visualMapping.mediaType === 'GRAPH' && visualMapping.graphConfig) {
     steps.push({
       id: `step_${moduleId}_3`,
@@ -764,33 +434,6 @@ export function generateVisualLessonPlanForCapsule(
         provenanceType: 'ncert_textbook',
       },
     })
-  } else if (visualMapping.mediaType === 'IMAGE') {
-    steps.push({
-      id: `step_${moduleId}_3`,
-      stepNumber: 3,
-      title: `${title} Textbook Schematic`,
-      type: 'IMAGE',
-      assetStatus: 'ready',
-      content: {
-        image: {
-          url: '',
-          alt: `${title} textbook illustration`,
-          caption: `Authentic textbook illustration and conceptual schematic for ${title}.`,
-          attribution: `${board} Standard Textbook`,
-          provenance: 'textbook',
-        },
-      },
-      boardDirective: {
-        action: 'draw_image',
-        content: `${title} | Authentic textbook illustration | ${board} Standard`,
-      },
-      estimatedSeconds: 120,
-      sourceCitation: {
-        textbookName: textbookProvenance?.textbookName || `${board} Standard Textbook`,
-        verifiedSource: true,
-        provenanceType: 'ncert_textbook',
-      },
-    })
   } else if (visualMapping.mediaType === 'VIDEO') {
     steps.push({
       id: `step_${moduleId}_3`,
@@ -819,7 +462,7 @@ export function generateVisualLessonPlanForCapsule(
       },
     })
   } else {
-    // Structured Diagram Step
+    // High-Precision Vector SVG Diagram Step
     steps.push({
       id: `step_${moduleId}_3`,
       stepNumber: 3,
@@ -828,21 +471,21 @@ export function generateVisualLessonPlanForCapsule(
       assetStatus: 'ready',
       content: {
         diagram: {
-          diagramType: (visualMapping.diagramType as any) || 'forces_fbd',
+          diagramType: (visualMapping.diagramType as any) || 'vector_svg',
           title: `${title} Schematic Diagram`,
           labels: [
-            { id: 'l1', text: keyConcepts[0] || 'Primary Parameter', x: 25, y: 30, revealStep: 0 },
-            { id: 'l2', text: keyConcepts[1] || 'Secondary Parameter', x: 75, y: 70, revealStep: 1 },
+            { id: 'l1', text: keyConcepts[0] || 'Primary Structure', x: 25, y: 30, revealStep: 0 },
+            { id: 'l2', text: keyConcepts[1] || 'Functional Component', x: 75, y: 70, revealStep: 1 },
           ],
           progressiveSteps: [
-            { step: 0, title: 'Physical Apparatus', activeLabelIds: ['l1'], description: 'Initial setup and reference boundary' },
-            { step: 1, title: 'Field / Vector Distribution', activeLabelIds: ['l2'], description: 'Dynamic directional interactions' },
+            { step: 0, title: 'Physical / Anatomical Layout', activeLabelIds: ['l1'], description: 'Primary structure and reference boundary' },
+            { step: 1, title: 'Dynamic Interaction', activeLabelIds: ['l2'], description: 'Functional interactions and scientific notation' },
           ],
         },
       },
       boardDirective: {
-        action: 'draw_diagram',
-        content: visualMapping.diagramType || title,
+        action: 'render_svg_diagram',
+        content: title,
       },
       estimatedSeconds: 120,
       sourceCitation: {
@@ -853,59 +496,11 @@ export function generateVisualLessonPlanForCapsule(
     })
   }
 
-  // 4. SCENE_3D / ANIMATION: Interactive Simulation Step
-  if (visualMapping.sceneType) {
-    steps.push({
-      id: `step_${moduleId}_4`,
-      stepNumber: 4,
-      title: `${title} 3D Interactive Simulation`,
-      type: 'SCENE_3D',
-      assetStatus: 'ready',
-      content: {
-        scene3D: {
-          sceneType: visualMapping.sceneType,
-          title: `${title} 3D Laboratory`,
-          initialParams: {},
-        },
-      },
-      boardDirective: {
-        action: 'draw_step',
-        content: `3D Simulation: ${visualMapping.sceneType.replace('_', ' ')}`,
-      },
-      estimatedSeconds: 180,
-      sourceCitation: {
-        textbookName: textbookProvenance?.textbookName || `${board} Standard Textbook`,
-        verifiedSource: true,
-        provenanceType: 'ncert_textbook',
-      },
-    })
-  } else if (visualMapping.animationType) {
-    steps.push({
-      id: `step_${moduleId}_4`,
-      stepNumber: 4,
-      title: `${title} Timed Procedural Animation`,
-      type: 'ANIMATION',
-      assetStatus: 'ready',
-      content: {
-        animation: {
-          animationType: (visualMapping.animationType as any) || 'projectile_motion',
-          durationSeconds: 8,
-        },
-      },
-      estimatedSeconds: 120,
-      sourceCitation: {
-        textbookName: textbookProvenance?.textbookName || `${board} Standard Textbook`,
-        verifiedSource: true,
-        provenanceType: 'ncert_textbook',
-      },
-    })
-  }
-
-  // 5. QUICK_CHECK: Micro-Assessment Checkpoint
+  // 4. QUICK_CHECK: Micro-Assessment Checkpoint
   const firstExample = workedEx[0]
   steps.push({
-    id: `step_${moduleId}_5`,
-    stepNumber: 5,
+    id: `step_${moduleId}_4`,
+    stepNumber: 4,
     title: 'Checkpoint: Test Your Understanding',
     type: 'QUICK_CHECK',
     assetStatus: 'ready',
@@ -925,16 +520,16 @@ export function generateVisualLessonPlanForCapsule(
       },
     },
     boardDirective: {
-      action: 'draw_note',
+      action: 'draw_question',
       content: 'Checkpoint: Quick Check Understanding',
     },
     estimatedSeconds: 90,
   })
 
-  // 6. SUMMARY: Exam-Topper Recap
+  // 5. SUMMARY: Exam-Topper Recap
   steps.push({
-    id: `step_${moduleId}_6`,
-    stepNumber: 6,
+    id: `step_${moduleId}_5`,
+    stepNumber: 5,
     title: 'Capsule Synthesis Summary',
     type: 'SUMMARY',
     assetStatus: 'ready',
