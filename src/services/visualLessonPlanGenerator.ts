@@ -6,6 +6,7 @@ import {
   EducationalBoard,
 } from '@/types/lessonManifest'
 import { VisualizationSceneType } from '@/components/whiteboard/scenes/sceneTypes'
+import { createUniversalScientificSvg } from '@/services/universalScientificSvg'
 
 export interface CapsuleInput {
   id?: string
@@ -203,9 +204,7 @@ export function inferConceptVisualDirective(
       (cLower.includes('plant') && cLower.includes('animal')) ||
       cLower.includes('matrix') ||
       cLower.includes('types of') ||
-      cLower.includes('classification') ||
-      cLower.includes('cellulose') ||
-      cLower.includes('wall'))
+      cLower.includes('classification'))
 
   if (isTableTopic) {
     const tableContent = `Feature | ${conceptTitle} | Comparative Alternative || Core Structure | Defining characteristic properties | Differentiating organizational traits || Functional Role | Specific physiological/physical role | Distinct interactions & mechanisms || Board Pattern | High-frequency exam distinction | Mandatory clauses & SI units`
@@ -251,13 +250,14 @@ export function inferConceptVisualDirective(
   }
 
   // 6. UNIVERSAL DYNAMIC VECTOR SVG DIAGRAM (Physics Apparatus, Optics Rays, Biology Anatomy, Chemistry Molecular Setups)
+  const generatedSvg = createUniversalScientificSvg(conceptTitle)
   return {
     concept: conceptTitle,
     toolCallAction: 'write_chalkboard',
     chalkboardAction: 'render_svg_diagram',
-    chalkboardContent: conceptTitle,
+    chalkboardContent: `${generatedSvg.title} | ${generatedSvg.svg} | ${generatedSvg.caption}`,
     readableSummary: `High-Precision Dynamic Vector SVG Diagram for ${conceptTitle}`,
-    toolCallExample: `render_svg_diagram(title="${conceptTitle}", svg="<svg viewBox='0 0 540 280' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="Authentic textbook schematic illustration for ${conceptTitle}")`,
+    toolCallExample: `render_svg_diagram(title="${generatedSvg.title}", svg="${generatedSvg.svg.replace(/"/g, "'")}", caption="${generatedSvg.caption}")`,
   }
 }
 

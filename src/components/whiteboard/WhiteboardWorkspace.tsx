@@ -156,16 +156,19 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
         if (typeof content === 'object') board.drawNumericalSolution?.(content)
         else board.handleAiDirective(`[NUMERICAL: ${content}]`)
       }
-      else if (action === 'draw_image' || action === 'image') {
+      else if (action === 'draw_image' || action === 'image' || action === 'draw_diagram' || action === 'diagram') {
         const parts = (content || '').split('|').map((s: string) => s.trim())
-        board.drawFlowchart?.(`${parts[0] || 'Key Concept'} -> Fundamental Principle -> Board Application`)
+        if (parts[1] && parts[1].includes('<svg')) {
+          board.drawSvgDiagram?.(parts[0] || 'Scientific Diagram', parts[1], parts[2] || '')
+        } else {
+          board.drawSvgDiagram?.(parts[0] || content || 'Scientific Diagram', '', parts[1] || '')
+        }
       }
       else if (action === 'draw_video' || action === 'video') {
         const parts = (content || '').split('|').map((s: string) => s.trim())
         board.drawVideoCard?.(parts[0] || 'Demonstration', parts[1] || '')
       }
       else if (action === 'new_page') board.addNewPage?.()
-      else if (action === 'draw_diagram' || action === 'diagram') board.handleAiDirective(`[DIAGRAM: ${content}]`)
       else board.handleAiDirective(`[${action.toUpperCase()}: ${content}]`)
     }
 

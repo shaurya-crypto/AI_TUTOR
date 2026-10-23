@@ -14,6 +14,7 @@ import {
   BookOpen,
 } from 'lucide-react'
 import { evaluateMathExpression } from '@/lib/mathEvaluator'
+import { createUniversalScientificSvg } from '@/services/universalScientificSvg'
 
 // Dynamically import Excalidraw with SSR disabled
 const Excalidraw = dynamic(
@@ -197,6 +198,24 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const [activeChalkColor, setActiveChalkColor] = useState<string>(INK_PRIMARY)
     const activeChalkColorRef = useRef<string>(INK_PRIMARY)
     const lastDrawnStudentAnswerRef = useRef<{ text: string; time: number } | null>(null)
+    const lastExecutedActionTimeRef = useRef<Map<string, number>>(new Map())
+
+    const shouldSkipDuplicate = (action: string, content: string, windowMs = 3500): boolean => {
+      if (!content || !content.trim()) return false
+      const key = `${action}:${content.toLowerCase().trim()}`
+      const now = Date.now()
+      const prev = lastExecutedActionTimeRef.current.get(key)
+      if (prev && now - prev < windowMs) {
+        return true
+      }
+      lastExecutedActionTimeRef.current.set(key, now)
+      if (lastExecutedActionTimeRef.current.size > 200) {
+        for (const [k, t] of lastExecutedActionTimeRef.current.entries()) {
+          if (now - t > 60000) lastExecutedActionTimeRef.current.delete(k)
+        }
+      }
+      return false
+    }
 
     const notifyPositionChange = (lastAction?: string, lastText?: string) => {
       onWritingPositionChange?.({
@@ -951,6 +970,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!excalidrawAPI || !noteText?.trim()) return
       const clean = noteText.trim()
       if (checkIsRedundant(clean)) return
+      if (shouldSkipDuplicate('draw_note', clean)) return
       if (executedTextHistoryRef.current.has(clean.toLowerCase())) return
       executedTextHistoryRef.current.add(clean.toLowerCase())
 
@@ -1005,6 +1025,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!excalidrawAPI || !stepText?.trim()) return
       const clean = stepText.trim()
       if (checkIsRedundant(clean)) return
+      if (shouldSkipDuplicate('draw_step', clean)) return
       const lines = wrapText(clean, 60)
       const lineHeight = 21
       const totalH = Math.max(26, lines.length * lineHeight)
@@ -1044,6 +1065,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!excalidrawAPI || !text?.trim()) return
       const clean = text.trim()
       if (checkIsRedundant(clean)) return
+      if (shouldSkipDuplicate('draw_highlight_box', clean)) return
       const lines = wrapText(clean, 60)
       const boxWidth = 740
       const lineHeight = 22
@@ -1098,6 +1120,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const drawQuestion = async (questionText: string, color?: string) => {
       if (!excalidrawAPI || !questionText?.trim()) return
       const clean = questionText.trim()
+      if (shouldSkipDuplicate('draw_question', clean)) return
       const lines = wrapText(clean, 64)
       const lineHeight = 22
       const paddingTop = 28
@@ -1325,6 +1348,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       color?: string
     ) => {
       if (!excalidrawAPI || !question?.trim()) return
+      if (shouldSkipDuplicate('draw_exam_question', question)) return
 
       // Support "question | model answer" in single string if modelAnswer omitted
       let qText = question.trim()
@@ -1842,6 +1866,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     // Universal Topic-Adaptive Flowchart on Board (Multi-Row Wrapping, Decision Trees & Cycles)
     const drawFlowchart = async (flowText: string, color?: string) => {
       if (!excalidrawAPI || !flowText?.trim()) return
+      if (shouldSkipDuplicate('draw_flowchart', flowText)) return
       const rawText = flowText.trim()
       const isCycle = rawText.toLowerCase().startsWith('cycle:') || rawText.toLowerCase().includes('[cycle]')
       const cleanText = rawText.replace(/^cycle:\s*/i, '').replace(/\[cycle\]/gi, '').trim()
@@ -1964,6 +1989,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     // Universal Responsive & Auto-Wrapping Whiteboard Table Renderer
     const drawTable = async (tableStr: string) => {
       if (!excalidrawAPI || !tableStr?.trim()) return
+      if (shouldSkipDuplicate('draw_table', tableStr)) return
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
         const startX = 60
@@ -2672,7 +2698,9 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
 
     // Draw Dynamic Vector SVG Diagram Card directly on Whiteboard
     const drawSvgDiagram = async (title: string, svgMarkup: string, caption = '') => {
-      if (!excalidrawAPI || !title?.trim() || !svgMarkup?.trim()) return
+      if (!excalidrawAPI || (!title?.trim() && !svgMarkup?.trim())) return
+      if (shouldSkipDuplicate('draw_svg_diagram', `${title}:${caption || ''}`)) return
+
       await checkAutoPageOverflow(260)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
@@ -2680,12 +2708,18 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const startY = getDynamicNextY(20)
 
         // Clean markdown code blocks, script tags, and whitespace
-        let cleanSvg = svgMarkup.trim().replace(/^```(?:xml|svg|html)?\s*/i, '').replace(/\s*```$/i, '').trim()
+        let cleanSvg = (svgMarkup || '').trim().replace(/^```(?:xml|svg|html)?\s*/i, '').replace(/\s*```$/i, '').trim()
         cleanSvg = cleanSvg.replace(/<script[\s\S]*?<\/script>/gi, '')
 
-        // Ensure outer svg tag and xmlns with razor-sharp geometricPrecision rendering
+        let resolvedTitle = (title || '').trim() || 'Scientific Diagram'
+        let resolvedCaption = caption
+
+        // If SVG markup is missing or does not contain an <svg tag, dynamically generate an authentic scientific SVG
         if (!cleanSvg.toLowerCase().includes('<svg')) {
-          cleanSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">${cleanSvg}</svg>`
+          const generated = createUniversalScientificSvg(resolvedTitle || cleanSvg, caption)
+          cleanSvg = generated.svg
+          resolvedTitle = generated.title
+          if (!resolvedCaption) resolvedCaption = generated.caption
         } else {
           if (!cleanSvg.includes('xmlns=')) {
             cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"')
@@ -2764,7 +2798,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         }
 
         const cardWidth = Math.max(svgWidth + 32, 440)
-        const captionLines = caption?.trim() ? wrapText(caption.trim(), 55) : []
+        const captionLines = caption?.trim()
+          ? wrapText(caption.trim(), 55)
+          : resolvedCaption?.trim()
+          ? wrapText(resolvedCaption.trim(), 55)
+          : []
         const captionHeight = captionLines.length * 18
         const cardHeight = svgHeight + 56 + (captionLines.length > 0 ? captionHeight + 12 : 0) + 16
 
@@ -2788,7 +2826,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             type: 'text',
             x: startX + 16,
             y: startY + 12,
-            text: `[DIAGRAM]: ${title.toUpperCase()}`,
+            text: `[DIAGRAM]: ${resolvedTitle.toUpperCase()}`,
             fontSize: 14,
             fontFamily: 1,
             strokeColor: INK_BOTANICAL,
@@ -3191,14 +3229,14 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             } else if (diag.includes('graph') || diag.includes('ohm') || diag.includes('linear') || diag.includes('velocity') || diag.includes('speed') || diag.includes('distance') || diag.includes('wave') || diag.includes('parabola') || diag.includes('quad') || diag.includes('boyle') || diag.includes('curve') || diag.includes('plot') || diag.includes('=')) {
               await drawGraph(diag)
             } else {
-              // Universal dynamic pathway flowchart for any syllabus subject
-              await drawFlowchart(payload || 'Curriculum Pathway')
+              // Universal dynamic vector SVG diagram for any syllabus subject
+              await drawSvgDiagram(payload || 'Scientific Diagram', '', '')
             }
           }
-          // 4. Board Videos & Dynamic Flowcharts
+          // 4. Board Videos & Dynamic Vector Diagrams
           else if (tagType === 'IMAGE' || tagType === 'DRAW_IMAGE') {
-            const [imgTitle] = payload.split('|').map((s) => s.trim())
-            await drawFlowchart(`${imgTitle || 'Key Concept'} -> Core Mechanism -> Exam Application`)
+            const [imgTitle, imgDesc] = payload.split('|').map((s) => s.trim())
+            await drawSvgDiagram(imgTitle || 'Scientific Diagram', '', imgDesc || '')
           } else if (tagType === 'VIDEO' || tagType === 'DRAW_VIDEO') {
             const [vidTitle, vidDesc] = payload.split('|').map((s) => s.trim())
             await drawVideoCard(vidTitle || 'Visual Demonstration', vidDesc || '')

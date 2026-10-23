@@ -27,6 +27,7 @@ export class GeminiLiveClient {
   private pendingKickoffText: string | null = null;
   private enableFunctionCalling: boolean = false;
   private executedToolCallIds = new Set<string>();
+  private lastExecutedToolCalls = new Map<string, number>();
 
   constructor(
     authTokenOrApiKey: string,
@@ -166,6 +167,20 @@ export class GeminiLiveClient {
       if (this.executedToolCallIds.size > 200) {
         const first = this.executedToolCallIds.values().next().value;
         if (first) this.executedToolCallIds.delete(first);
+      }
+    }
+
+    const argKey = typeof args === 'string' ? args : JSON.stringify(args);
+    const callSignature = `${name}:${argKey}`;
+    const now = Date.now();
+    const lastTime = this.lastExecutedToolCalls.get(callSignature);
+    if (lastTime && (now - lastTime) < 2500) {
+      return;
+    }
+    this.lastExecutedToolCalls.set(callSignature, now);
+    if (this.lastExecutedToolCalls.size > 200) {
+      for (const [k, t] of this.lastExecutedToolCalls.entries()) {
+        if (now - t > 60000) this.lastExecutedToolCalls.delete(k);
       }
     }
     if (name === "write_chalkboard") {
@@ -368,7 +383,7 @@ export class GeminiLiveClient {
               },
               {
                 name: "render_svg_diagram",
-                description: "Render a clean, high-precision vector SVG educational diagram directly on the chalkboard. Use this in Stage 2 of every concept to illustrate biology (cellular anatomy, membranes, organelles), physics (ray optics, circuits, forces, wave mechanics, apparatus setups), chemistry (molecular geometry, bonding, lab apparatus), or mathematics. MUST be an authentic, detailed vector graphic.",
+                description: "Render a clean, high-precision vector SVG educational diagram directly on the chalkboard. Use this in Stage 2 of every concept or whenever the student asks to see an image, picture, diagram, or molecular structure. NEVER refuse or say you cannot generate images; call this tool instead. MUST be an authentic, detailed vector graphic.",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -379,7 +394,7 @@ export class GeminiLiveClient {
                     },
                     svg: {
                       type: Type.STRING,
-                      description: "Complete, well-formed XML <svg> element. Must use viewBox='0 0 540 280', shape-rendering='geometricPrecision', text-rendering='geometricPrecision'. Include <defs> with arrow marker (<marker id='arrow' viewBox='0 0 10 10' refX='5' refY='5' markerWidth='6' markerHeight='6' orient='auto-start-reverse'><path d='M 0 0 L 10 5 L 0 10 z' fill='#C85A43'/></marker>). Draw authentic paths, smooth curves, organelle contours, or optical rays with leader lines and crisp <text> labels (font-size='12', font-family='sans-serif', font-weight='600'). Use high-contrast colors: ink '#171817', botanical '#52715D', coral '#C85A43', cyan/blue '#0284C7', amber '#D97706', pastel fills ('#F0F7F1', '#FFF8F6', '#EFF6FF'). NEVER render flat stacked colored rectangles.",
+                      description: "Complete, well-formed XML <svg> element. Must use viewBox='0 0 540 280', shape-rendering='geometricPrecision', text-rendering='geometricPrecision'. Include <defs> with arrow marker. Draw authentic paths, smooth curves, chemical ring structures (e.g. for cellulose/sugars: Haworth/chair hexagon rings with oxygen bridges and hydroxyls), rays, or organelle contours with leader lines and crisp <text> labels. Use high-contrast colors: botanical '#2F5233', coral '#C85A43', blue '#2B6CB0', amber '#D97706'. NEVER render plain square flowchart boxes for chemical or biological structures.",
                     },
                     caption: {
                       type: Type.STRING,
@@ -614,8 +629,7 @@ export class GeminiLiveClient {
                const cleaned = this.extractAndExecuteEmbeddedToolCalls(content.outputTranscription.text);
                 if (cleaned) this.callbacks.onTranscript(cleaned, "teacher");
                hasTeacherTranscript = true;
-             }
-             if (content.outputTranscription && content.outputTranscription.parts) {
+             } else if (content.outputTranscription && content.outputTranscription.parts) {
                for (const part of content.outputTranscription.parts) {
                  if (part.text) {
                    const cleaned = this.extractAndExecuteEmbeddedToolCalls(part.text);

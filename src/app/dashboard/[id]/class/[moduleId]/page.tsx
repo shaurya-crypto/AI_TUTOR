@@ -833,7 +833,6 @@ export default function ModuleClassroomPage() {
         chalkboardRef.current.drawFlowchart(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_table' && directive.chalkboardContent) {
         chalkboardRef.current.drawTable?.(directive.chalkboardContent)
-        chalkboardRef.current.drawTable?.(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_flowchart' && directive.chalkboardContent) {
         chalkboardRef.current.drawFlowchart(directive.chalkboardContent)
       } else if (
@@ -849,12 +848,12 @@ export default function ModuleClassroomPage() {
         if (rawContent.includes('|') && rawContent.includes('<svg')) {
           const parts = rawContent.split('|').map((s) => s.trim())
           chalkboardRef.current.drawSvgDiagram?.(
-            parts[0] || 'Educational Diagram',
+            parts[0] || 'Scientific Diagram',
             parts[1] || '',
             parts[2] || ''
           )
         } else if (rawContent.includes('<svg')) {
-          chalkboardRef.current.drawSvgDiagram?.('Educational Diagram', rawContent)
+          chalkboardRef.current.drawSvgDiagram?.('Scientific Diagram', rawContent)
         } else {
           chalkboardRef.current.drawSvgDiagram?.(rawContent, '')
         }
@@ -1388,34 +1387,54 @@ STUDENT: ${resolvedClassLevel || 'Class 10'} (${resolvedBoard || 'CBSE'}) | Subj
     : ''
 }
 
-PEDAGOGICAL CADENCE FOR EACH CONCEPT (STRICT 5-STAGE SEQUENCE):
-1. Stage 1 - Real-World Intuitive Hook: Everyday physical phenomenon first before formulas.
-   write_chalkboard(action="draw_note", content="Intuition: <everyday example & plain meaning>", color="botanical")
-2. Stage 2 - Formal Law, Formula & MANDATORY VISUAL EXPLANATION:
-   write_chalkboard(action="draw_highlight_box", content="Law / Formula: <exact law & SI units>", color="coral")
-   INVIOLABLE VISUAL REQUIREMENT (EVERY CONCEPT): You MUST execute at least ONE visual tool in Stage 2 for every concept before moving to Stage 3 or asking questions. Choose the most fitting tool:
-   - render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="...") for biology (cell walls, organelles, double membranes, transport), physics (ray optics, circuits, forces, wave mechanics), chemistry (molecular models, setups), or mathematics. Must be high-contrast, razor-sharp vector graphics with labels. NEVER flat colored boxes.
+PEDAGOGICAL CADENCE FOR EACH CONCEPT (STRICT 3-TURN INTERACTIVE SEQUENCE - NEVER DUMP EVERYTHING AT ONCE):
+
+TURN 1 (FIRST TURN OF CONCEPT) - INTUITION, LAW & MANDATORY ACCURATE VISUAL:
+1. Everyday Real-World Example: Greet in 4-6 words and share an everyday intuitive hook before any formulas.
+   write_chalkboard(action="draw_note", content="Intuition: <everyday physical example & plain meaning>", color="botanical")
+2. Precise Law / Principle:
+   write_chalkboard(action="draw_highlight_box", content="Law / Principle: <exact scientific formulation & SI units>", color="coral")
+3. MANDATORY ACCURATE VISUAL: Render an authentic, publication-grade scientific visual diagram immediately:
+   - render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="...")
+     Use for biology (cells, organelles, membranes), physics (circuits, ray optics, forces, waves), chemistry (molecular models, setups). Must be high-contrast, razor-sharp vector graphics with labels and leader lines. NEVER flat colored boxes.
+     For biochemical/molecular structures (e.g. cellulose, glucose, starch, DNA): render authentic hexagon chair/Haworth ring projections with oxygen bridges (-O-), hydroxyls (-OH), and hydrogen bonds!
    - draw_graph(formula="...", domain="[-5, 5]", range="[-5, 5]", title="...") for functions, parabolas, and kinematics curves.
    - draw_flowchart(steps="...") for biochemical pathways, cycles, and classifications.
    - draw_table(table="Col1 | Col2 || Row1A | Row1B") for property comparison matrices.
-   - draw_shape(shape="rectangle"|"circle"|"cylinder"|"cube"|"arrow", ...) for geometric solids and dimensioned diagrams.
-3. Stage 3 - Authentic Board Exam Numerical & Model Answer:
-   write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Answer: <Topper Model Answer with steps & units>", color="coral")
-4. Stage 4 - Checkpoint Question (1-2 Qs & INVIOLABLE HARD STOP):
-   write_chalkboard(action="draw_question", content="Checkpoint Q: <Question text>", color="amber")
-   STOP speaking at '?' and wait for student.
+   - draw_shape(shape="rectangle"|"circle"|"cylinder"|"cube"|"arrow", ...) for geometric solids.
+4. Interactive Intuition Check: Conclude Turn 1 by asking: "Does this real-world intuition and diagram make sense to you before we solve a board exam question?"
+5. STRICT INVIOLABLE PROHIBITION IN TURN 1:
+   DO NOT write any exam question (action="draw_exam_question") and DO NOT write any checkpoint question (action="draw_question") in Turn 1!
+   STOP speaking and wait for the student to confirm understanding.
+
+TURN 2 (AFTER STUDENT CONFIRMS INTUITION) - SOLVE A BOARD QUESTION FIRST, THEN POSE CHECKPOINT QUESTION:
+1. Acknowledge the student's confirmation in 1 sentence.
+2. SOLVE A QUESTION FIRST ON THE WHITEBOARD: Model authentic exam problem-solving:
+   write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Given: <values> | Formula: <formula> | Solution: <step-by-step working> | Answer: <boxed answer with SI units>", color="coral")
+3. Explain the solution steps and common pitfalls in 2 sentences.
+4. THEN POSE A CHECKPOINT QUESTION for the student to test their mastery:
+   write_chalkboard(action="draw_question", content="Checkpoint Q: <Targeted board exam question testing this concept>", color="amber")
+5. INVIOLABLE HARD STOP: Stop speaking at '?' and wait for the student to solve and reply.
    CRITICAL PAGE FLIP BARRIER: DO NOT CHANGE THE WHITEBOARD PAGE. DO NOT CALL action="concept_done" OR action="concept_focus" BEFORE THE STUDENT REPLIES!
-5. Stage 5 - Student Answer & Model Verdict (STAY ON CURRENT WHITEBOARD PAGE):
-   When student replies (spoken or typed in Sobi pod):
+
+TURN 3 (AFTER STUDENT REPLIES TO QUESTION) - EVALUATE, GIVE VERDICT & TRANSITION:
+1. When student replies (spoken or typed in Sobi pod):
    - write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
-   - write_chalkboard(action="draw_answer_verdict", content="Verdict: <Correct confirmation OR Correction & 100% Ideal Answer>", color="botanical"|"coral")
-   - INVIOLABLE RULE: DO NOT CHANGE THE WHITEBOARD PAGE. DO NOT CALL action="concept_done" OR action="concept_focus" IN THIS TURN!
-   - Speak 2-3 sentences explaining the topper answer and ask the student: "Does this solution make sense to you, or would you like to clarify any step?"
-   - ONLY in the NEXT turn, when the student explicitly replies confirming understanding (e.g., "yes", "understood", "clear", "let's move to next concept"):
-     a) Silently call: write_chalkboard(action="concept_done", content="<Current Concept Name>")
-     b) Silently call: write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean page!
-     c) Begin Stage 1 for the next concept on the new clean page.
-     d) If all concepts completed, call: conclude_and_open_quiz(summary="...")
+   - write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring points & correction if any>", color="botanical")
+2. Explain the verdict in 2 sentences.
+3. Ask the student: "Does this concept feel 100% clear now, and are you ready to move to the next concept?"
+4. ONLY in the NEXT turn, when the student explicitly replies confirming understanding (e.g. "yes", "understood", "clear", "let's move"):
+   a) write_chalkboard(action="concept_done", content="<Current Concept Name>")
+   b) write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
+   c) Begin Turn 1 for the next concept on the clean new page.
+   d) If all concepts completed, call: conclude_and_open_quiz(summary="...")
+
+STUDENT IMAGE & DIAGRAM REQUEST DIRECTIVE:
+You have a real-time whiteboard graphics engine with render_svg_diagram(title, svg, caption).
+NEVER tell the student "I am unable to generate images", "I cannot generate separate images", or "I am an audio AI".
+When a student asks to see an image, picture, diagram, structure, visual, or sketch of ANY concept (e.g. "generate image of cellulose", "show diagram of cell wall", "draw refraction"):
+1. Reply enthusiastically in 1 short sentence: "Drawing that on the chalkboard for you right now!"
+2. IMMEDIATELY call render_svg_diagram(title="...", svg="<svg ...>...</svg>", caption="...")!
 
 FULL WHITEBOARD CANVAS & PALETTE:
 - Whiteboard is single source of truth for notes. 740px width with automatic line-wrapping.
@@ -1530,9 +1549,13 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             if (typeof content === 'object') chalkboardRef.current.drawNumericalSolution?.(content)
             else chalkboardRef.current.handleAiDirective(`[NUMERICAL: ${content}]`)
           }
-          else if (action === 'draw_image' || action === 'image') {
+          else if (action === 'draw_image' || action === 'image' || action === 'draw_diagram' || action === 'diagram') {
             const parts = (content || '').split('|').map((s: string) => s.trim())
-            chalkboardRef.current.drawFlowchart?.(`${parts[0] || 'Key Concept'} -> Fundamental Principle -> Board Application`)
+            if (parts[1] && parts[1].includes('<svg')) {
+              chalkboardRef.current.drawSvgDiagram?.(parts[0] || 'Scientific Diagram', parts[1], parts[2] || '')
+            } else {
+              chalkboardRef.current.drawSvgDiagram?.(parts[0] || content || 'Scientific Diagram', '', parts[1] || '')
+            }
           }
           else if (action === 'draw_video' || action === 'video') {
             const parts = (content || '').split('|').map((s: string) => s.trim())
