@@ -179,6 +179,43 @@ assert(
   pageSource.includes("trimmed.includes('<svg')")
 )
 
+assert(
+  'GreenChalkboard.tsx generates base64 data URL instead of utf8 data URL for Excalidraw',
+  !chalkboardSource.includes("const dataURL = `data:image/svg+xml;utf8,") &&
+    chalkboardSource.includes('data:image/svg+xml;base64,') &&
+    chalkboardSource.includes('const dataURL = svgToBase64DataUrl(cleanSvg)')
+)
+
+// 5b. Verify atob decoding of Unicode-rich SVG data URLs (Zero InvalidCharacterError)
+const testUnicodeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
+  <text x="20" y="40">Displacement Δx = ±5.0 m, θ = 45°, λ = 500 nm, R = 10 Ω</text>
+  <path d="M 10 80 Q 52 10 95 80 T 180 80" stroke="#52715D" fill="none" />
+</svg>`
+
+const bytes = new TextEncoder().encode(testUnicodeSvg)
+let binary = ''
+for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+const base64Data = Buffer.from(binary, 'binary').toString('base64')
+const dataUrl = `data:image/svg+xml;base64,${base64Data}`
+
+let decodedSuccessfully = false
+try {
+  const extractedBase64 = dataUrl.slice('data:image/svg+xml;base64,'.length)
+  // atob must not throw InvalidCharacterError
+  const decodedBinary = atob(extractedBase64)
+  const decodedBytes = new Uint8Array(decodedBinary.length)
+  for (let i = 0; i < decodedBinary.length; i++) decodedBytes[i] = decodedBinary.charCodeAt(i)
+  const decodedSvg = new TextDecoder().decode(decodedBytes)
+  decodedSuccessfully = decodedSvg === testUnicodeSvg
+} catch (e) {
+  decodedSuccessfully = false
+}
+
+assert(
+  'SVG base64 DataURL can be decoded by atob() without InvalidCharacterError',
+  decodedSuccessfully
+)
+
 // 6. Zero Emoji Invariant Verification across all modified files
 const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u
 for (const f of filesToCheck) {

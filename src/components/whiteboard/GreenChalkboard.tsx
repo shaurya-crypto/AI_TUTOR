@@ -429,6 +429,25 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       return { notesText, roughText, fullSummary }
     }
 
+    // Helper to safely encode arbitrary UTF-8 SVG markup to base64 Data URL for Excalidraw
+    const svgToBase64DataUrl = (svgString: string): string => {
+      try {
+        if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+          const bytes = new TextEncoder().encode(svgString)
+          let binary = ''
+          const len = bytes.byteLength
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          return `data:image/svg+xml;base64,${window.btoa(binary)}`
+        }
+        return `data:image/svg+xml;base64,${Buffer.from(svgString, 'utf-8').toString('base64')}`
+      } catch (err) {
+        console.warn('svgToBase64DataUrl conversion error:', err)
+        return `data:image/svg+xml;base64,${Buffer.from(svgString, 'utf-8').toString('base64')}`
+      }
+    }
+
     // Debounced persistence to localStorage
     const persistScene = (elements: readonly any[] | any[]) => {
       if (!storageKey || typeof window === 'undefined') return
@@ -694,8 +713,20 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
               if (rawFiles && excalidrawAPI?.addFiles) {
                 const parsedFiles = JSON.parse(rawFiles)
                 const filesArr = Object.values(parsedFiles) as any[]
-                if (filesArr.length > 0) {
-                  excalidrawAPI.addFiles(filesArr)
+                const sanitizedFiles = filesArr.map((f: any) => {
+                  if (typeof f?.dataURL === 'string' && f.dataURL.startsWith('data:image/svg+xml;utf8,')) {
+                    try {
+                      const rawEncoded = f.dataURL.slice('data:image/svg+xml;utf8,'.length)
+                      const rawSvg = decodeURIComponent(rawEncoded)
+                      return { ...f, dataURL: svgToBase64DataUrl(rawSvg) }
+                    } catch {
+                      return f
+                    }
+                  }
+                  return f
+                })
+                if (sanitizedFiles.length > 0) {
+                  excalidrawAPI.addFiles(sanitizedFiles)
                 }
               }
             }
@@ -2702,8 +2733,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         if (svgHeight < 120) svgHeight = 160
 
         const fileId = `svg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` as any
-        const encodedSvg = encodeURIComponent(cleanSvg)
-        const dataURL = `data:image/svg+xml;utf8,${encodedSvg}` as any
+        const dataURL = svgToBase64DataUrl(cleanSvg) as any
 
         const fileObj = {
           id: fileId,
@@ -2713,7 +2743,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         }
 
         if (excalidrawAPI.addFiles) {
-          excalidrawAPI.addFiles([fileObj])
+          try {
+            excalidrawAPI.addFiles([fileObj])
+          } catch (fileErr) {
+            console.warn('excalidrawAPI.addFiles error:', fileErr)
+          }
         }
 
         // Persist SVG file to localStorage so it survives page reload
