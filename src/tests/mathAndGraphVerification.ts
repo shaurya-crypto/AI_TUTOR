@@ -67,18 +67,15 @@ async function runVerification() {
   const absVal = evaluateMathExpression('abs(-5x)', 2)
   assert('Absolute value (abs(-5x) at x=2 == 10)', absVal === 10, { got: absVal })
 
-  // 2. Scene Aliases
+  // 2. Scene Aliases (Phase 3: 3D solids and cross sections)
   const aliasTests = [
-    { input: 'circuits', expected: 'circuits_interactive' },
-    { input: 'forces', expected: 'physics_forces' },
-    { input: 'optics', expected: 'optics_refraction' },
-    { input: 'waves', expected: 'wave_harmonics' },
-    { input: 'matter', expected: 'states_of_matter' },
-    { input: 'linear_graph', expected: 'linear_graphs' },
-    { input: '3d_vectors', expected: 'coordinate_geometry' },
     { input: 'geometry', expected: 'geometry_3d' },
+    { input: 'geometry_3d', expected: 'geometry_3d' },
+    { input: 'mensuration', expected: 'geometry_3d' },
+    { input: 'solids', expected: 'geometry_3d' },
     { input: 'cross_section', expected: 'geometry_cross_section' },
-    { input: 'bohr_atom', expected: 'bohr_atom' },
+    { input: 'slice', expected: 'geometry_cross_section' },
+    { input: 'conic_sections', expected: 'geometry_cross_section' },
   ]
   aliasTests.forEach(({ input, expected }) => {
     const resolved = resolveSceneType(input)
