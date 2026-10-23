@@ -2655,9 +2655,14 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const startX = 60
         const startY = getDynamicNextY(20)
 
-        // Ensure xmlns is present on svg
-        let cleanSvg = svgMarkup.trim()
-        if (!cleanSvg.includes('xmlns=')) {
+        // Clean markdown code blocks, script tags, and whitespace
+        let cleanSvg = svgMarkup.trim().replace(/^```(?:xml|svg|html)?\s*/i, '').replace(/\s*```$/i, '').trim()
+        cleanSvg = cleanSvg.replace(/<script[\s\S]*?<\/script>/gi, '')
+
+        // Ensure outer svg tag and xmlns
+        if (!cleanSvg.toLowerCase().includes('<svg')) {
+          cleanSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240">${cleanSvg}</svg>`
+        } else if (!cleanSvg.includes('xmlns=')) {
           cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"')
         }
 
@@ -2700,20 +2705,33 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const encodedSvg = encodeURIComponent(cleanSvg)
         const dataURL = `data:image/svg+xml;utf8,${encodedSvg}` as any
 
+        const fileObj = {
+          id: fileId,
+          dataURL,
+          mimeType: 'image/svg+xml',
+          created: Date.now(),
+        }
+
         if (excalidrawAPI.addFiles) {
-          excalidrawAPI.addFiles([
-            {
-              id: fileId,
-              dataURL,
-              mimeType: 'image/svg+xml',
-              created: Date.now(),
-            },
-          ])
+          excalidrawAPI.addFiles([fileObj])
+        }
+
+        // Persist SVG file to localStorage so it survives page reload
+        if (typeof window !== 'undefined' && storageKey) {
+          try {
+            const rawFiles = localStorage.getItem(`${storageKey}_files`)
+            const existingFiles = rawFiles ? JSON.parse(rawFiles) : {}
+            existingFiles[fileId] = fileObj
+            localStorage.setItem(`${storageKey}_files`, JSON.stringify(existingFiles))
+          } catch (e) {
+            console.warn('Error saving whiteboard file to localStorage:', e)
+          }
         }
 
         const cardWidth = Math.max(svgWidth + 32, 440)
-        const captionHeight = caption ? 32 : 0
-        const cardHeight = svgHeight + 56 + captionHeight + 16
+        const captionLines = caption?.trim() ? wrapText(caption.trim(), 55) : []
+        const captionHeight = captionLines.length * 18
+        const cardHeight = svgHeight + 56 + (captionLines.length > 0 ? captionHeight + 12 : 0) + 16
 
         const skeletons: any[] = [
           // Background card container
@@ -2754,12 +2772,12 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           },
         ]
 
-        if (caption) {
+        if (captionLines.length > 0) {
           skeletons.push({
             type: 'text',
             x: startX + 16,
             y: startY + 44 + svgHeight + 12,
-            text: caption,
+            text: captionLines.join('\n'),
             fontSize: 12,
             fontFamily: 1,
             strokeColor: INK_SECONDARY,
@@ -2878,8 +2896,49 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             if (content) await drawExamQuestion(content, undefined, undefined, color);
           } else if (action === 'draw_shape' || action === 'shape' || action === 'draw_rectangle' || action === 'draw_circle' || action === 'draw_triangle') {
             if (content) await drawShape(content);
+          } else if (action === 'draw_table' || action === 'table') {
+            if (content) await drawTable(content);
+          } else if (action === 'draw_graph' || action === 'graph') {
+            if (content) await drawGraph(content);
+          } else if (action === 'draw_geometry' || action === 'geometry') {
+            if (content) await drawGeometry(content);
+          } else if (action === 'draw_image' || action === 'image') {
+            const parts = (content || '').split('|').map((s) => s.trim());
+            await drawImageCard(parts[0] || 'Diagram', parts[1] || '', parts[2] || 'NCERT Standard');
+          } else if (action === 'draw_video' || action === 'video') {
+            const parts = (content || '').split('|').map((s) => s.trim());
+            await drawVideoCard(parts[0] || 'Demonstration', parts[1] || '');
+          } else if (action === 'draw_numerical' || action === 'numerical' || action === 'worked_example' || action === 'solve') {
+            if (typeof content === 'object') await drawNumericalSolution(content);
+            else {
+              const parts = (content || '').split('|').map((s) => s.trim());
+              const solutionData: any = { answer: '' };
+              parts.forEach((p) => {
+                const lower = p.toLowerCase();
+                if (lower.startsWith('problem:')) solutionData.problem = p.substring(8).trim();
+                else if (lower.startsWith('given:')) solutionData.given = p.substring(6).trim();
+                else if (lower.startsWith('formula:')) solutionData.formula = p.substring(8).trim();
+                else if (lower.startsWith('substitution:') || lower.startsWith('sub:')) solutionData.substitution = p.split(':')[1]?.trim();
+                else if (lower.startsWith('calculation:') || lower.startsWith('rough:')) solutionData.calculation = p.split(':')[1]?.trim();
+                else if (lower.startsWith('answer:') || lower.startsWith('final:')) solutionData.answer = p.split(':')[1]?.trim();
+                else if (lower.startsWith('unit:') || lower.startsWith('units:')) solutionData.unit = p.split(':')[1]?.trim();
+                else if (!solutionData.problem) solutionData.problem = p;
+                else if (!solutionData.answer) solutionData.answer = p;
+              });
+              await drawNumericalSolution(solutionData);
+            }
           } else if (action === 'render_svg_diagram' || action === 'draw_svg' || action === 'draw_svg_diagram') {
-            if (content) await drawSvgDiagram('Educational Diagram', content);
+            if (content) {
+              const trimmed = content.trim();
+              if (trimmed.includes('|') && trimmed.includes('<svg')) {
+                const parts = trimmed.split('|').map((s) => s.trim());
+                await drawSvgDiagram(parts[0] || 'Educational Diagram', parts[1] || '', parts[2]);
+              } else if (trimmed.includes('<svg')) {
+                await drawSvgDiagram('Educational Diagram', trimmed);
+              } else {
+                await drawSvgDiagram(trimmed, '');
+              }
+            }
           } else if (action === 'draw_flowchart' || action === 'flowchart') {
             if (content) await drawFlowchart(content, color);
           } else if (action === 'draw_rough_work' || action === 'rough_work' || action === 'rough') {
@@ -2924,15 +2983,24 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             caption = parsed.caption || '';
           } catch {}
         } else {
-          const tMatch = body.match(/(?:title\s*=\s*)?["']([^"']*)["']/i);
-          const sMatch = body.match(/(?:svg\s*=\s*)?["']([\s\S]*?)["'](?:\s*,\s*|$)/i);
-          const cMatch = body.match(/(?:caption\s*=\s*)?["']([^"']*)["']\s*$/i);
-          if (tMatch) title = tMatch[1];
-          if (sMatch) svg = sMatch[1];
-          if (cMatch) caption = cMatch[1];
+          const explicitTitle = body.match(/\btitle\s*=\s*["']([^"']*)["']/i);
+          const explicitSvg = body.match(/\bsvg\s*=\s*["']([\s\S]*?)["'](?:\s*,\s*[a-zA-Z_]+\s*=|\s*$)/i);
+          const explicitCaption = body.match(/\bcaption\s*=\s*["']([^"']*)["']/i);
+          if (explicitSvg) {
+            title = explicitTitle ? explicitTitle[1] : 'Educational Diagram';
+            svg = explicitSvg[1];
+            caption = explicitCaption ? explicitCaption[1] : '';
+          } else {
+            const posMatch = body.match(/["']([^"']*)["']\s*,\s*["']([\s\S]*?)["'](?:\s*,\s*["']([^"']*)["'])?/);
+            if (posMatch) {
+              title = posMatch[1];
+              svg = posMatch[2];
+              caption = posMatch[3] || '';
+            }
+          }
         }
         if (svg) {
-          const signature = `SVG:${normalizeTitle(title)}`;
+          const signature = `SVG:${normalizeTitle(title)}:${svg.slice(0, 40)}`;
           if (!executedDirectivesRef.current.has(signature)) {
             executedDirectivesRef.current.add(signature);
             enqueueOperation(async () => {
@@ -3060,11 +3128,15 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           }
           // 3. Universal Diagrams, SVG & Graphs (Any Subject)
           else if (tagType === 'SVG' || tagType === 'SVG_DIAGRAM' || tagType === 'RENDER_SVG' || tagType === 'RENDER_SVG_DIAGRAM') {
-            const parts = payload.split('|').map((s) => s.trim())
-            const title = parts[0] || 'Educational Diagram'
-            const svg = parts[1] || ''
-            const caption = parts[2] || ''
-            if (svg) await drawSvgDiagram(title, svg, caption)
+            if (payload.includes('|') && payload.includes('<svg')) {
+              const parts = payload.split('|').map((s) => s.trim())
+              const title = parts[0] || 'Educational Diagram'
+              const svg = parts[1] || ''
+              const caption = parts[2] || ''
+              if (svg) await drawSvgDiagram(title, svg, caption)
+            } else if (payload.includes('<svg')) {
+              await drawSvgDiagram('Educational Diagram', payload)
+            }
           } else if (tagType === 'GRAPH' || tagType === 'DRAW_GRAPH') {
             await drawGraph(payload)
           } else if (tagType === 'DIAGRAM' || tagType === 'DRAW_DIAGRAM') {

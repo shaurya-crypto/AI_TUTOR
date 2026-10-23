@@ -763,12 +763,19 @@ export default function ModuleClassroomPage() {
         (directive.chalkboardAction === 'render_svg_diagram' || directive.chalkboardAction === 'draw_svg') &&
         directive.chalkboardContent
       ) {
-        const parts = directive.chalkboardContent.split('|').map((s) => s.trim())
-        chalkboardRef.current.drawSvgDiagram?.(
-          parts[0] || 'Educational Diagram',
-          parts[1] || '',
-          parts[2] || ''
-        )
+        const rawContent = directive.chalkboardContent.trim()
+        if (rawContent.includes('|') && rawContent.includes('<svg')) {
+          const parts = rawContent.split('|').map((s) => s.trim())
+          chalkboardRef.current.drawSvgDiagram?.(
+            parts[0] || 'Educational Diagram',
+            parts[1] || '',
+            parts[2] || ''
+          )
+        } else if (rawContent.includes('<svg')) {
+          chalkboardRef.current.drawSvgDiagram?.('Educational Diagram', rawContent)
+        } else {
+          chalkboardRef.current.drawSvgDiagram?.(rawContent, '')
+        }
       }
     }
   }
@@ -1549,8 +1556,15 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             if (typeof content === 'object' && content !== null) {
               chalkboardRef.current.drawSvgDiagram?.(content.title || 'Educational Diagram', content.svg || '', content.caption)
             } else if (typeof content === 'string') {
-              const parts = content.split('|').map((s: string) => s.trim())
-              chalkboardRef.current.drawSvgDiagram?.(parts[0] || 'Educational Diagram', parts[1] || '', parts[2])
+              const trimmed = content.trim()
+              if (trimmed.includes('|') && trimmed.includes('<svg')) {
+                const parts = trimmed.split('|').map((s: string) => s.trim())
+                chalkboardRef.current.drawSvgDiagram?.(parts[0] || 'Educational Diagram', parts[1] || '', parts[2])
+              } else if (trimmed.includes('<svg')) {
+                chalkboardRef.current.drawSvgDiagram?.('Educational Diagram', trimmed)
+              } else {
+                chalkboardRef.current.drawSvgDiagram?.(trimmed, '')
+              }
             }
           }
           else if (action === 'new_page') chalkboardRef.current.addNewPage?.()

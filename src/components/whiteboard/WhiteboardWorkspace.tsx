@@ -118,7 +118,7 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       const board = ref.current
       if (!board) return
 
-      if (action === 'set_color' || action === 'chalk_color') board.setChalkColor(typeof content === 'string' ? content : '')
+      if (action === 'set_color' || action === 'chalk_color') board.setChalkColor(typeof content === 'string' ? content : (content?.color || ''))
       else if (action === 'draw_title') board.drawTitle(content)
       else if (action === 'draw_note') board.drawNote(content)
       else if (action === 'draw_step') board.drawStep(content)
@@ -141,8 +141,15 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
         if (typeof content === 'object' && content !== null) {
           board.drawSvgDiagram?.(content.title || 'Educational Diagram', content.svg || '', content.caption)
         } else if (typeof content === 'string') {
-          const parts = content.split('|').map((s: string) => s.trim())
-          board.drawSvgDiagram?.(parts[0] || 'Educational Diagram', parts[1] || '', parts[2])
+          const trimmed = content.trim()
+          if (trimmed.includes('|') && trimmed.includes('<svg')) {
+            const parts = trimmed.split('|').map((s: string) => s.trim())
+            board.drawSvgDiagram?.(parts[0] || 'Educational Diagram', parts[1] || '', parts[2])
+          } else if (trimmed.includes('<svg')) {
+            board.drawSvgDiagram?.('Educational Diagram', trimmed)
+          } else {
+            board.drawSvgDiagram?.(trimmed, '')
+          }
         }
       }
       else if (action === 'draw_numerical' || action === 'numerical' || action === 'worked_example') {

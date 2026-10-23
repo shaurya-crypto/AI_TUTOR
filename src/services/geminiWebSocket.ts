@@ -105,22 +105,36 @@ export class GeminiLiveClient {
     }
 
     // 4. Match render_svg_diagram(...)
-    const svgRegex = /render_svg_diagram\s*\(\s*(?:(?:title\s*=\s*)?["']([^"']*)["']\s*,\s*(?:svg\s*=\s*)?["']([\s\S]*?)["'](?:\s*,\s*(?:caption\s*=\s*)?["']([^"']*)["'])?|(\{[\s\S]*?\}))\s*\)/gi;
+    const svgRegex = /render_svg_diagram\s*\(([\s\S]*?)\)/gi;
     let svgm;
     while ((svgm = svgRegex.exec(rawText)) !== null) {
-      if (svgm[4]) {
+      const body = svgm[1]?.trim() || "";
+      if (!body) continue;
+      if (body.startsWith("{")) {
         try {
-          const parsed = JSON.parse(svgm[4]);
+          const parsed = JSON.parse(body);
           if (parsed.svg) {
             this.handleSingleToolCall("render_svg_diagram", parsed);
           }
         } catch {}
       } else {
-        const title = svgm[1]?.trim() || "Educational Diagram";
-        const svg = (svgm[2] ?? "").trim();
-        const caption = svgm[3]?.trim() || "";
-        if (svg) {
+        const explicitTitle = body.match(/\btitle\s*=\s*["']([^"']*)["']/i);
+        const explicitSvg = body.match(/\bsvg\s*=\s*["']([\s\S]*?)["'](?:\s*,\s*[a-zA-Z_]+\s*=|\s*$)/i);
+        const explicitCaption = body.match(/\bcaption\s*=\s*["']([^"']*)["']/i);
+        if (explicitSvg) {
+          const title = explicitTitle ? explicitTitle[1] : "Educational Diagram";
+          const svg = explicitSvg[1];
+          const caption = explicitCaption ? explicitCaption[1] : "";
           this.handleSingleToolCall("render_svg_diagram", { title, svg, caption });
+        } else {
+          const posMatch = body.match(/["']([^"']*)["']\s*,\s*["']([\s\S]*?)["'](?:\s*,\s*["']([^"']*)["'])?/);
+          if (posMatch) {
+            this.handleSingleToolCall("render_svg_diagram", {
+              title: posMatch[1],
+              svg: posMatch[2],
+              caption: posMatch[3] || "",
+            });
+          }
         }
       }
     }
