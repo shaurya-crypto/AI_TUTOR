@@ -394,7 +394,7 @@ export class GeminiLiveClient {
                     },
                     svg: {
                       type: Type.STRING,
-                      description: "Complete, well-formed XML <svg> element. Must use viewBox='0 0 540 280', shape-rendering='geometricPrecision', text-rendering='geometricPrecision'. Include <defs> with arrow marker. Draw authentic paths, smooth curves, chemical ring structures (e.g. for cellulose/sugars: Haworth/chair hexagon rings with oxygen bridges and hydroxyls), rays, or organelle contours with leader lines and crisp <text> labels. Use high-contrast colors: botanical '#2F5233', coral '#C85A43', blue '#2B6CB0', amber '#D97706'. NEVER render plain square flowchart boxes for chemical or biological structures.",
+                      description: "Complete, well-formed XML <svg> element with xmlns='http://www.w3.org/2000/svg'. Must use viewBox='0 0 540 280', shape-rendering='geometricPrecision', text-rendering='geometricPrecision'. Include <defs> with arrow marker. Draw authentic paths, smooth curves, chemical ring structures (e.g. for cellulose/sugars: Haworth/chair hexagon rings with oxygen bridges and hydroxyls), rays, or organelle contours with leader lines and crisp <text> labels. Use high-contrast colors: botanical '#2F5233', coral '#C85A43', blue '#2B6CB0', amber '#D97706'. NEVER render plain square flowchart boxes for chemical or biological structures. All XML must be well-formed: use &amp; for ampersands, self-close void elements like <path/>, <circle/>, <rect/>, <line/>.",
                     },
                     caption: {
                       type: Type.STRING,

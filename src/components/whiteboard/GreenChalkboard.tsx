@@ -448,6 +448,80 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       return { notesText, roughText, fullSummary }
     }
 
+    // Sanitize raw SVG markup: parse via DOMParser, fix common Gemini output issues, return clean SVG or null
+    const sanitizeSvg = (rawSvg: string): string | null => {
+      if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return rawSvg
+      try {
+        // Fix common malformed XML issues from Gemini Live output before parsing
+        let fixed = rawSvg
+        // Escape unescaped ampersands (not already part of &amp; &lt; &gt; &apos; &quot; &#...)
+        fixed = fixed.replace(/&(?!amp;|lt;|gt;|apos;|quot;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;')
+        // Self-close unclosed void elements common in SVG (e.g. <path d="..." > -> <path d="..." />)
+        fixed = fixed.replace(/<(path|circle|ellipse|rect|line|polygon|polyline|use|image|stop)\b([^>]*?)(?<!\/)>/gi,
+          (match, tag, attrs) => {
+            if (attrs.trim().endsWith('/')) return match
+            return `<${tag}${attrs}/>`
+          }
+        )
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(fixed, 'image/svg+xml')
+        const parseError = doc.querySelector('parsererror')
+        if (parseError) {
+          // Last resort: try with text/html parser which is more forgiving
+          const htmlDoc = parser.parseFromString(`<body>${fixed}</body>`, 'text/html')
+          const svgEl = htmlDoc.querySelector('svg')
+          if (svgEl) {
+            if (!svgEl.hasAttribute('xmlns')) svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+            return svgEl.outerHTML
+          }
+          return null
+        }
+        const svgEl = doc.querySelector('svg')
+        if (!svgEl) return null
+        if (!svgEl.hasAttribute('xmlns')) svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+        // Ensure width/height are set (Excalidraw requires them)
+        const vb = svgEl.getAttribute('viewBox')
+        if (vb && (!svgEl.getAttribute('width') || !svgEl.getAttribute('height'))) {
+          const parts = vb.trim().split(/[\s,]+/).map(Number)
+          if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+            if (!svgEl.getAttribute('width')) svgEl.setAttribute('width', String(parts[2]))
+            if (!svgEl.getAttribute('height')) svgEl.setAttribute('height', String(parts[3]))
+          }
+        }
+        return svgEl.outerHTML
+      } catch {
+        return null
+      }
+    }
+
+    // Rasterize SVG string to PNG data URL via offscreen canvas (bulletproof fallback for Excalidraw)
+    const rasterizeSvgToPng = (svgString: string, width: number, height: number): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        if (typeof window === 'undefined') { reject(new Error('No window')); return }
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const img = new Image()
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas')
+            canvas.width = width * 2  // 2x for sharpness
+            canvas.height = height * 2
+            const ctx = canvas.getContext('2d')
+            if (!ctx) { reject(new Error('No canvas context')); URL.revokeObjectURL(url); return }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+            const pngDataUrl = canvas.toDataURL('image/png')
+            URL.revokeObjectURL(url)
+            resolve(pngDataUrl)
+          } catch (err) {
+            URL.revokeObjectURL(url)
+            reject(err)
+          }
+        }
+        img.onerror = (err) => { URL.revokeObjectURL(url); reject(err) }
+        img.src = url
+      })
+    }
+
     // Helper to safely encode arbitrary UTF-8 SVG markup to base64 Data URL for Excalidraw
     const svgToBase64DataUrl = (svgString: string): string => {
       try {
@@ -2769,16 +2843,18 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           cleanSvg = generated.svg
           resolvedTitle = generated.title
           if (!resolvedCaption) resolvedCaption = generated.caption
+        }
+
+        // Sanitize SVG via DOMParser to catch malformed XML from Gemini Live output
+        const sanitized = sanitizeSvg(cleanSvg)
+        if (sanitized) {
+          cleanSvg = sanitized
         } else {
-          if (!cleanSvg.includes('xmlns=')) {
-            cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"')
-          }
-          if (!cleanSvg.includes('shape-rendering=')) {
-            cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg shape-rendering="geometricPrecision"')
-          }
-          if (!cleanSvg.includes('text-rendering=')) {
-            cleanSvg = cleanSvg.replace(/<svg\b/i, '<svg text-rendering="geometricPrecision"')
-          }
+          // SVG is irreparably malformed, fall back to universal generator
+          const generated = createUniversalScientificSvg(resolvedTitle, caption)
+          cleanSvg = generated.svg
+          resolvedTitle = generated.title
+          if (!resolvedCaption) resolvedCaption = generated.caption
         }
 
         // Determine dimensions from viewBox or width/height
@@ -2818,19 +2894,31 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
 
         const fileId = `svg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` as any
         const dataURL = svgToBase64DataUrl(cleanSvg) as any
+        let resolvedDataURL = dataURL
+        let fileMimeType = 'image/svg+xml'
 
-        const fileObj = {
+        // Try adding as SVG first; if Excalidraw rejects it, rasterize to PNG as bulletproof fallback
+        let fileObj: any = {
           id: fileId,
-          dataURL,
-          mimeType: 'image/svg+xml',
+          dataURL: resolvedDataURL,
+          mimeType: fileMimeType,
           created: Date.now(),
         }
 
         if (excalidrawAPI.addFiles) {
           try {
             excalidrawAPI.addFiles([fileObj])
-          } catch (fileErr) {
-            console.warn('excalidrawAPI.addFiles error:', fileErr)
+          } catch (svgErr) {
+            // SVG rejected by Excalidraw's internal parser - rasterize to PNG
+            try {
+              const pngDataUrl = await rasterizeSvgToPng(cleanSvg, svgWidth, svgHeight)
+              fileMimeType = 'image/png'
+              resolvedDataURL = pngDataUrl
+              fileObj = { id: fileId, dataURL: pngDataUrl, mimeType: 'image/png', created: Date.now() }
+              excalidrawAPI.addFiles([fileObj])
+            } catch (pngErr) {
+              console.warn('Both SVG and PNG fallback failed:', pngErr)
+            }
           }
         }
 
