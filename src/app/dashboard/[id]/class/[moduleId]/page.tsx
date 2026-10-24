@@ -369,7 +369,6 @@ export default function ModuleClassroomPage() {
   const chalkboardRef = useRef<GreenChalkboardRef | null>(null)
   const executedSceneDirectivesRef = useRef<Set<string>>(new Set())
   const renderedVisualConceptsRef = useRef<Set<number>>(new Set())
-  const autoVisualTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Exact database values (no hardcoded mocks)
   const resolvedClassLevel =
@@ -1097,12 +1096,11 @@ export default function ModuleClassroomPage() {
     setIsCompletedBefore(false)
     setModuleCompletedSuccess(false)
 
-    // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page
-    chalkboardRef.current?.goToPage?.(targetIdx, targetConceptName)
-
-    // Trigger visual for target concept only if not already rendered to prevent overlapping
-    if (!renderedVisualConceptsRef.current.has(targetIdx)) {
-      autoTriggerVisualForConcept(targetIdx)
+    // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page (or clean reset for Page 1)
+    if (targetIdx === 0) {
+      chalkboardRef.current?.resetBoard?.()
+    } else {
+      chalkboardRef.current?.goToPage?.(targetIdx, targetConceptName)
     }
 
     try {
@@ -1236,28 +1234,13 @@ export default function ModuleClassroomPage() {
         toggleMute()
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        handleOpenQuiz()
+        handleEndClass()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isCallActive, toggleMute])
-
-  // Automatic visual guarantee: ensures the active concept always displays its rich visual without waiting for student prompt
-  useEffect(() => {
-    if (isCallActive && (connectionState === 'TEACHER_SPEAKING' || connectionState === 'LISTENING')) {
-      if (!renderedVisualConceptsRef.current.has(currentConceptIndex)) {
-        if (autoVisualTimerRef.current) clearTimeout(autoVisualTimerRef.current)
-        autoVisualTimerRef.current = setTimeout(() => {
-          autoTriggerVisualForConcept(currentConceptIndex)
-        }, 1200)
-      }
-    }
-    return () => {
-      if (autoVisualTimerRef.current) clearTimeout(autoVisualTimerRef.current)
-    }
-  }, [isCallActive, connectionState, currentConceptIndex, activeModule, resolvedSubject, resolvedTitle])
 
   // Start Spoken Lesson: continuous teaching flow, explanation-first, worked-demonstrations second, strict chalkboard directives
   const handleStartClass = () => {
@@ -1429,6 +1412,10 @@ TURN 3 (AFTER STUDENT REPLIES TO QUESTION) - EVALUATE, GIVE VERDICT & TRANSITION
    c) Begin Turn 1 for the next concept on the clean new page.
    d) If all concepts completed, call: conclude_and_open_quiz(summary="...")
 
+QUIZ INVIOLABLE TIMING RULE:
+- NEVER mention the 10-MCQ quiz, propose a quiz, or call conclude_and_open_quiz until ALL concepts in this capsule have been fully taught, solved, and marked as done with concept_done!
+- During individual concepts, focus 100% on intuition, diagrams, worked examples, and checkpoint questions. The 10-MCQ quiz is reserved strictly for the very end of the capsule after all concepts are completed.
+
 STUDENT IMAGE & DIAGRAM REQUEST DIRECTIVE:
 You have a real-time whiteboard graphics engine with render_svg_diagram(title, svg, caption).
 NEVER tell the student "I am unable to generate images", "I cannot generate separate images", or "I am an audio AI".
@@ -1579,6 +1566,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           else if (action === 'new_page') chalkboardRef.current.addNewPage?.()
           else if (action === 'clear_board' || action === 'erase_board') chalkboardRef.current.clearBoard()
           else if (action === 'start_quiz' || action === 'open_quiz') {
+            markModuleAsCompleted()
             handleOpenQuiz()
           }
           else if (action === 'chapter_summary') {
@@ -1617,14 +1605,17 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
         handleVisualAction(action, params)
       }
     )
+  }
 
-    // Guarantee that visual is triggered on class kickoff without waiting for student to request
-    setTimeout(() => {
-      autoTriggerVisualForConcept(currentConceptIndex)
-    }, 1200)
+  const handleEndClass = () => {
+    endCall()
+    if (isCompletedBefore || moduleCompletedSuccess) {
+      setQuizOpen(true)
+    }
   }
 
   const handleOpenQuiz = () => {
+    if (!isCompletedBefore && !moduleCompletedSuccess) return
     endCall()
     setQuizOpen(true)
   }
@@ -1758,16 +1749,18 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             )}
           </Button>
 
-          {/* Direct 10-MCQ Mastery Button */}
-          <Button
-            id="open-mastery-quiz-btn"
-            onClick={handleOpenQuiz}
-            className="bg-[#C85A43] hover:bg-[#A94734] text-white rounded-xl px-3.5 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer"
-            title="Take 10 MCQs to test mastery anytime"
-          >
-            <Award className="w-4 h-4 text-white" strokeWidth={1.5} />
-            <span>Take 10 MCQs</span>
-          </Button>
+          {/* Direct 10-MCQ Mastery Button - Only visible once module is completed */}
+          {(isCompletedBefore || moduleCompletedSuccess) && (
+            <Button
+              id="open-mastery-quiz-btn"
+              onClick={handleOpenQuiz}
+              className="bg-[#C85A43] hover:bg-[#A94734] text-white rounded-xl px-3.5 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer"
+              title="Take 10 MCQs to test mastery"
+            >
+              <Award className="w-4 h-4 text-white" strokeWidth={1.5} />
+              <span>Take 10 MCQs</span>
+            </Button>
+          )}
 
           <ConnectionStatus state={connectionState} />
         </div>
@@ -1793,7 +1786,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                 isMuted={isMuted}
                 userVolume={userVolume}
                 onToggleMute={toggleMute}
-                onEndCall={handleOpenQuiz}
+                onEndCall={handleEndClass}
               />
               <span className="text-[11px] text-[#7A7C75] font-mono">
                 Press [M] to mute • [Esc] to end
@@ -1963,8 +1956,8 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             </div>
           )}
 
-          {/* Interactive Chapter End Confirmation Banner */}
-          {endChapterConfirmPrompt && (
+          {/* Interactive Chapter End Confirmation Banner - Only visible once module is completed */}
+          {(isCompletedBefore || moduleCompletedSuccess) && endChapterConfirmPrompt && (
             <div className="p-4 rounded-2xl bg-white border-2 border-[#52715D]/50 shadow-md space-y-3 animate-in fade-in duration-300">
               <div className="flex items-start gap-2.5">
                 <Sparkles className="w-4 h-4 text-[#52715D] shrink-0 mt-0.5" />

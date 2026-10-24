@@ -41,6 +41,7 @@ export interface GreenChalkboardRef {
   drawRoughWork: (workText: string, color?: string) => void
   clearRough: () => void
   clearBoard: () => void
+  resetBoard?: () => void
   setChalkColor: (colorNameOrHex: string) => void
   setBoardColor: (theme: 'green' | 'blackboard' | 'slate' | 'white') => void
   drawSvgDiagram: (title: string, svgMarkup: string, caption?: string) => void
@@ -2168,9 +2169,57 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Clear entire board (or advance to fresh page to preserve notes)
+    // Reset entire board to clean state (clears localStorage and resets to clean Page 1)
+    const resetBoard = async () => {
+      if (!excalidrawAPI) return
+      try {
+        if (typeof window !== 'undefined' && storageKey) {
+          localStorage.removeItem(storageKey)
+          localStorage.removeItem(`${storageKey}_files`)
+        }
+        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
+        const firstConcept = keyConcepts && keyConcepts[0] ? keyConcepts[0] : undefined
+        const initialSkeleton = createHeaderSkeleton(1, firstConcept)
+        const initialElements = convertToExcalidrawElements(initialSkeleton)
+        const freshPages: WhiteboardPage[] = [
+          {
+            id: 1,
+            elements: initialElements,
+            nextY: firstConcept ? 200 : 140,
+            roughY: 140,
+          },
+        ]
+        pagesRef.current = freshPages
+        setPages(freshPages)
+        currentPageIndexRef.current = 0
+        setCurrentPageIndex(0)
+        boardElementsRef.current = initialElements
+        nextYRef.current = firstConcept ? 200 : 140
+        roughYRef.current = 140
+        executedTextHistoryRef.current.clear()
+        lastExecutedActionTimeRef.current.clear()
+        activeQuestionRef.current = null
+
+        excalidrawAPI.updateScene({
+          elements: initialElements,
+          appState: {
+            viewBackgroundColor: CANVAS_BG,
+            currentItemStrokeColor: INK_PRIMARY,
+            currentItemFontFamily: 1,
+            currentItemRoughness: 0,
+            zoom: { value: 0.7 },
+            scrollX: 0,
+            scrollY: 0,
+          },
+        })
+      } catch (err) {
+        console.error('resetBoard error:', err)
+      }
+    }
+
+    // Clear entire board (resets to Page 1 clean state)
     const clearBoard = async () => {
-      await addNewPage()
+      await resetBoard()
     }
 
     // Rewrite notes cleanly on board
@@ -3245,15 +3294,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           else if (tagType === 'BOARD_QUESTION' || tagType === 'QUESTION') {
             if (payload) {
               await drawQuestion(payload)
-              if (
-                payload.toLowerCase().includes('conclude') ||
-                payload.toLowerCase().includes('end chapter') ||
-                payload.toLowerCase().includes('10-mcq') ||
-                payload.toLowerCase().includes('10 mcq') ||
-                payload.toLowerCase().includes('quiz')
-              ) {
-                onConfirmEndChapter?.(payload)
-              }
             }
           } else if (tagType === 'CONFIRM_END_CHAPTER') {
             if (payload) {
@@ -3310,6 +3350,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       clearNotes,
       rewriteNotes,
       clearBoard,
+      resetBoard,
       setChalkColor: (colorNameOrHex: string) => setChalkColor(colorNameOrHex),
       setBoardColor: () => {},
       drawSvgDiagram,

@@ -197,14 +197,7 @@ export function inferConceptVisualDirective(
       cLower.includes('differ') ||
       cLower.includes('compare') ||
       cLower.includes('comparison') ||
-      cLower.includes('prokaryot') ||
-      cLower.includes('eukaryot') ||
-      (cLower.includes('acid') && cLower.includes('base')) ||
-      (cLower.includes('solid') && cLower.includes('liquid')) ||
-      (cLower.includes('plant') && cLower.includes('animal')) ||
-      cLower.includes('matrix') ||
-      cLower.includes('types of') ||
-      cLower.includes('classification'))
+      cLower.includes('distinction'))
 
   if (isTableTopic) {
     const tableContent = `Feature | ${conceptTitle} | Comparative Alternative || Core Structure | Defining characteristic properties | Differentiating organizational traits || Functional Role | Specific physiological/physical role | Distinct interactions & mechanisms || Board Pattern | High-frequency exam distinction | Mandatory clauses & SI units`
