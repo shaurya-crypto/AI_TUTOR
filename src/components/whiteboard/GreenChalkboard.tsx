@@ -813,21 +813,85 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
               if (rawFiles && excalidrawAPI?.addFiles) {
                 const parsedFiles = JSON.parse(rawFiles)
                 const filesArr = Object.values(parsedFiles) as any[]
-                const sanitizedFiles = filesArr.map((f: any) => {
-                  if (typeof f?.dataURL === 'string' && f.dataURL.startsWith('data:image/svg+xml;utf8,')) {
-                    try {
-                      const rawEncoded = f.dataURL.slice('data:image/svg+xml;utf8,'.length)
-                      const rawSvg = decodeURIComponent(rawEncoded)
-                      return { ...f, dataURL: svgToBase64DataUrl(rawSvg) }
-                    } catch {
-                      return f
+                const updatedFilesStore: Record<string, any> = {}
+
+                for (const file of filesArr) {
+                  if (!file || !file.id || !file.dataURL) continue
+                  let currentFile = { ...file }
+                  const isSvg =
+                    currentFile.mimeType === 'image/svg+xml' ||
+                    (typeof currentFile.dataURL === 'string' &&
+                      currentFile.dataURL.startsWith('data:image/svg+xml'))
+
+                  if (isSvg) {
+                    let rawSvg: string | null = null
+                    if (currentFile.dataURL.startsWith('data:image/svg+xml;utf8,')) {
+                      try {
+                        rawSvg = decodeURIComponent(currentFile.dataURL.slice('data:image/svg+xml;utf8,'.length))
+                      } catch {}
+                    } else if (currentFile.dataURL.startsWith('data:image/svg+xml;base64,')) {
+                      try {
+                        const b64 = currentFile.dataURL.slice('data:image/svg+xml;base64,'.length)
+                        const binary = atob(b64)
+                        const bytes = new Uint8Array(binary.length)
+                        for (let i = 0; i < binary.length; i++) {
+                          bytes[i] = binary.charCodeAt(i)
+                        }
+                        rawSvg = new TextDecoder().decode(bytes)
+                      } catch {}
+                    }
+
+                    if (rawSvg) {
+                      const clean = sanitizeSvg(rawSvg)
+                      if (clean) {
+                        currentFile = {
+                          ...currentFile,
+                          dataURL: svgToBase64DataUrl(clean),
+                          mimeType: 'image/svg+xml',
+                        }
+                      }
                     }
                   }
-                  return f
-                })
-                if (sanitizedFiles.length > 0) {
-                  excalidrawAPI.addFiles(sanitizedFiles)
+
+                  // Add each file individually with try-catch and PNG rasterization fallback
+                  try {
+                    excalidrawAPI.addFiles([currentFile])
+                    updatedFilesStore[currentFile.id] = currentFile
+                  } catch (fileErr) {
+                    console.warn(`File ${currentFile.id} failed addFiles as SVG, attempting PNG fallback:`, fileErr)
+                    if (isSvg) {
+                      try {
+                        let rawSvg: string | null = null
+                        if (typeof currentFile.dataURL === 'string' && currentFile.dataURL.startsWith('data:image/svg+xml;base64,')) {
+                          const b64 = currentFile.dataURL.slice('data:image/svg+xml;base64,'.length)
+                          const binary = atob(b64)
+                          const bytes = new Uint8Array(binary.length)
+                          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+                          rawSvg = new TextDecoder().decode(bytes)
+                        }
+                        if (!rawSvg) {
+                          const universal = createUniversalScientificSvg('Scientific Diagram')
+                          rawSvg = universal.svg
+                        }
+                        const pngUrl = await rasterizeSvgToPng(rawSvg, 500, 260)
+                        const pngFile = {
+                          ...currentFile,
+                          dataURL: pngUrl,
+                          mimeType: 'image/png',
+                        }
+                        excalidrawAPI.addFiles([pngFile])
+                        updatedFilesStore[currentFile.id] = pngFile
+                      } catch (pngErr) {
+                        console.warn(`File ${currentFile.id} could not be rasterized:`, pngErr)
+                      }
+                    }
+                  }
                 }
+
+                // Resave cleaned files to localStorage so invalid SVGs are pruned
+                try {
+                  localStorage.setItem(`${storageKey}_files`, JSON.stringify(updatedFilesStore))
+                } catch {}
               }
             }
           } catch (e) {
