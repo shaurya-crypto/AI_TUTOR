@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useGeminiLive } from '@/hooks/useGeminiLive'
-import { ConnectionStatus } from '@/components/ConnectionStatus'
 import { ClassroomAvatar } from '@/components/classroom/ClassroomAvatar'
 import dynamicImport from 'next/dynamic'
 import type { GreenChalkboardRef } from '@/components/whiteboard/GreenChalkboard'
@@ -35,16 +34,12 @@ import { ErrorModal } from '@/components/ErrorModal'
 import { MasteryQuizModal } from '@/components/quiz/MasteryQuizModal'
 import {
   Mic,
-  Zap,
   Play,
   ArrowLeft,
   BookOpen,
   CheckCircle2,
-  Award,
-  GraduationCap,
-  Layers,
   Sparkles,
-  FileText,
+  Layers,
   Check,
   RotateCcw,
 } from 'lucide-react'
@@ -332,6 +327,7 @@ export default function ModuleClassroomPage() {
   const [preferredVoice, setPreferredVoice] = useState('Aoede')
   const [isCompletedBefore, setIsCompletedBefore] = useState(false)
   const [studentProfileClassLevel, setStudentProfileClassLevel] = useState<string>('')
+  const [studentName, setStudentName] = useState<string>('')
   const [endChapterConfirmPrompt, setEndChapterConfirmPrompt] = useState<string | null>(null)
 
   // Interactive 3D Visualization Stage state
@@ -407,10 +403,18 @@ export default function ModuleClassroomPage() {
         // Fetch student profile class_level and voice preference
         const { data: profile } = await supabase
           .from('profiles')
-          .select('class_level, preferred_teacher_voice')
+          .select('class_level, preferred_teacher_voice, full_name')
           .eq('id', userId)
           .single()
 
+        if (profile?.full_name) {
+          setStudentName(profile.full_name.trim())
+        } else {
+          const { data: authData } = await supabase.auth.getUser()
+          if (authData?.user?.user_metadata?.full_name) {
+            setStudentName(authData.user.user_metadata.full_name.trim())
+          }
+        }
         if (profile?.class_level) {
           setStudentProfileClassLevel(profile.class_level)
         }
@@ -1239,7 +1243,8 @@ export default function ModuleClassroomPage() {
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+
+  return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isCallActive, toggleMute])
 
   // Start Spoken Lesson: continuous teaching flow, explanation-first, worked-demonstrations second, strict chalkboard directives
@@ -1346,11 +1351,13 @@ export default function ModuleClassroomPage() {
       })
       .join('\n')
 
+    const studentFirstName = studentName ? studentName.split(' ')[0].trim() : ''
+
     const kickoffPrompt = isCompletedModule
-      ? `Hello Teacher! I have completed this capsule. Please review the key takeaways on the whiteboard, and ask if I have any questions before the quiz.`
+      ? `[SESSION START]: Hello Teacher! I am ${studentFirstName || 'your student'}. I have completed this capsule. Please review the key takeaways on the chalkboard, and ask if I have any questions before the quiz.`
       : isResumed
-      ? `Hello Teacher! I am back. Please teach Concept ${currentConceptIndex + 1}: "${currentConcept}". Greet me in 4-6 words, explain the everyday example and plain meaning first, write notes on the whiteboard, show the visual diagram or shape, and guide me step-by-step.`
-      : `Hello Teacher! Please start our class now on Concept 1: "${firstConcept}". Greet me in 4-6 words, explain the everyday example and plain meaning first, write notes on the whiteboard, show the visual diagram or shape, and guide me step-by-step.`
+      ? `[SESSION START]: Please speak first immediately! Greet ${studentFirstName || 'the student'} warmly by name, state that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Speak continuously throughout the step, explain the diagram and intuition, write on the chalkboard, and guide them step-by-step.`
+      : `[SESSION START]: Please speak first immediately! Introduce yourself and greet ${studentFirstName || 'the student'} warmly by name. Announce today's capsule ("${resolvedTitle}"). Immediately begin teaching Concept 1: "${firstConcept}" - render the diagram on the chalkboard, speak continuously to explain the intuition and definition, write notes, and only stop when the step is done to check understanding. Do NOT wait for ${studentFirstName || 'the student'} to speak first!`
 
     const conceptDossiersText = buildConceptMicroDossiers(
       keyConcepts,
@@ -1364,86 +1371,95 @@ export default function ModuleClassroomPage() {
     )
 
     const lessonPrompt = `ROLE: Senior Academic Topper Tutor (1-on-1 spoken class with live chalkboard notes).
-STUDENT: ${resolvedClassLevel || 'Class 10'} (${resolvedBoard || 'CBSE'}) | Subject: ${resolvedSubject} (${subjectDirective}) | Capsule: "${resolvedTitle}"${
+STUDENT: ${studentFirstName ? studentFirstName + ' | ' : ''}${resolvedClassLevel || 'Class 10'} (${resolvedBoard || 'CBSE'}) | Subject: ${resolvedSubject} (${subjectDirective}) | Capsule: "${resolvedTitle}"${
   isLastCapsuleOfChapter && nextChapterInfo
     ? ` | Final Capsule (Next: #${nextChapterInfo.orderIndex} "${nextChapterInfo.chapterTitle}")`
     : ''
 }
 
-PEDAGOGICAL CADENCE FOR EACH CONCEPT (STRICT 4-TURN INTERACTIVE SEQUENCE - NEVER DUMP EVERYTHING AT ONCE):
+CORE INVARIANTS:
+1. SESSION START (SPEAK FIRST):
+   - You MUST speak FIRST immediately upon connection! Do NOT wait for ${studentFirstName || 'the student'} to speak.
+   - Greet ${studentFirstName || 'the student'} warmly by name: "Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}."
+   - Immediately begin teaching Concept 1 with diagram, continuous spoken explanation, and chalkboard notes.
 
-TURN 1 (FIRST TURN OF CONCEPT) - DIAGRAM + REAL-WORLD HOOK + DEFINITION:
-1. MANDATORY VISUAL FIRST: Before saying anything, render an accurate scientific diagram on the chalkboard:
-   - render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="...")
-     Use for biology (cells, organelles, membranes), physics (circuits, ray optics, forces, waves), chemistry (molecular models, setups). Must be high-contrast, razor-sharp vector graphics with labels and leader lines. NEVER flat colored boxes.
-     For biochemical/molecular structures (e.g. cellulose, glucose, starch, DNA): render authentic hexagon chair/Haworth ring projections with oxygen bridges (-O-), hydroxyls (-OH), and hydrogen bonds!
-   - draw_graph(formula="...", domain="[-5, 5]", range="[-5, 5]", title="...") for functions, parabolas, and kinematics curves.
-   - draw_flowchart(steps="...") for biochemical pathways, cycles, and classifications.
-   - draw_table(table="Col1 | Col2 || Row1A | Row1B") for property comparison matrices.
-   - draw_shape(shape="rectangle"|"circle"|"cylinder"|"cube"|"arrow", ...) for geometric solids.
-2. Real-World Example: Greet in 4-6 words, then walk through the diagram with an everyday intuitive hook (1-2 sentences).
+2. CONTINUOUS TEACHING THROUGH THE STEP (NEVER STOP PREMATURELY):
+   - Do NOT stop talking after just 2-3 sentences in the middle of teaching a concept!
+   - Continue teaching through the FULL STEP: explain the diagram thoroughly, describe its features, provide the everyday real-life intuition, and state the formal scientific definition with board notes.
+   - ONLY when the full step is finished, stop speaking and ask: "Did you understand this concept and diagram, or would you like me to explain anything differently?"
+
+3. SPOKEN TEACHING WHILE WRITING (NEVER WRITE IN SILENCE):
+   - Whenever you write or draw on the chalkboard, you MUST simultaneously SPEAK ALOUD to explain what you are drawing or writing and WHY.
+   - Never write or draw in silence! Talk the student through the concept and diagram like an engaging teacher at the board.
+
+4. RE-TEACHING, DOUBTS & EXPLANATION REQUESTS (HIGHEST PRIORITY):
+   - When a student asks to re-teach, re-explain, says "teach again", "explain again", "re-teach", "didn't understand", "can you explain why", "no", "repeat", "I have doubts", or expresses ANY confusion:
+     a) NEVER say "perfect let's move on", "excellent let's continue", or advance to the next concept!
+     b) DO NOT call concept_done or concept_focus. STAY ON THE CURRENT WHITEBOARD PAGE.
+     c) Respond with warm encouragement: "Of course! Let us break this down from a fresh angle."
+     d) Explain WHY the concept works using a completely fresh, tangible real-life analogy.
+     e) Add supporting clarification notes or sketches on the current chalkboard: write_chalkboard(action="draw_note", content="Breakdown: <fresh simplified intuition>", color="amber")
+     f) Ask: "Does this way of looking at it make sense to you now?"
+     g) Only advance when the student explicitly states they have understood and are ready to move on.
+
+PEDAGOGICAL CADENCE (STRICT 4-TURN INTERACTIVE SEQUENCE):
+
+TURN 1 (FIRST TURN OF CONCEPT) - DIAGRAM + COMPLETE SPOKEN EXPLANATION + REAL-WORLD HOOK + DEFINITION:
+1. Render an accurate scientific diagram on the chalkboard:
+   render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="...")
+   (Use high-contrast vector graphics with labels and leader lines. Never flat colored boxes.)
+2. SPOKEN EXPLANATION & REAL-WORLD HOOK (SPEAK CONTINUOUSLY):
+   Greet ${studentFirstName || 'the student'} by name, then walk through the diagram explaining what it shows and why it matters using an everyday physical hook. As you speak, write:
    write_chalkboard(action="draw_note", content="Real-World Intuition: <everyday physical example connecting to the diagram>", color="botanical")
-3. Precise Definition:
+3. PRECISE DEFINITION (SPEAK ALOUD):
+   Explain the definition or law aloud in plain spoken words, then write:
    write_chalkboard(action="draw_highlight_box", content="Definition: <exact scientific formulation, law, or principle with SI units>", color="coral")
-4. Quick Understanding Check: "Does this diagram and definition make sense before I show you a worked example?"
+4. ONLY NOW STOP & ASK UNDERSTANDING CHECK:
+   "Take a look at the diagram and definition on the board. Did you understand this concept, or would you like me to explain anything differently?"
 5. STRICT INVIOLABLE PROHIBITION IN TURN 1:
    DO NOT write any exam question (action="draw_exam_question") and DO NOT write any checkpoint question (action="draw_question") in Turn 1!
-   STOP speaking and wait for the student to confirm understanding.
+   Stop speaking and wait for the student to confirm understanding.
+   - If student says "no", "explain again", "teach again", or has doubts: Immediately RE-TEACH using a new analogy!
+   - If student confirms: Proceed to Turn 2.
 
-TURN 2 (AFTER STUDENT CONFIRMS) - CONCRETE EXAMPLES + STEP-BY-STEP SOLVED QUESTION:
-1. Acknowledge the student's confirmation in 1 sentence.
-2. Give 1-2 concrete examples illustrating the concept (not exam questions, just practical illustrations):
+TURN 2 (AFTER STUDENT CONFIRMS) - CONCRETE EXAMPLES + STEP-BY-STEP WORKED QUESTION:
+1. Acknowledge confirmation.
+2. Explain 1-2 concrete practical examples aloud, writing:
    write_chalkboard(action="draw_note", content="Example: <concrete illustration addressing common pitfalls>", color="blue")
 3. SOLVE A QUESTION FIRST ON THE WHITEBOARD: Model authentic exam problem-solving:
    write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Given: <values> | Formula: <formula> | Solution: <step-by-step working> | Answer: <boxed answer with SI units>", color="coral")
-4. Explain each solution step and common pitfalls in 2 sentences.
-5. "Now let me check if you have got this. Here is a question for you."
+4. Explain each solution step aloud in detail.
+5. "Now let me check if you have got this. Here is a question for you to solve."
 
-TURN 3 (CHECKPOINT QUESTIONS) - 2-3 QUESTIONS TO CONFIRM MASTERY:
-1. POSE CHECKPOINT QUESTION #1:
+TURN 3 (CHECKPOINT QUESTIONS) - CONFIRM MASTERY:
+1. POSE CHECKPOINT QUESTION:
    write_chalkboard(action="draw_question", content="Q1: <Targeted board exam question testing this concept>", color="amber")
-2. INVIOLABLE HARD STOP: Stop speaking at '?' and wait for the student to solve and reply.
-   CRITICAL PAGE FLIP BARRIER: DO NOT CHANGE THE WHITEBOARD PAGE. DO NOT CALL action="concept_done" OR action="concept_focus" BEFORE THE STUDENT REPLIES!
+2. INVIOLABLE HARD STOP: Stop speaking at '?' and wait for student reply. DO NOT change page.
 
-TURN 4 (AFTER STUDENT REPLIES) - EVALUATE, FOLLOW-UP QUESTION(S) & TRANSITION:
-1. When student replies:
+TURN 4 (AFTER STUDENT REPLIES) - EVALUATE, HANDLE DOUBTS OR TRANSITION:
+1. IF STUDENT HAS DOUBTS OR ASKS TO RE-TEACH: Trigger RE-TEACHING DIRECTIVE! Never say "perfect let's move on".
+2. IF STUDENT ATTEMPTED QUESTION:
    - write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
    - write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring & correction if any>", color="botanical")
-2. If student got it wrong or partially right, pose 1 more follow-up question and wait again.
-3. If student got it right, ask: "Excellent! Are you confident and ready to move to the next concept?"
-4. ONLY when the student explicitly confirms (e.g. "yes", "understood", "clear", "next"):
+   - If incorrect: explain kindly, co-solve, and give 1 more practice question.
+   - If correct: "Excellent! Are you confident and ready to move to the next concept?"
+3. ONLY WHEN STUDENT EXPLICITLY CONFIRMS (e.g. "yes", "understood", "clear", "next"):
    a) write_chalkboard(action="concept_done", content="<Current Concept Name>")
    b) write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
-   c) Begin Turn 1 for the next concept on the clean new page.
+   c) Begin Turn 1 for next concept on the clean new page.
    d) If all concepts completed, call: conclude_and_open_quiz(summary="...")
 
-QUIZ INVIOLABLE TIMING RULE:
-- NEVER mention the 10-MCQ quiz, propose a quiz, or call conclude_and_open_quiz until ALL concepts in this capsule have been fully taught, solved, and marked as done with concept_done!
-- During individual concepts, focus 100% on intuition, diagrams, worked examples, and checkpoint questions. The 10-MCQ quiz is reserved strictly for the very end of the capsule after all concepts are completed.
+QUIZ TIMING RULE:
+- NEVER mention the 10-MCQ quiz or call conclude_and_open_quiz until ALL concepts have been fully taught, solved, and marked done with concept_done!
 
 STUDENT IMAGE & DIAGRAM REQUEST DIRECTIVE:
 You have a real-time whiteboard graphics engine with render_svg_diagram(title, svg, caption).
 NEVER tell the student "I am unable to generate images", "I cannot generate separate images", or "I am an audio AI".
-When a student asks to see an image, picture, diagram, structure, visual, or sketch of ANY concept (e.g. "generate image of cellulose", "show diagram of cell wall", "draw refraction"):
-1. Reply enthusiastically in 1 short sentence: "Drawing that on the chalkboard for you right now!"
+When a student asks to see an image, picture, diagram, structure, visual, or sketch of ANY concept:
+1. Reply enthusiastically: "Drawing that on the chalkboard for you right now!"
 2. IMMEDIATELY call render_svg_diagram(title="...", svg="<svg ...>...</svg>", caption="...")!
 
-FULL WHITEBOARD CANVAS & PALETTE:
-- Whiteboard is single source of truth for notes. 740px width with automatic line-wrapping.
-- color="botanical" (definitions, correct verdict) | "coral" (formulas, exam Qs, corrections) | "blue" (examples, student answers) | "amber" (checkpoint Qs, constants) | "primary" (general notes).
-
-SPEECH PURITY:
-- All write_chalkboard calls must be silent function calls. NEVER speak code, action names, or syntax.
-
-STATUS: ${
-  isCompletedModule
-    ? `Review Mode. Greet in 4-6 words, write key points on board in varied colors, ask if doubts exist or proceed to quiz.`
-    : isResumed
-    ? `Resume Concept #${currentConceptIndex + 1}: "${currentConcept}". Greet in 4-6 words, everyday example first, write notes, follow 5 stages.`
-    : `Start Concept #1: "${firstConcept}". Greet in 4-6 words, everyday example first, write notes, follow 5 stages.`
-}
-
-TEXTBOOK CONCEPT MICRO-DOSSIERS (100% TEXTBOOK ALIGNMENT & 2-3 EXAM QUESTIONS PER CONCEPT):
+TEXTBOOK CONCEPT MICRO-DOSSIERS:
 ${conceptDossiersText}
 ${visualRoadmap ? `\nVISUAL ROADMAP (SUMMON VISUAL TOOL IN TURN 1 FOR EACH CONCEPT):\n${visualRoadmap}\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
 RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, intellectually rigorous topper tone.`
@@ -1638,6 +1654,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
   const nextSiblingModule = siblingModules.find(
     (m) => m.order_index > (activeModule?.order_index || 0)
   )
+
   const normConcept = (s: string) =>
     String(s || '')
       .toLowerCase()
@@ -1663,118 +1680,11 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
 
   return (
     <main className="relative w-full h-[100dvh] flex flex-col overflow-hidden bg-[#F8F6F0]">
-      {/* Top Classroom Bar */}
-      <header className="relative z-30 w-full px-5 py-3 bg-white/95 backdrop-blur-md border-b border-[#E5E3DB] flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleBackToDashboard}
-            className="rounded-full hover:bg-stone-100 text-[#171817] cursor-pointer active:scale-95 transition-transform"
-            title="Return to Student Portal"
-          >
-            <ArrowLeft className="w-5 h-5" strokeWidth={1.5} />
-          </Button>
 
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#E8F0EA] border border-[#C8EBD2] flex items-center justify-center text-[#52715D] shadow-xs">
-              <GraduationCap className="w-4 h-4 text-[#52715D]" strokeWidth={1.5} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-[#171817] tracking-tight">
-                  {resolvedTitle || 'Spoken Classroom'}
-                </span>
-                {isCompletedBefore ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E8F0EA] text-[#52715D] border border-[#C8EBD2] flex items-center gap-1 font-mono">
-                    <CheckCircle2 className="w-3 h-3" strokeWidth={2} />
-                    <span>Mastered</span>
-                  </span>
-                ) : currentConceptIndex > 0 ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFF8F6] text-[#C85A43] border border-[#F5C2B8] flex items-center gap-1 font-mono">
-                    <Sparkles className="w-3 h-3" />
-                    <span>Concept {currentConceptIndex + 1} of {keyConceptsList.length || 1}</span>
-                  </span>
-                ) : null}
-              </div>
-              <p className="text-[11px] text-[#7A7C75] font-mono">
-                {[resolvedSubject, resolvedClassLevel, `Voice: ${preferredVoice}`]
-                  .filter(Boolean)
-                  .join(' • ')}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Header: Next Capsule / Next Chapter Quick Button, Chapter Notes, Take 10 MCQs, & Connection Status */}
-        <div className="flex items-center gap-2.5">
-          {(isCompletedBefore || moduleCompletedSuccess) && nextSiblingModule && (
-            <Button
-              id="header-next-capsule-btn"
-              onClick={() => {
-                endCall()
-                router.push(`/dashboard/${userId}/class/${nextSiblingModule.id}`)
-              }}
-              className="bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl px-3 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
-              title={`Advance to ${nextSiblingModule.title}`}
-            >
-              <span>Next Capsule</span>
-              <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
-            </Button>
-          )}
-
-          {(isCompletedBefore || moduleCompletedSuccess) && !nextSiblingModule && nextChapterInfo && (
-            <Button
-              id="header-next-chapter-btn"
-              onClick={() => {
-                endCall()
-                router.push(`/dashboard/${userId}/class/${nextChapterInfo.firstModuleId}`)
-              }}
-              className="bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl px-3 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
-              title={`Advance to Chapter ${nextChapterInfo.orderIndex}: ${nextChapterInfo.chapterTitle}`}
-            >
-              <span>Next Chapter</span>
-              <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
-            </Button>
-          )}
-
-          {/* Chapter Notes Button */}
-          <Button
-            id="view-chapter-notes-btn"
-            variant="outline"
-            size="sm"
-            onClick={() => setNotesModalOpen(true)}
-            className="bg-white hover:bg-[#F8F6F0] border-[#E5E3DB] text-[#171817] rounded-xl px-3 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
-            title="View Compiled Chapter Notes"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-[#52715D]" strokeWidth={1.5} />
-            <span>Chapter Notes</span>
-            {chapterNotes.trim().length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-[#52715D] animate-pulse" />
-            )}
-          </Button>
-
-          {/* Direct 10-MCQ Mastery Button - Only visible once module is completed */}
-          {(isCompletedBefore || moduleCompletedSuccess) && (
-            <Button
-              id="open-mastery-quiz-btn"
-              onClick={handleOpenQuiz}
-              className="bg-[#C85A43] hover:bg-[#A94734] text-white rounded-xl px-3.5 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer"
-              title="Take 10 MCQs to test mastery"
-            >
-              <Award className="w-4 h-4 text-white" strokeWidth={1.5} />
-              <span>Take 10 MCQs</span>
-            </Button>
-          )}
-
-          <ConnectionStatus state={connectionState} />
-        </div>
-      </header>
-
-      {/* Main Classroom Stage: 2-Column Split */}
-      <div className="relative z-10 w-full flex-1 flex flex-col md:flex-row p-4 gap-4 overflow-hidden">
-        {/* Left Column: Avatar, Live Captions, Controls & Module Capsule */}
-        <div className="w-full md:w-[380px] lg:w-[420px] flex flex-col justify-between gap-3 h-full overflow-y-auto pr-1">
+      {/* Main Classroom Stage: Left Avatar Column + Right Full Whiteboard Stage */}
+      <div className="relative z-10 w-full flex-1 flex flex-col md:flex-row p-3 sm:p-4 gap-3 sm:gap-4 overflow-hidden min-h-0">
+        {/* Left Column: Avatar Section & Voice Controls (Positioned on the LEFT) */}
+        <div className="w-full md:w-[320px] lg:w-[360px] shrink-0 flex flex-col gap-3 h-full overflow-y-auto pr-1">
           {/* Audio-Reactive Avatar with bottom movie-style captions */}
           <ClassroomAvatar
             state={connectionState}
@@ -1834,6 +1744,15 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                   <span>Mark Capsule Complete & Unlock Next</span>
                 </Button>
               )}
+              <button
+                type="button"
+                onClick={handleBackToDashboard}
+                className="w-full text-center text-xs text-[#7A7C75] hover:text-[#171817] font-medium py-1 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                title="Return to Student Portal"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Return to Dashboard</span>
+              </button>
             </div>
           )}
 
@@ -2042,7 +1961,6 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
               />
             </div>
 
-            {/* Concept Sequence in Order */}
             {keyConceptsList.length > 0 ? (
               <div className="space-y-1.5 pt-1">
                 {keyConceptsList.map((concept: string, idx: number) => {
@@ -2100,52 +2018,10 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
               </p>
             )}
           </div>
-
-          {/* Live Chapter Notes Ledger Preview */}
-          <div className="p-3.5 rounded-2xl bg-white border border-[#E5E3DB] text-[#171817] text-xs space-y-2 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-[#52715D]" />
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#52715D] font-bold">
-                  Exam-Ready Notes Ledger
-                </span>
-              </div>
-              <span className="text-[10px] font-mono text-[#7A7C75]">
-                {notesSaveStatus === 'saving' ? (
-                  <span className="text-[#C85A43]">Saving...</span>
-                ) : chapterNotes.trim() ? (
-                  <span className="text-[#52715D]">Auto-Saved</span>
-                ) : (
-                  'Live Sync'
-                )}
-              </span>
-            </div>
-
-            {chapterNotes.trim() ? (
-              <div className="space-y-2">
-                <div className="p-2.5 rounded-xl bg-[#F8F6F0] border border-[#E5E3DB] text-[11px] text-[#171817] max-h-24 overflow-hidden font-mono line-clamp-3 whitespace-pre-line">
-                  {chapterNotes.split('\n').filter(Boolean).slice(-3).join('\n')}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setNotesModalOpen(true)}
-                  className="w-full text-[#52715D] hover:text-[#3E5D4B] hover:bg-[#E8F0EA] text-xs flex items-center justify-center gap-1.5 py-1 h-7.5 cursor-pointer rounded-lg border border-[#E5E3DB]"
-                >
-                  <BookOpen className="w-3 h-3" />
-                  <span>Open Full Exam Notes</span>
-                </Button>
-              </div>
-            ) : (
-              <p className="text-[11px] text-[#7A7C75] italic leading-relaxed py-1">
-                Teacher notes, formulas, and derivations auto-save here in real time.
-              </p>
-            )}
-          </div>
         </div>
 
-        {/* Right Column: Classroom Dual Stage (AI Green Chalkboard + 3D Simulation) */}
-        <div className="flex-1 h-full min-h-[400px] flex flex-col">
+        {/* Right Column: Full Whiteboard Canvas Stage (Occupies main area to the right of avatar section) */}
+        <div className="flex-1 h-full min-h-0 flex flex-col overflow-hidden">
           <WhiteboardWorkspace
             ref={chalkboardRef}
             moduleId={moduleId}

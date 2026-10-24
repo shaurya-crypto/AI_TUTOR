@@ -156,20 +156,20 @@ export class AudioStreamer {
     // 1. TEACHER SPEAKING (SPEAKER SUPPRESSION & HIGH-FIDELITY DELIBERATE BARGE-IN):
     if (this.isTeacherSpeaking) {
       const now = Date.now();
-      // Brief grace period (100ms) after teacher starts speaking to ignore initial speaker activation transients
-      if (now - this.teacherSpeechStartTime < 100) {
+      // Grace period (450ms) after teacher starts speaking to ignore initial speaker activation transients & acoustic echo
+      if (now - this.teacherSpeechStartTime < 450) {
         this.consecutiveBargeInFrames = 0;
         return;
       }
 
-      // Responsive voice detection threshold: calibrated above ambient room noise (0.015) to catch natural speech
-      const BARGE_IN_THRESHOLD = 0.018;
-      const requiredFrames = this.workletNode ? 4 : 1;
+      // Robust voice detection threshold: calibrated above ambient room noise, keyboard clicks, breathing, and speaker bleed
+      const BARGE_IN_THRESHOLD = 0.055;
+      const requiredFrames = this.workletNode ? 6 : 3;
 
       if (rms >= BARGE_IN_THRESHOLD) {
         this.consecutiveBargeInFrames++;
         if (this.consecutiveBargeInFrames >= requiredFrames) {
-          console.log(`[AudioStreamer] Student voice detected during teacher speech (RMS: ${rms.toFixed(4)}). Triggering instant barge-in.`);
+          console.log(`[AudioStreamer] Deliberate student voice detected during teacher speech (RMS: ${rms.toFixed(4)}, frames: ${this.consecutiveBargeInFrames}). Triggering barge-in.`);
           this.isTeacherSpeaking = false;
           this.consecutiveBargeInFrames = 0;
           this.lastSpeechTime = now;
@@ -190,7 +190,7 @@ export class AudioStreamer {
 
     // 2. ADAPTIVE NOISE GATING & SPEECH HANGOVER:
     const now = Date.now();
-    const NOISE_GATE_THRESHOLD = 0.015;
+    const NOISE_GATE_THRESHOLD = 0.025;
     const SPEECH_HANGOVER_MS = 650;
 
     if (rms >= NOISE_GATE_THRESHOLD) {
