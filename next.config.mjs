@@ -8,10 +8,10 @@ const cspHeader = `
   object-src 'none';
   base-uri 'self';
   form-action 'self';
-  frame-ancestors 'none';
+  frame-ancestors 'self' http://localhost:* http://127.0.0.1:* https://*.microsoft.com https://*.bing.com https://*.office.com vscode-webview:;
   worker-src 'self' blob:;
   media-src 'self' blob: data:;
-  connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com;
+  connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://api.simli.ai wss://api.simli.ai https://*.simli.ai wss://*.simli.ai https://*.livekit.cloud wss://*.livekit.cloud;
 `.replace(/\s{2,}/g, ' ').trim()
 
 const nextConfig = {
@@ -27,7 +27,7 @@ const nextConfig = {
           },
           {
             key: 'X-Frame-Options',
-            value: 'DENY',
+            value: 'SAMEORIGIN',
           },
           {
             key: 'X-Content-Type-Options',

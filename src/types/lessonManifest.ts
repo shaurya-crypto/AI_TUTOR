@@ -197,7 +197,9 @@ export interface LessonStep {
       | 'draw_question'
       | 'draw_flowchart'
       | 'draw_graph'
-      | 'draw_image'
+      | 'draw_table'
+      | 'draw_shape'
+      | 'render_svg_diagram'
       | 'draw_video'
       | 'draw_diagram'
     content: string
@@ -310,8 +312,11 @@ export const LessonStepSchema = z.object({
         'draw_rough_work',
         'clear_rough',
         'draw_question',
+        'draw_flowchart',
         'draw_graph',
-        'draw_image',
+        'draw_table',
+        'draw_shape',
+        'render_svg_diagram',
         'draw_video',
         'draw_diagram',
       ]),

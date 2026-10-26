@@ -1,23 +1,17 @@
 'use client'
 
-import React, { forwardRef, useState, useEffect } from 'react'
+import React, { forwardRef, useState, useEffect, useCallback } from 'react'
 import { GreenChalkboard, GreenChalkboardRef, WritingPositionInfo } from './GreenChalkboard'
 import { SobiCompanion } from './SobiCompanion'
 import { VisualizationViewport } from './VisualizationViewport'
+import { MafsGraphCanvas, MafsGraphCanvasProps } from './MafsGraphCanvas'
 import { VisualizationSceneType } from './scenes/sceneTypes'
 import { resolveSceneType } from './scenes/sceneRegistry'
-import { MultimediaLessonPlayer } from '@/components/multimedia/MultimediaLessonPlayer'
 import { VisualLessonManifest, LessonStep } from '@/types/lessonManifest'
 import {
-  Layers,
   Box,
-  Columns,
-  Maximize2,
   Minimize2,
-  Sparkles,
-  Activity,
   X,
-  Minimize,
 } from 'lucide-react'
 
 export interface WhiteboardWorkspaceProps {
@@ -49,6 +43,8 @@ export interface WhiteboardWorkspaceProps {
   isListening?: boolean
   onSubmitStudentAnswer?: (answer: string) => void
   onVoiceStudentAnswer?: (answer: string) => void
+  activeGraph?: MafsGraphCanvasProps | null
+  onCloseGraph?: () => void
 }
 
 export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWorkspaceProps>(
@@ -82,6 +78,8 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       isListening = true,
       onSubmitStudentAnswer,
       onVoiceStudentAnswer,
+      activeGraph = null,
+      onCloseGraph,
     },
     ref
   ) => {
@@ -91,13 +89,24 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
     // Sobi Whiteboard Companion writing position tracking
     const [writingPosition, setWritingPosition] = useState<WritingPositionInfo | null>(null)
 
-    // 3D Scene In-Whiteboard Display Mode:
-    // 'box_in_board' (embedded container box right on the whiteboard) | 'docked_split' (side-by-side) | 'minimized'
-    const [sceneBoxMode, setSceneBoxMode] = useState<'box_in_board' | 'docked_split' | 'minimized'>('box_in_board')
+    const handleWritingPositionChange = useCallback((pos: WritingPositionInfo) => {
+      setWritingPosition((prev) => {
+        if (
+          prev &&
+          prev.nextY === pos.nextY &&
+          prev.pageIndex === pos.pageIndex &&
+          prev.lastAction === pos.lastAction &&
+          prev.lastText === pos.lastText
+        ) {
+          return prev
+        }
+        return pos
+      })
+    }, [])
 
-    // Mobile / Responsive tab
-    const [mobileTab, setMobileTab] = useState<'board' | 'visual'>('board')
-    const [layoutSplit, setLayoutSplit] = useState<'split' | 'full_board' | 'full_visual'>('split')
+    // 3D Scene In-Whiteboard Display Mode:
+    // 'box_in_board' (embedded container box right on the whiteboard) | 'minimized'
+    const [sceneBoxMode, setSceneBoxMode] = useState<'box_in_board' | 'minimized'>('box_in_board')
 
     // When an active scene is summoned, pop open the in-board box
     useEffect(() => {
@@ -106,14 +115,13 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       }
     }, [activeSceneType])
 
-    const hasVisualStage = !!lessonManifest || (!!activeSceneType && sceneBoxMode === 'docked_split')
-
-    const handleExecuteBoardDirective = (action: string, content: string) => {
+    const handleExecuteBoardDirective = (action: string, content: any) => {
       if (!ref || typeof ref === 'function') return
       const board = ref.current
       if (!board) return
 
-      if (action === 'draw_title') board.drawTitle(content)
+      if (action === 'set_color' || action === 'chalk_color') board.setChalkColor(typeof content === 'string' ? content : (content?.color || ''))
+      else if (action === 'draw_title') board.drawTitle(content)
       else if (action === 'draw_note') board.drawNote(content)
       else if (action === 'draw_step') board.drawStep(content)
       else if (action === 'draw_highlight_box') board.drawHighlightBox(content)
@@ -131,30 +139,38 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       else if (action === 'draw_table' || action === 'table') board.drawTable?.(content)
       else if (action === 'draw_geometry' || action === 'geometry') board.drawGeometry?.(content)
       else if (action === 'draw_graph' || action === 'graph') board.drawGraph(content)
+      else if (action === 'render_svg_diagram' || action === 'draw_svg' || action === 'draw_svg_diagram') {
+        if (typeof content === 'object' && content !== null) {
+          board.drawSvgDiagram?.(content.title || 'Educational Diagram', content.svg || '', content.caption)
+        } else if (typeof content === 'string') {
+          const trimmed = content.trim()
+          if (trimmed.includes('|') && trimmed.includes('<svg')) {
+            const parts = trimmed.split('|').map((s: string) => s.trim())
+            board.drawSvgDiagram?.(parts[0] || 'Educational Diagram', parts[1] || '', parts[2])
+          } else if (trimmed.includes('<svg')) {
+            board.drawSvgDiagram?.('Educational Diagram', trimmed)
+          } else {
+            board.drawSvgDiagram?.(trimmed, '')
+          }
+        }
+      }
       else if (action === 'draw_numerical' || action === 'numerical' || action === 'worked_example') {
         if (typeof content === 'object') board.drawNumericalSolution?.(content)
         else board.handleAiDirective(`[NUMERICAL: ${content}]`)
       }
-      else if (action === 'draw_image' || action === 'image') {
+      else if (action === 'draw_image' || action === 'image' || action === 'draw_diagram' || action === 'diagram') {
         const parts = (content || '').split('|').map((s: string) => s.trim())
-        board.drawImageCard?.(parts[0] || 'Diagram', parts[1] || '', parts[2] || 'NCERT Standard')
+        if (parts[1] && parts[1].includes('<svg')) {
+          board.drawSvgDiagram?.(parts[0] || 'Scientific Diagram', parts[1], parts[2] || '')
+        } else {
+          board.drawSvgDiagram?.(parts[0] || content || 'Scientific Diagram', '', parts[1] || '')
+        }
       }
       else if (action === 'draw_video' || action === 'video') {
         const parts = (content || '').split('|').map((s: string) => s.trim())
         board.drawVideoCard?.(parts[0] || 'Demonstration', parts[1] || '')
       }
-      else if (action === 'draw_cell') board.drawCellDiagram()
-      else if (action === 'draw_atom') board.drawAtomDiagram()
-      else if (action === 'draw_optics') board.drawOpticsDiagram()
-      else if (action === 'draw_forces') board.drawForcesDiagram()
-      else if (action === 'draw_magnet') board.drawMagnetDiagram()
-      else if (action === 'draw_pressure') board.drawPressureDiagram()
-      else if (action === 'draw_matter') board.drawStatesOfMatterDiagram()
-      else if (action === 'draw_photosynthesis') board.drawPhotosynthesisDiagram()
-      else if (action === 'draw_circuit' || action === 'draw_circuit_series') board.drawCircuitSeries()
-      else if (action === 'draw_circuit_parallel') board.drawCircuitParallel()
       else if (action === 'new_page') board.addNewPage?.()
-      else if (action === 'draw_diagram' || action === 'diagram') board.handleAiDirective(`[DIAGRAM: ${content}]`)
       else board.handleAiDirective(`[${action.toUpperCase()}: ${content}]`)
     }
 
@@ -166,81 +182,10 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
       .join(' · ')
 
     return (
-      <div className="relative w-full h-full flex flex-col overflow-hidden bg-[#F8F6F0]">
-        {/* Mobile View Toggle Bar (when multimedia manifest or docked split is active) */}
-        {hasVisualStage && (
-          <div className="md:hidden z-20 flex items-center justify-center p-1.5 bg-white border-b border-[#E5E3DB] gap-2 shadow-xs">
-            <button
-              onClick={() => setMobileTab('board')}
-              className={`px-3 py-1 text-xs rounded-lg font-medium transition-all ${
-                mobileTab === 'board'
-                  ? 'bg-[#52715D] text-white shadow-xs'
-                  : 'text-[#555852] hover:bg-[#F8F6F0]'
-              }`}
-            >
-              Whiteboard Notes
-            </button>
-            <button
-              onClick={() => setMobileTab('visual')}
-              className={`px-3 py-1 text-xs rounded-lg font-medium transition-all flex items-center gap-1.5 ${
-                mobileTab === 'visual'
-                  ? 'bg-[#C85A43] text-white shadow-xs'
-                  : 'text-[#555852] hover:bg-[#F8F6F0]'
-              }`}
-            >
-              {lessonManifest ? <Activity className="w-3.5 h-3.5" /> : <Box className="w-3.5 h-3.5" />}
-              <span>{lessonManifest ? 'Multimedia Stage' : '3D Simulation'}</span>
-            </button>
-          </div>
-        )}
-
-        {/* Desktop Layout Toggle (for multimedia lesson stages) */}
-        {hasVisualStage && lessonManifest && (
-          <div className="hidden md:flex absolute top-3 right-6 z-30 items-center gap-1 bg-white/95 backdrop-blur-md px-2 py-1 rounded-xl border border-[#E5E3DB] shadow-sm">
-            <button
-              onClick={() => setLayoutSplit('split')}
-              className={`p-1 rounded-md text-xs transition-colors ${
-                layoutSplit === 'split' ? 'bg-[#52715D] text-white' : 'text-[#555852] hover:bg-[#F8F6F0]'
-              }`}
-              title="Side-by-Side Dual View"
-            >
-              <Columns className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setLayoutSplit('full_board')}
-              className={`p-1 rounded-md text-xs transition-colors ${
-                layoutSplit === 'full_board' ? 'bg-[#52715D] text-white' : 'text-[#555852] hover:bg-[#F8F6F0]'
-              }`}
-              title="Full Whiteboard View"
-            >
-              <Layers className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setLayoutSplit('full_visual')}
-              className={`p-1 rounded-md text-xs transition-colors ${
-                layoutSplit === 'full_visual' ? 'bg-[#C85A43] text-white' : 'text-[#555852] hover:bg-[#F8F6F0]'
-              }`}
-              title="Full Visual Stage View"
-            >
-              <Activity className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Workspace Panes */}
-        <div className="relative flex-1 w-full h-full flex flex-col md:flex-row overflow-hidden p-2 sm:p-3 gap-2 sm:gap-3">
-          {/* Main Whiteboard Canvas */}
-          <div
-            className={`relative transition-all duration-300 flex-1 h-full ${
-              hasVisualStage
-                ? layoutSplit === 'full_visual'
-                  ? 'hidden'
-                  : layoutSplit === 'full_board'
-                  ? 'w-full'
-                  : 'md:w-1/2 w-full ' + (mobileTab === 'visual' ? 'hidden md:flex' : 'flex')
-                : 'w-full'
-            }`}
-          >
+      <div className="relative w-full h-full flex flex-col overflow-hidden">
+        {/* Full Whiteboard Canvas Area */}
+        <div className="relative flex-1 w-full h-full overflow-hidden">
+          <div className="relative w-full h-full overflow-hidden">
             <GreenChalkboard
               ref={ref}
               moduleId={moduleId}
@@ -258,7 +203,7 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
               onModuleComplete={onModuleComplete}
               onConfirmEndChapter={onConfirmEndChapter}
               onStartQuiz={onStartQuiz}
-              onWritingPositionChange={setWritingPosition}
+              onWritingPositionChange={handleWritingPositionChange}
             />
 
             {/* Sobi Whiteboard Companion: Glides alongside writing and points to questions */}
@@ -306,14 +251,6 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
-                    {/* Dock to side toggle */}
-                    <button
-                      onClick={() => setSceneBoxMode('docked_split')}
-                      className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-900/50 transition-colors"
-                      title="Dock to side (Split view)"
-                    >
-                      <Columns className="w-3.5 h-3.5" />
-                    </button>
                     {/* Minimize toggle */}
                     <button
                       onClick={() => setSceneBoxMode('minimized')}
@@ -345,6 +282,21 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
               </div>
             )}
 
+            {/* In-Whiteboard Dynamic Mafs Vector Graphing Canvas */}
+            {activeGraph && (
+              <div className="absolute top-14 right-4 z-30 w-[92vw] max-w-[480px] shadow-[0_20px_50px_rgba(0,0,0,0.35)] animate-in fade-in slide-in-from-top-4 duration-300">
+                <MafsGraphCanvas
+                  formula={activeGraph.formula}
+                  domain={activeGraph.domain}
+                  range={activeGraph.range}
+                  title={activeGraph.title}
+                  callout={activeGraph.callout}
+                  points={activeGraph.points}
+                  onClose={onCloseGraph}
+                />
+              </div>
+            )}
+
             {/* Minimized Simulation Floating Pill */}
             {resolvedScene && sceneBoxMode === 'minimized' && (
               <button
@@ -359,52 +311,6 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
               </button>
             )}
           </div>
-
-          {/* Right Pane: Multimedia Lesson Player OR Docked 3D Stage */}
-          {hasVisualStage && (
-            <div
-              className={`relative transition-all duration-300 flex-1 h-full ${
-                layoutSplit === 'full_board'
-                  ? 'hidden'
-                  : layoutSplit === 'full_visual'
-                  ? 'w-full'
-                  : 'md:w-1/2 w-full ' + (mobileTab === 'board' ? 'hidden md:flex' : 'flex')
-              }`}
-            >
-              {lessonManifest ? (
-                <MultimediaLessonPlayer
-                  manifest={lessonManifest}
-                  initialStepIndex={initialStepIndex}
-                  onStepChange={onStepChange}
-                  onBoardDirective={handleExecuteBoardDirective}
-                  onSaveProgress={onSaveProgress}
-                  onClose={onCloseScene}
-                />
-              ) : (
-                <div className="relative w-full h-full flex flex-col">
-                  {/* Docked top bar to undock back into in-board box */}
-                  <div className="flex items-center justify-between px-3 py-1.5 bg-[#122319] border-b border-emerald-900/60 text-emerald-200">
-                    <span className="text-xs font-semibold">Side-by-Side 3D Simulation</span>
-                    <button
-                      onClick={() => setSceneBoxMode('box_in_board')}
-                      className="px-2 py-0.5 text-xs rounded bg-emerald-900/60 hover:bg-emerald-800 text-white flex items-center gap-1"
-                    >
-                      <Box className="w-3 h-3" />
-                      <span>Embed in Whiteboard</span>
-                    </button>
-                  </div>
-                  <div className="flex-1 w-full h-full">
-                    <VisualizationViewport
-                      sceneType={resolvedScene}
-                      initialParams={activeSceneParams}
-                      title={activeSceneTitle}
-                      onClose={onCloseScene}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     )

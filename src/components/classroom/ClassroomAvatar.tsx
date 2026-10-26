@@ -1,8 +1,14 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { ConnectionState, TranscriptItem } from '@/types/liveSession'
-import { Volume2, Mic, Sparkles, Image as ImageIcon, RotateCcw } from 'lucide-react'
+import { Sparkles, Settings } from 'lucide-react'
+import { LiveAvatarConfig } from '@/services/geminiWebSocket'
+import { SimliAvatarController, SimliStatus } from '@/services/simliAvatarService'
+
+export type AvatarProvider = 'simli' | 'google'
 
 interface ClassroomAvatarProps {
   state: ConnectionState
@@ -10,6 +16,12 @@ interface ClassroomAvatarProps {
   userVolume?: number
   isMuted: boolean
   latestTranscript?: TranscriptItem | null
+  latestVideoFrame?: string | null
+  videoMimeType?: string
+  onCustomAvatarChange?: (avatarConfig: LiveAvatarConfig | null) => void
+  onSimliControllerReady?: (controller: SimliAvatarController | null) => void
+  onSimliActiveChange?: (isActive: boolean) => void
+  preferredProvider?: AvatarProvider
 }
 
 export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
@@ -18,50 +30,169 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
   userVolume = 0,
   isMuted,
   latestTranscript,
+  latestVideoFrame,
+  videoMimeType = 'image/jpeg',
+  onSimliControllerReady,
+  onSimliActiveChange,
+  preferredProvider = 'simli',
 }) => {
-  const [customPhoto, setCustomPhoto] = useState<string | null>(null)
+  const params = useParams()
+  const studentId = (params?.id as string) || ''
+
+  // Selected Face ID: default to 80459b57-2d66-4ca7-8682-59e1c649bc53
+  const [selectedFaceId, setSelectedFaceId] = useState<string>('80459b57-2d66-4ca7-8682-59e1c649bc53')
+  const [activeProvider, setActiveProvider] = useState<AvatarProvider>(preferredProvider)
+  const [simliStatus, setSimliStatus] = useState<SimliStatus>('idle')
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const simliVideoRef = useRef<HTMLVideoElement | null>(null)
+  const simliAudioRef = useRef<HTMLAudioElement | null>(null)
+  const simliControllerRef = useRef<SimliAvatarController | null>(null)
 
   const isSpeaking = state === 'TEACHER_SPEAKING'
   const isListening = state === 'LISTENING'
   const isConnecting = state === 'CONNECTING'
+  const isCallActive = state !== 'IDLE' && state !== 'DISCONNECTED' && state !== 'ERROR'
   const isUserTalking = !isSpeaking && !isMuted && userVolume > 0.04
+  const hasLiveGoogleVideo = Boolean(latestVideoFrame)
+  const isSimliActive = activeProvider === 'simli' && simliStatus === 'connected'
 
-  // Audio-reactive scale multipliers
-  const reactiveScale = isSpeaking ? 1 + teacherVolume * 0.12 : isUserTalking ? 1 + userVolume * 0.05 : 1
-  const ringScale1 = isSpeaking ? 1 + teacherVolume * 0.45 : isUserTalking ? 1 + userVolume * 0.35 : 1.02
-  const ringScale2 = isSpeaking ? 1 + teacherVolume * 0.85 : isUserTalking ? 1 + userVolume * 0.6 : 1.05
-  const mouthScaleY = isSpeaking ? 1 + Math.min(teacherVolume * 1.8, 1.4) : 1
+  const onSimliActiveChangeRef = useRef(onSimliActiveChange)
+  onSimliActiveChangeRef.current = onSimliActiveChange
 
-  // Handle custom photo upload
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const url = URL.createObjectURL(file)
-      setCustomPhoto(url)
+  const onSimliControllerReadyRef = useRef(onSimliControllerReady)
+  onSimliControllerReadyRef.current = onSimliControllerReady
+
+  const prevSimliActiveRef = useRef<boolean | null>(null)
+
+  // Notify parent of Simli active status to manage audio routing and eliminate echo
+  useEffect(() => {
+    if (prevSimliActiveRef.current !== isSimliActive) {
+      prevSimliActiveRef.current = isSimliActive
+      onSimliActiveChangeRef.current?.(isSimliActive)
+    }
+  }, [isSimliActive])
+
+  useEffect(() => {
+    return () => {
+      onSimliActiveChangeRef.current?.(false)
+    }
+  }, [])
+
+  // Restore saved faceId from localStorage on mount and sync on storage events
+  useEffect(() => {
+    setIsMounted(true)
+    if (typeof window !== 'undefined') {
+      try {
+        const storedFaceId = localStorage.getItem('ai_tutor_selected_face_id')
+        if (storedFaceId && storedFaceId.length > 5) {
+          setSelectedFaceId(storedFaceId)
+        }
+      } catch {}
+    }
+
+    const handleStorageUpdate = () => {
+      try {
+        const storedFaceId = localStorage.getItem('ai_tutor_selected_face_id')
+        if (storedFaceId && storedFaceId.length > 5) {
+          setSelectedFaceId(storedFaceId)
+        }
+      } catch {}
+    }
+    window.addEventListener('storage', handleStorageUpdate)
+    return () => window.removeEventListener('storage', handleStorageUpdate)
+  }, [])
+
+  // Initialize Simli controller with auto-fallback to Google Avatar (strictly once on mount)
+  useEffect(() => {
+    const controller = new SimliAvatarController((status, err) => {
+      setSimliStatus(status)
+      if (status === 'fallback' || status === 'error') {
+        console.warn('[ClassroomAvatar] Simli fallback triggered, switching to Google Avatar:', err)
+        setFallbackReason(err || 'Connection interrupted')
+        setActiveProvider('google')
+      }
+    })
+
+    simliControllerRef.current = controller
+    onSimliControllerReadyRef.current?.(controller)
+
+    return () => {
+      controller.stop()
+      simliControllerRef.current = null
+      onSimliControllerReadyRef.current?.(null)
+    }
+  }, [])
+
+  // Start or stop Simli based on call active state and preferred provider
+  useEffect(() => {
+    const controller = simliControllerRef.current
+    if (!controller) return
+
+    if (isCallActive && activeProvider === 'simli') {
+      if (simliVideoRef.current && simliAudioRef.current && simliStatus === 'idle') {
+        const faceIdToStart = selectedFaceId || '80459b57-2d66-4ca7-8682-59e1c649bc53'
+        controller
+          .start({
+            videoElement: simliVideoRef.current,
+            audioElement: simliAudioRef.current,
+            faceId: faceIdToStart,
+          })
+          .then((success) => {
+            if (!success) {
+              setActiveProvider('google')
+            }
+          })
+      }
+    } else if (!isCallActive && simliStatus !== 'idle') {
+      controller.stop()
+    }
+  }, [isCallActive, activeProvider, simliStatus, selectedFaceId])
+
+  // Draw incoming native 24 FPS video frames streamed from Google Gemini 3.8 Live Avatar (Fallback)
+  useEffect(() => {
+    if (activeProvider !== 'google' && isSimliActive) return
+    if (!latestVideoFrame || !canvasRef.current) return
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const img = new Image()
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    }
+    img.src = `data:${videoMimeType || 'image/jpeg'};base64,${latestVideoFrame}`
+  }, [latestVideoFrame, videoMimeType, activeProvider, isSimliActive])
+
+  // Toggle between Simli (Primary) and Google Avatar (Fallback)
+  const toggleProvider = () => {
+    if (activeProvider === 'simli') {
+      simliControllerRef.current?.stop()
+      setActiveProvider('google')
+    } else {
+      setFallbackReason(null)
+      setActiveProvider('simli')
     }
   }
 
-  // Filter out internal board and diagram directives from caption display
-  const cleanCaptionText = (text: string) => {
-    const stripCall = (name: string) => new RegExp(`${name}\\s*\\((?:'[^']*'|"[^"]*"|[^()]*|\\([^()]*\\))*\\)`, 'gi')
-    return text
-      .replace(stripCall('write_chalkboard'), '')
-      .replace(stripCall('execute_visual_action'), '')
-      .replace(stripCall('show_educational_media'), '')
-      .replace(stripCall('plot_mathematical_graph'), '')
-      .replace(stripCall('open_interactive_simulation'), '')
-      .replace(stripCall('solve_step_by_step_numerical'), '')
-      .replace(stripCall('conclude_and_open_quiz'), '')
-      .replace(/\[[A-Z_]+(?::\s*[^\]]*)?\]/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
+  // Audio-reactive visual dynamics for ambient stage
+  const reactiveScale = isSpeaking ? 1 + teacherVolume * 0.04 : isUserTalking ? 1 + userVolume * 0.03 : 1
+  const ringScale1 = isSpeaking ? 1 + teacherVolume * 0.35 : isUserTalking ? 1 + userVolume * 0.25 : 1.02
+  const ringScale2 = isSpeaking ? 1 + teacherVolume * 0.65 : isUserTalking ? 1 + userVolume * 0.45 : 1.04
 
+  // Subtle natural breathing motion (guarded by isMounted to guarantee identical SSR & client hydration output)
+  const breathingOffset = isMounted ? Math.sin(Date.now() / 1400) * 1.2 : 0
+
+  // Filter out internal directives from caption display
   const rawCaption = latestTranscript?.text || ''
-  const displayCaption = cleanCaptionText(rawCaption)
+  const displayCaption = rawCaption.replace(/\[[A-Z_]+(?::\s*[^\]]+)?\]/gi, '').trim()
+
+  const avatarImageUrl = `/avatars/${selectedFaceId}.jpg`
 
   return (
-    <div className="relative w-full flex flex-col items-center justify-between p-4 bg-white/70 backdrop-blur-md rounded-3xl border border-border-subtle shadow-md">
+    <div className="relative w-full flex flex-col items-center justify-between p-4 bg-white/70 backdrop-blur-md rounded-3xl border border-stone-200/60 shadow-xs min-h-[380px] overflow-hidden select-none">
       {/* Top micro status bar */}
       <div className="w-full flex items-center justify-between px-2 mb-3">
         <div className="flex items-center gap-2">
@@ -80,7 +211,11 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
           />
           <span className="text-[11px] font-mono uppercase tracking-wider text-ink-secondary">
             {isSpeaking
-              ? 'AI Teacher Speaking'
+              ? isSimliActive
+                ? 'Simli Live Avatar Speaking'
+                : hasLiveGoogleVideo
+                ? 'Gemini Live Avatar Speaking'
+                : 'AI Teacher Speaking'
               : isUserTalking
               ? 'Hearing Student'
               : isListening
@@ -93,31 +228,43 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
           </span>
         </div>
 
-        {/* Custom Photo / Puppet Toggle */}
+        {/* Avatar Provider Mode Badge & Settings Link */}
         <div className="flex items-center gap-1.5">
-          {customPhoto ? (
-            <button
-              onClick={() => setCustomPhoto(null)}
+          <button
+            onClick={toggleProvider}
+            className="text-[10px] font-mono px-2 py-0.5 rounded-md border flex items-center gap-1 transition-colors cursor-pointer bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
+            title={
+              activeProvider === 'simli'
+                ? 'Simli Live is Primary. Click to test Google Avatar fallback.'
+                : 'Google Live Avatar is active (Fallback). Click to switch to Simli.'
+            }
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                activeProvider === 'simli'
+                  ? simliStatus === 'connected'
+                    ? 'bg-emerald-500'
+                    : 'bg-amber-500 animate-pulse'
+                  : 'bg-blue-500'
+              }`}
+            />
+            <span>{activeProvider === 'simli' ? 'Simli (Primary)' : 'Google (Fallback)'}</span>
+          </button>
+
+          {studentId && (
+            <Link
+              href={`/dashboard/${studentId}/settings?tab=avatars`}
               className="text-[10px] text-ink-muted hover:text-ink-primary flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-stone-100 transition-colors cursor-pointer"
-              title="Reset to default AI scholar avatar"
+              title="Configure Classroom Avatars & Settings"
             >
-              <RotateCcw className="w-3 h-3" />
-              <span>Default</span>
-            </button>
-          ) : (
-            <label
-              className="text-[10px] text-ink-muted hover:text-ink-primary flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-stone-100 transition-colors cursor-pointer"
-              title="Upload your parent or favorite tutor photo"
-            >
-              <ImageIcon className="w-3 h-3" />
-              <span>Custom Avatar</span>
-              <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-            </label>
+              <Settings className="w-3.5 h-3.5" />
+              <span>Avatars</span>
+            </Link>
           )}
         </div>
       </div>
 
-      {/* Center: Audio-Reactive Avatar Stage */}
+      {/* Center: Live Avatar Stage */}
       <div className="relative w-48 h-48 md:w-56 md:h-56 flex items-center justify-center my-2">
         {/* Ambient reactive glow aura */}
         <div
@@ -146,102 +293,84 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
           }}
         />
 
-        {/* Avatar Outer Bezel */}
+        {/* Avatar Stage Outer Bezel */}
         <div
-          className="relative z-10 w-44 h-44 md:w-52 md:h-52 rounded-full p-2 bg-white/80 border-2 border-stone-200/80 shadow-lg backdrop-blur-md transition-transform duration-100 ease-out flex items-center justify-center overflow-hidden"
+          className="relative z-10 w-44 h-44 md:w-52 md:h-52 rounded-full p-1.5 bg-white/90 border-2 border-stone-200/80 shadow-lg backdrop-blur-md transition-transform duration-150 ease-out flex items-center justify-center overflow-hidden"
           style={{
-            transform: `scale(${reactiveScale})`,
+            transform: `scale(${reactiveScale}) translateY(${breathingOffset}px)`,
           }}
         >
-          {customPhoto ? (
-            /* Custom Photo 2D Puppet Lip-Sync Mode */
-            <div className="relative w-full h-full rounded-full overflow-hidden flex flex-col items-center justify-center bg-stone-100">
-              <img
-                src={customPhoto}
-                alt="Custom Tutor Avatar"
-                className="w-full h-full object-cover"
-              />
-              {/* Mouth overlay that reacts to Web Audio volume */}
-              <div
-                className="absolute bottom-11 w-10 h-3 rounded-full bg-[#801313]/90 border border-black/30 transition-transform duration-75 origin-center"
-                style={{
-                  transform: `scaleY(${mouthScaleY})`,
-                }}
-              />
+          {/* Primary: Video element for Simli Live WebRTC Avatar (No display:none to allow requestVideoFrameCallback) */}
+          <video
+            ref={simliVideoRef}
+            autoPlay
+            playsInline
+            className={`absolute inset-0 w-full h-full object-cover rounded-full bg-stone-900 transition-opacity duration-200 ${
+              isSimliActive ? 'opacity-100 z-10' : 'opacity-0 pointer-events-none z-0'
+            }`}
+          />
+          {/* Audio element bound to Simli WebRTC stream */}
+          <audio ref={simliAudioRef} autoPlay />
+
+          {/* Fallback: Canvas for native Gemini 3.8 Live Avatar video stream */}
+          <canvas
+            ref={canvasRef}
+            width={480}
+            height={480}
+            className={`absolute inset-0 w-full h-full object-cover rounded-full bg-stone-900 transition-opacity duration-200 ${
+              !isSimliActive && hasLiveGoogleVideo ? 'opacity-100 z-10' : 'opacity-0 pointer-events-none z-0'
+            }`}
+          />
+
+          {/* Real Face ID avatar image when live video stream is waiting to connect or in standby */}
+          <div
+            className={`absolute inset-0 w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-stone-100 transition-opacity duration-200 ${
+              !isSimliActive && !hasLiveGoogleVideo ? 'opacity-100 z-5' : 'opacity-0 pointer-events-none z-0'
+            }`}
+          >
+            <img
+              src={avatarImageUrl}
+              alt="Real Face ID Avatar Portrait"
+              className="w-full h-full object-cover rounded-full"
+              onError={(e) => {
+                // Fallback to Simli app CDN directly if local asset is loading
+                (e.currentTarget as HTMLImageElement).src = `https://app.simli.com/characters/trinity2/${selectedFaceId}.jpg`
+              }}
+            />
+
+            {/* Natural studio lighting vignette */}
+            <div className="absolute inset-0 rounded-full pointer-events-none bg-gradient-to-t from-black/35 via-transparent to-white/10" />
+
+            {/* Subtle status badge */}
+            <div className="absolute bottom-2.5 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-xs text-[9px] font-mono text-white/90 uppercase tracking-widest border border-white/20">
+              {activeProvider === 'simli' ? 'Simli Scholar' : 'Google Scholar'}
             </div>
-          ) : (
-            /* Default Scholar Botanical Teacher Avatar */
-            <div className="relative w-full h-full rounded-full bg-linear-to-b from-[#2e4a3b] to-[#1c3327] flex flex-col items-center justify-center shadow-inner overflow-hidden border border-emerald-900/40">
-              {/* Head Silhouette */}
-              <div className="relative z-10 flex flex-col items-center">
-                {/* Scholar Cap / Crest */}
-                <div className="w-12 h-6 bg-amber-400/90 rounded-t-full flex items-center justify-center mb-1 shadow-xs">
-                  <span className="text-[10px] font-bold text-[#1c3327]">AI</span>
-                </div>
-
-                {/* Face Disc */}
-                <div className="w-20 h-20 rounded-full bg-[#fdecd2] border-2 border-amber-900/30 flex flex-col items-center justify-center relative shadow-md">
-                  {/* Eyes */}
-                  <div className="flex items-center gap-4 mb-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#2d1f14]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#2d1f14]" />
-                  </div>
-
-                  {/* Reactive Mouth Puppet */}
-                  <div
-                    className="w-6 h-2 rounded-full bg-[#b91c1c] transition-transform duration-75 origin-center"
-                    style={{
-                      transform: `scaleY(${mouthScaleY})`,
-                    }}
-                  />
-
-                  {/* Wire Glasses */}
-                  <div className="absolute top-6 w-16 h-4 border border-amber-900/40 rounded-full pointer-events-none" />
-                </div>
-
-                {/* Academic Collar */}
-                <div className="w-24 h-8 bg-emerald-900/90 rounded-t-2xl mt-1 flex items-center justify-center border-t border-amber-400/30">
-                  <span className="text-[9px] text-amber-200/80 font-serif tracking-wider uppercase">
-                    Scholar Tutor
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Broadcast/Movie-Style Captions at Bottom of Avatar */}
-      <div className="w-full mt-2">
-        <div className="w-full min-h-[64px] max-h-[88px] p-3 rounded-2xl bg-black/85 backdrop-blur-md border border-white/10 text-white shadow-xl flex flex-col justify-center items-center text-center transition-all overflow-hidden">
+      {/* Dynamic Subtitle / Live Closed Captions */}
+      <div className="w-full flex flex-col items-center mt-2 px-2 z-20">
+        <div className="min-h-[44px] w-full flex items-center justify-center text-center">
           {displayCaption ? (
-            <div className="w-full animate-fade-in">
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <span
-                  className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
-                    latestTranscript?.sender === 'teacher'
-                      ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
-                      : 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      latestTranscript?.sender === 'teacher' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
-                    }`}
-                  />
-                  <span>{latestTranscript?.sender === 'teacher' ? 'Instructor' : 'Student'}</span>
-                </span>
-              </div>
-              <p className="text-xs md:text-sm font-medium leading-snug line-clamp-2 text-white/95">
-                "{displayCaption}"
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-white/40 italic flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400/60 animate-pulse" />
-              <span>Voice captions will appear here live...</span>
+            <p className="text-xs sm:text-sm font-medium text-stone-700 bg-stone-100/80 px-3 py-1.5 rounded-xl border border-stone-200/50 backdrop-blur-xs max-w-full truncate animate-in fade-in slide-in-from-bottom-1 duration-200">
+              {displayCaption}
             </p>
-          )}
+          ) : isSpeaking ? (
+            <div className="flex items-center gap-1.5 text-stone-400 text-xs font-mono">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-spin" />
+              <span>Synthesizing voice and speech visemes...</span>
+            </div>
+          ) : isUserTalking ? (
+            <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Listening to student answer...</span>
+            </div>
+          ) : fallbackReason ? (
+            <p className="text-[10px] text-amber-700 font-mono">
+              Using Google Live Fallback ({fallbackReason})
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

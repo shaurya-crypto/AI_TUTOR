@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useGeminiLive } from '@/hooks/useGeminiLive'
-import { ConnectionStatus } from '@/components/ConnectionStatus'
 import { ClassroomAvatar } from '@/components/classroom/ClassroomAvatar'
+import { LiveAvatarConfig } from '@/services/geminiWebSocket'
+import type { SimliAvatarController } from '@/services/simliAvatarService'
 import dynamicImport from 'next/dynamic'
 import type { GreenChalkboardRef } from '@/components/whiteboard/GreenChalkboard'
 
@@ -22,6 +23,7 @@ const WhiteboardWorkspace = dynamicImport(
 )
 import { VisualizationSceneType } from '@/components/whiteboard/scenes/sceneTypes'
 import { resolveSceneType, parseSceneParams } from '@/components/whiteboard/scenes/sceneRegistry'
+import type { MafsGraphCanvasProps } from '@/components/whiteboard/MafsGraphCanvas'
 import { VisualLessonManifest, LessonStep } from '@/types/lessonManifest'
 import {
   generateVisualLessonPlanForCapsule,
@@ -34,16 +36,12 @@ import { ErrorModal } from '@/components/ErrorModal'
 import { MasteryQuizModal } from '@/components/quiz/MasteryQuizModal'
 import {
   Mic,
-  Zap,
   Play,
   ArrowLeft,
   BookOpen,
   CheckCircle2,
-  Award,
-  GraduationCap,
-  Layers,
   Sparkles,
-  FileText,
+  Layers,
   Check,
   RotateCcw,
 } from 'lucide-react'
@@ -119,48 +117,91 @@ function buildConceptMicroDossiers(
 ): string {
   if (!keyConcepts || keyConcepts.length === 0) return ''
 
-  let subtopics: string[] = []
-  if (Array.isArray(activeModule?.subtopics)) {
-    subtopics = activeModule.subtopics
-  } else if (typeof activeModule?.subtopics === 'string') {
-    try {
-      const p = JSON.parse(activeModule.subtopics)
-      if (Array.isArray(p)) subtopics = p
-    } catch {}
-  }
-
   return keyConcepts
     .map((rawConcept, idx) => {
       const conceptName = rawConcept.replace(/^[\s\(\[\{]+|[\s\)\]\}]+$/g, '').trim()
-      const subtopic = subtopics[idx] || subtopics[0] || conceptName
       const ex1 = workedExamples[idx] || workedExamples[0]
-      const ex2 = workedExamples[idx + 1] || workedExamples[1]
       const misc = misconceptions[idx] || misconceptions[0]
 
       const q1 = ex1?.problem
-        ? `Q: ${ex1.problem} | Ans: Given: ${ex1.given || ''}, Formula: ${ex1.formula || ''}, Calc: ${ex1.calculation || ''}, Final: ${ex1.finalAnswer || ''} ${ex1.unit || ''}`
-        : `Q: State the fundamental law governing ${conceptName} and define its SI unit. | Ans: State exact ${resolvedBoard} standard definition with SI units and dimensional formula.`
+        ? `Q: ${ex1.problem} | Ans: ${ex1.finalAnswer || ''} ${ex1.unit || ''}`
+        : `Q: State the law/definition for ${conceptName}. | Ans: Standard ${resolvedBoard} formulation.`
 
-      const q2 = ex2?.problem
-        ? `Q: ${ex2.problem} | Ans: ${ex2.finalAnswer || ''} ${ex2.unit || ''}`
-        : `Q: Calculate the value when standard conditions apply for ${conceptName}. | Ans: Step-by-step numerical solution with boxed final answer and SI units.`
-
-      const q3 = misc
-        ? `Q: Why is it incorrect to assume ${misc}? | Ans: Clarify the physical principle and correct scientific reasoning.`
-        : `Q: State one real-world application and common examination pitfall for ${conceptName}. | Ans: Provide verified textbook application with error prevention rule.`
-
-      return `---
-CONCEPT #${idx + 1}: "${conceptName}"
-- Textbook Alignment: ${resolvedBoard} ${resolvedClassLevel} ${resolvedSubject} Chapter "${chapterName}" | Section: "${subtopic}"
-- Core Law / Formula: Exact textbook definition with mathematical relationship & SI units.
-- Intuitive Analogy: Everyday tangible physical phenomenon.
-- 2-3 Exam-Ready Board Questions & Topper Answers:
-  1. ${q1}
-  2. ${q2}
-  3. ${q3}
-- Examination Pitfall to Check: ${misc || 'Ensure correct SI units and explicit formula declaration before substitution.'}`
+      return `Concept ${idx + 1} "${conceptName}": ${q1}${misc ? ` [Caution: ${misc}]` : ''}`
     })
-    .join('\n\n')
+    .join('\n')
+}
+
+/**
+ * Natural language detector for spoken concept transitions by the AI tutor.
+ * Detects phrases like: "Moving on to Concept 2", "Let's move to Concept 3",
+ * "Now moving to Concept 2", "Moving on to cellulose", "Let's talk about cellulose", etc.
+ */
+function detectSpokenConceptTransition(
+  text: string,
+  keyConcepts: string[]
+): { targetIdx: number; conceptTitle: string } | null {
+  if (!text || keyConcepts.length === 0) return null
+
+  // 1. Direct number match: e.g. "moving on to concept 2", "let's talk about concept 2", "now on to concept 2", "concept 2 is"
+  const numMatch = text.match(
+    /(?:moving\s+(?:on\s+)?to|let['’]?s\s+(?:move\s+(?:on\s+)?to|talk\s+about|discuss|begin|start)|now\s+(?:moving\s+to|on\s+to|for)|turn(?:ing)?\s+(?:our\s+attention\s+)?to|next\s+(?:is|up\s+is|concept\s+is)|welcome\s+to|starting|onto|in)\s+concept\s*#?\s*(\d+)/i
+  ) || text.match(/\bconcept\s*#?\s*(\d+)\s*(?:is|:|\-)\s*/i)
+  if (numMatch && numMatch[1]) {
+    const num = parseInt(numMatch[1], 10)
+    if (num >= 1 && num <= keyConcepts.length) {
+      return { targetIdx: num - 1, conceptTitle: keyConcepts[num - 1] }
+    }
+  }
+
+  // 2. Ordinal word match: e.g. "moving on to the second concept", "second concept"
+  const ordinals: Record<string, number> = {
+    first: 1,
+    second: 2,
+    third: 3,
+    fourth: 4,
+    fifth: 5,
+    sixth: 6,
+    seventh: 7,
+    eighth: 8,
+    ninth: 9,
+    tenth: 10,
+  }
+  const ordinalMatch = text.match(
+    /(?:moving\s+(?:on\s+)?to|let['’]?s\s+move\s+(?:on\s+)?to|now\s+moving\s+to|next\s+is)\s+(?:the\s+)?([a-z]+)\s+concept/i
+  )
+  if (ordinalMatch && ordinalMatch[1]) {
+    const word = ordinalMatch[1].toLowerCase()
+    if (ordinals[word] && ordinals[word] <= keyConcepts.length) {
+      const idx = ordinals[word] - 1
+      return { targetIdx: idx, conceptTitle: keyConcepts[idx] }
+    }
+  }
+
+  // 3. Keyword / topic title match: e.g. "moving on to cellulose", "let's talk about cellulose"
+  for (let i = 0; i < keyConcepts.length; i++) {
+    const c = keyConcepts[i]
+    // Filter significant topic words (length >= 4)
+    const words = c
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 4 && !['what', 'with', 'from', 'this', 'that', 'about', 'basic', 'types', 'cell'].includes(w))
+    for (const word of words) {
+      const isUnique = !keyConcepts.some((other, oIdx) => oIdx !== i && other.toLowerCase().includes(word))
+      if (isUnique) {
+        const pattern = new RegExp(
+          `(?:moving\\s+(?:on\\s+)?to|let['’]?s\\s+(?:move\\s+to|talk\\s+about|discuss)|now\\s+(?:on\\s+to|for)|turn(?:ing)?\\s+to|next\\s+up\\s+is)\\s+${word}`,
+          'i'
+        )
+        if (pattern.test(text)) {
+          return { targetIdx: i, conceptTitle: keyConcepts[i] }
+        }
+      }
+    }
+  }
+
+  return null
 }
 
 export default function ModuleClassroomPage() {
@@ -178,13 +219,72 @@ export default function ModuleClassroomPage() {
     userVolume,
     selectedVoice,
     setSelectedVoice,
+    latestVideoFrame,
+    videoMimeType,
     startClass,
     toggleMute,
+    setTeacherAudioMuted,
     endCall,
     resetToIdle,
     sendBoardContext,
     sendTextMessage,
   } = useGeminiLive()
+
+  // Google Gemini 3.8 Live Avatar configuration state
+  const [avatarConfig, setAvatarConfig] = useState<LiveAvatarConfig | null>(null)
+  const simliControllerRef = useRef<SimliAvatarController | null>(null)
+  const saveNotesToSupabaseRef = useRef<((notes: string) => Promise<void>) | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('ai_tutor_avatar_config')
+        if (saved) {
+          setAvatarConfig(JSON.parse(saved))
+        }
+      } catch {}
+    }
+  }, [])
+
+  const handleCustomAvatarChange = useCallback((cfg: LiveAvatarConfig | null) => {
+    setAvatarConfig((prev) => {
+      if (prev === cfg) return prev
+      if (!prev && !cfg) return prev
+      if (
+        prev &&
+        cfg &&
+        prev.avatarName === cfg.avatarName &&
+        prev.customizedAvatar?.imageData === cfg.customizedAvatar?.imageData
+      ) {
+        return prev
+      }
+      return cfg
+    })
+  }, [])
+
+  const handleSimliControllerReady = useCallback((ctrl: SimliAvatarController | null) => {
+    simliControllerRef.current = ctrl
+  }, [])
+
+  const handleSimliActiveChange = useCallback(
+    (active: boolean) => {
+      setTeacherAudioMuted(active)
+    },
+    [setTeacherAudioMuted]
+  )
+
+  const handleBoardContentChange = useCallback(
+    (summary: { notesText: string; roughText: string; fullSummary: string }) => {
+      setLatestBoardSummary((prev) => (prev === summary.fullSummary ? prev : summary.fullSummary))
+      const notesContent = summary.notesText.trim()
+      if (notesContent && notesContent !== lastSentBoardNotesRef.current) {
+        lastSentBoardNotesRef.current = notesContent
+        setChapterNotes(notesContent)
+        saveNotesToSupabaseRef.current?.(notesContent)
+      }
+    },
+    []
+  )
 
   // Interactive page flip barrier: prevents premature page flips until student replies to checkpoint question
   const isAwaitingStudentAnswerRef = useRef<boolean>(false)
@@ -193,6 +293,9 @@ export default function ModuleClassroomPage() {
   // Verdict review barrier: locks whiteboard on current page until student confirms understanding
   const isReviewingVerdictRef = useRef<boolean>(false)
   const [isReviewingVerdict, setIsReviewingVerdict] = useState<boolean>(false)
+
+  // Mafs.dev high-precision dynamic mathematical & scientific graph state
+  const [activeGraph, setActiveGraph] = useState<MafsGraphCanvasProps | null>(null)
 
   const handleStudentSubmitAnswer = (answer: string) => {
     if (!answer?.trim()) return
@@ -256,6 +359,7 @@ export default function ModuleClassroomPage() {
   const [preferredVoice, setPreferredVoice] = useState('Aoede')
   const [isCompletedBefore, setIsCompletedBefore] = useState(false)
   const [studentProfileClassLevel, setStudentProfileClassLevel] = useState<string>('')
+  const [studentName, setStudentName] = useState<string>('')
   const [endChapterConfirmPrompt, setEndChapterConfirmPrompt] = useState<string | null>(null)
 
   // Interactive 3D Visualization Stage state
@@ -274,6 +378,10 @@ export default function ModuleClassroomPage() {
     currentConceptIndexRef.current = currentConceptIndex
   }, [currentConceptIndex])
   const [completedConcepts, setCompletedConcepts] = useState<string[]>([])
+  const completedConceptsRef = useRef<string[]>([])
+  useEffect(() => {
+    completedConceptsRef.current = completedConcepts
+  }, [completedConcepts])
   const [lastCoveredConcept, setLastCoveredConcept] = useState<string>('')
 
   // Chapter Notes state, AI optimization & auto-save to Supabase
@@ -289,7 +397,8 @@ export default function ModuleClassroomPage() {
   const chalkboardRef = useRef<GreenChalkboardRef | null>(null)
   const executedSceneDirectivesRef = useRef<Set<string>>(new Set())
   const renderedVisualConceptsRef = useRef<Set<number>>(new Set())
-  const autoVisualTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastPageJumpTimeRef = useRef<number>(0)
+  const lastTargetIdxRef = useRef<number>(-1)
 
   // Exact database values (no hardcoded mocks)
   const resolvedClassLevel =
@@ -318,20 +427,53 @@ export default function ModuleClassroomPage() {
 
   const resolvedTitle = activeModule?.title || ''
 
+  // Guard to ensure loadModuleContext runs strictly once per module navigation
+  const hasLoadedModuleContextRef = useRef<string | null>(null)
+
   // 1. Fetch exact module context, student profile, concept tracking & existing notes
   useEffect(() => {
+    if (!userId || !moduleId) return
+    const contextKey = `${userId}_${moduleId}`
+    if (hasLoadedModuleContextRef.current === contextKey) return
+    hasLoadedModuleContextRef.current = contextKey
+
     const supabase = createClient()
 
     async function loadModuleContext() {
       setIsLoadingLesson(true)
       try {
-        // Fetch student profile class_level and voice preference
+        // Instant restore of completed concepts from localStorage cache
+        if (typeof window !== 'undefined' && moduleId) {
+          try {
+            const cached = localStorage.getItem(`completed_concepts_${moduleId}`)
+            if (cached) {
+              const parsed = JSON.parse(cached)
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                completedConceptsRef.current = parsed
+                setCompletedConcepts(parsed)
+              }
+            }
+          } catch {}
+        }
+
+        // Fetch student profile class_level, voice preference, and name
         const { data: profile } = await supabase
           .from('profiles')
-          .select('class_level, preferred_teacher_voice')
+          .select('class_level, preferred_teacher_voice, full_name')
           .eq('id', userId)
           .single()
 
+        let foundName = ''
+        if (profile?.full_name?.trim()) {
+          foundName = profile.full_name.trim()
+        } else {
+          const { data: authData } = await supabase.auth.getUser()
+          const meta = authData?.user?.user_metadata
+          foundName = (meta?.full_name || meta?.name || authData?.user?.email?.split('@')[0] || '').trim()
+        }
+        if (foundName) {
+          setStudentName(foundName)
+        }
         if (profile?.class_level) {
           setStudentProfileClassLevel(profile.class_level)
         }
@@ -461,24 +603,36 @@ export default function ModuleClassroomPage() {
 
         if (progress) {
           if (typeof progress.current_concept_index === 'number') {
-            currentConceptIndexRef.current = progress.current_concept_index
-            setCurrentConceptIndex(progress.current_concept_index)
+            if (currentConceptIndexRef.current !== progress.current_concept_index) {
+              currentConceptIndexRef.current = progress.current_concept_index
+              setCurrentConceptIndex(progress.current_concept_index)
+            }
           }
           if (Array.isArray(progress.completed_concepts)) {
-            setCompletedConcepts(parseKeyConcepts(progress.completed_concepts))
+            const loaded = parseKeyConcepts(progress.completed_concepts)
+            const merged = Array.from(new Set([...completedConceptsRef.current, ...loaded]))
+            if (merged.length !== completedConceptsRef.current.length || !merged.every((v, i) => v === completedConceptsRef.current[i])) {
+              completedConceptsRef.current = merged
+              setCompletedConcepts(merged)
+            }
+            if (typeof window !== 'undefined' && moduleId) {
+              try {
+                localStorage.setItem(`completed_concepts_${moduleId}`, JSON.stringify(merged))
+              } catch {}
+            }
           }
           if (progress.last_covered_concept) {
-            setLastCoveredConcept(progress.last_covered_concept)
+            setLastCoveredConcept((prev) => (prev === progress.last_covered_concept ? prev : progress.last_covered_concept))
           }
           if (progress.chapter_notes) {
-            setChapterNotes(progress.chapter_notes)
+            setChapterNotes((prev) => (prev === progress.chapter_notes ? prev : progress.chapter_notes))
           }
           if (progress.status === 'completed' || progress.completed_at) {
             setIsCompletedBefore(true)
             setModuleCompletedSuccess(true)
           }
           if (progress.visual_progress && typeof progress.visual_progress.currentStepIndex === 'number') {
-            setActiveVisualStepIndex(progress.visual_progress.currentStepIndex)
+            setActiveVisualStepIndex((prev) => (prev === progress.visual_progress.currentStepIndex ? prev : progress.visual_progress.currentStepIndex))
           }
         }
       } catch (err) {
@@ -491,7 +645,7 @@ export default function ModuleClassroomPage() {
     if (userId && moduleId) {
       loadModuleContext()
     }
-  }, [userId, moduleId, setSelectedVoice])
+  }, [userId, moduleId])
 
   // 2. Synchronize AI spoken directives to Green Chalkboard and 3D Simulation Viewport
   useEffect(() => {
@@ -582,25 +736,39 @@ export default function ModuleClassroomPage() {
         }
       }
 
-      // Check for [CONCEPT_DONE: ...] or [CONCEPT_DONE]
-      const doneMatches = Array.from(latest.text.matchAll(/\[(?:CONCEPT_DONE|CONCEPT_MASTERED|MASTERED)(?::\s*([^\]]*))?\]/gi))
+      // Check for [CONCEPT_DONE: ...] or [CONCEPT_DONE] or write_chalkboard(action="concept_done")
+      const doneMatches = Array.from(latest.text.matchAll(/\[(?:CONCEPT_DONE|CONCEPT_MASTERED|MASTERED)(?::\s*([^\]]*))?\]|write_chalkboard\s*\(\s*(?:action\s*=\s*)?["']?(?:concept_done|concept_mastered)["']?(?:\s*,\s*(?:content\s*=\s*)?["']?([^"'\)]*)["']?)?/gi))
       for (const dm of doneMatches) {
         const tag = dm[0]
         const key = `${transcriptId}:${tag}`
         if (!executedSceneDirectivesRef.current.has(key)) {
           executedSceneDirectivesRef.current.add(key)
-          handleConceptDone(dm[1] || '')
+          handleConceptDone(dm[1] || dm[2] || '')
         }
       }
 
-      // Check for [CONCEPT_FOCUS: ...] or [FOCUS: ...]
-      const focusMatches = Array.from(latest.text.matchAll(/\[(?:CONCEPT_FOCUS|FOCUS):\s*([^\]]+)\]/gi))
+      // Check for [CONCEPT_FOCUS: ...] or [FOCUS: ...] or write_chalkboard(action="concept_focus")
+      const focusMatches = Array.from(latest.text.matchAll(/\[(?:CONCEPT_FOCUS|FOCUS):\s*([^\]]+)\]|write_chalkboard\s*\(\s*(?:action\s*=\s*)?["']?(?:concept_focus|focus)["']?\s*,\s*(?:content\s*=\s*)?["']?([^"'\)]+)["']?/gi))
       for (const fm of focusMatches) {
         const tag = fm[0]
         const key = `${transcriptId}:${tag}`
         if (!executedSceneDirectivesRef.current.has(key)) {
           executedSceneDirectivesRef.current.add(key)
-          handleConceptFocus(fm[1] || '')
+          handleConceptFocus(fm[1] || fm[2] || '')
+        }
+      }
+
+      // Check for natural spoken transitions like "Moving on to Concept 2, let's talk about cellulose...", "Now let's move to Concept 2..."
+      const keyConceptsList = parseKeyConcepts(activeModule?.key_concepts)
+      const spokenTransition = detectSpokenConceptTransition(latest.text, keyConceptsList)
+      if (spokenTransition) {
+        const spokenKey = `${transcriptId}:spoken_concept_${spokenTransition.targetIdx}`
+        if (!executedSceneDirectivesRef.current.has(spokenKey)) {
+          executedSceneDirectivesRef.current.add(spokenKey)
+          if (spokenTransition.targetIdx > currentConceptIndexRef.current) {
+            console.log(`[Spoken Concept Transition] Advancing from Concept ${currentConceptIndexRef.current + 1} to Concept ${spokenTransition.targetIdx + 1}: "${spokenTransition.conceptTitle}"`)
+            handleConceptGoto(spokenTransition.targetIdx + 1)
+          }
         }
       }
     }
@@ -665,17 +833,17 @@ export default function ModuleClassroomPage() {
       if (typeof stepIdx === 'number' && lessonManifest && stepIdx >= 0 && stepIdx < lessonManifest.steps.length) {
         setActiveVisualStepIndex(stepIdx)
         const step = lessonManifest.steps[stepIdx]
-        if (step.type === 'IMAGE' && step.content.image) {
-          chalkboardRef.current?.drawImageCard?.(step.title, step.content.image.caption, step.content.image.attribution)
-        } else if (step.type === 'VIDEO' && step.content.video) {
+        if (step.type === 'VIDEO' && step.content.video) {
           chalkboardRef.current?.drawVideoCard?.(step.title, step.content.video.description)
         } else if (step.type === 'GRAPH') {
           chalkboardRef.current?.drawGraph(step.content.graph?.title || 'linear')
         } else if (step.type === 'DIAGRAM') {
           chalkboardRef.current?.handleAiDirective(`[DIAGRAM: ${step.title}]`)
+        } else {
+          chalkboardRef.current?.drawFlowchart?.(`${step.title} -> Core Concept Formulation -> Board Application`)
         }
       } else if (params.title) {
-        chalkboardRef.current?.drawImageCard?.(params.title, params.caption, params.attribution)
+        chalkboardRef.current?.drawFlowchart?.(`${params.title} -> Socratic Progression`)
       }
     } else if (action === 'UPDATE_GRAPH') {
       const stepIdx = typeof params.stepIndex === 'number' ? params.stepIndex : params.step
@@ -733,19 +901,8 @@ export default function ModuleClassroomPage() {
         chalkboardRef.current.drawGraph(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_geometry' && directive.chalkboardContent) {
         chalkboardRef.current.drawGeometry?.(directive.chalkboardContent)
-      } else if (directive.chalkboardAction === 'draw_image' && directive.chalkboardContent) {
-        const parts = directive.chalkboardContent.split('|').map((s) => s.trim())
-        chalkboardRef.current.drawImageCard?.(
-          parts[0] || 'Textbook Diagram',
-          parts[1] || '',
-          parts[2] || 'NCERT Standard'
-        )
-      } else if (directive.chalkboardAction === 'draw_video' && directive.chalkboardContent) {
-        const parts = directive.chalkboardContent.split('|').map((s) => s.trim())
-        chalkboardRef.current.drawVideoCard?.(
-          parts[0] || 'Demonstration',
-          parts[1] || ''
-        )
+      } else if (directive.chalkboardAction === 'draw_flowchart' && directive.chalkboardContent) {
+        chalkboardRef.current.drawFlowchart(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_table' && directive.chalkboardContent) {
         chalkboardRef.current.drawTable?.(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_flowchart' && directive.chalkboardContent) {
@@ -755,12 +912,30 @@ export default function ModuleClassroomPage() {
         directive.chalkboardContent
       ) {
         chalkboardRef.current.handleAiDirective(`[NUMERICAL: ${directive.chalkboardContent}]`)
+      } else if (
+        (directive.chalkboardAction === 'render_svg_diagram' || directive.chalkboardAction === 'draw_svg') &&
+        directive.chalkboardContent
+      ) {
+        const rawContent = directive.chalkboardContent.trim()
+        if (rawContent.includes('|') && rawContent.includes('<svg')) {
+          const parts = rawContent.split('|').map((s) => s.trim())
+          chalkboardRef.current.drawSvgDiagram?.(
+            parts[0] || 'Scientific Diagram',
+            parts[1] || '',
+            parts[2] || ''
+          )
+        } else if (rawContent.includes('<svg')) {
+          chalkboardRef.current.drawSvgDiagram?.('Scientific Diagram', rawContent)
+        } else {
+          chalkboardRef.current.drawSvgDiagram?.(rawContent, '')
+        }
       }
     }
   }
 
   // 3. Auto-save notes to Supabase user_progress.chapter_notes
   const saveNotesToSupabase = async (notesToSave: string) => {
+    saveNotesToSupabaseRef.current = saveNotesToSupabase
     if (!userId || !moduleId || !notesToSave.trim()) return
     setNotesSaveStatus('saving')
     try {
@@ -951,188 +1126,7 @@ export default function ModuleClassroomPage() {
     }
   }
 
-  // 6. Concept Tracking Callbacks: auto-save progress and resume state
-  const handleConceptFocus = (conceptName: string) => {
-    if (isAwaitingStudentAnswerRef.current || isReviewingVerdictRef.current) {
-      console.log('[Page Guard] Blocked premature concept_focus while awaiting answer / reviewing verdict on current page:', conceptName)
-      return
-    }
-    const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
-    if (keyConcepts.length === 0) return
-
-    const norm = (s: string) =>
-      String(s || '')
-        .toLowerCase()
-        .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
-        .replace(/^concept\s*\d*[:\-\s]*/i, '')
-        .replace(/^\d+[\.\:\)\-]\s*/, '')
-        .replace(/[^a-z0-9]/g, '')
-
-    const targetNorm = norm(conceptName)
-
-    let targetIdx = -1
-    const numMatch = String(conceptName || '').match(/\b(\d+)\b/)
-    if (numMatch) {
-      const parsedNum = parseInt(numMatch[1], 10)
-      if (parsedNum >= 1 && parsedNum <= keyConcepts.length) {
-        targetIdx = parsedNum - 1
-      }
-    }
-
-    if (targetIdx === -1 && targetNorm) {
-      targetIdx = keyConcepts.findIndex((c) => {
-        const cNorm = norm(c)
-        return (
-          cNorm === targetNorm ||
-          cNorm.includes(targetNorm) ||
-          targetNorm.includes(cNorm)
-        )
-      })
-    }
-
-    if (targetIdx === -1) {
-      targetIdx = currentConceptIndex
-    }
-
-    const canonicalConcept = keyConcepts[targetIdx] || conceptName
-
-    // If tutor advances to concept N (e.g. Concept 2), all prior concepts (0..N-1) are completed
-    let updatedCompleted: string[] = []
-    setCompletedConcepts((prev) => {
-      let updated = [...prev]
-      for (let i = 0; i < targetIdx; i++) {
-        const prevConcept = keyConcepts[i]
-        if (prevConcept && !updated.some((u) => norm(u) === norm(prevConcept))) {
-          updated.push(prevConcept)
-        }
-      }
-      updatedCompleted = updated
-      return updated
-    })
-
-    currentConceptIndexRef.current = targetIdx
-    setCurrentConceptIndex(targetIdx)
-    setLastCoveredConcept(canonicalConcept)
-
-    // Whiteboard 1-Concept-Per-Page: Dedicated page per concept (0 -> Page 1, 1 -> Page 2...)
-    chalkboardRef.current?.goToPage?.(targetIdx)
-
-    autoTriggerVisualForConcept(targetIdx)
-
-    const supabase = createClient()
-    supabase
-      .from('user_progress')
-      .upsert(
-        {
-          user_id: userId,
-          syllabus_module_id: moduleId,
-          current_concept_index: targetIdx,
-          completed_concepts: updatedCompleted,
-          last_covered_concept: canonicalConcept,
-          status: isCompletedBefore || moduleCompletedSuccess ? 'completed' : 'in_progress',
-        },
-        { onConflict: 'user_id,syllabus_module_id' }
-      )
-      .then(({ error }) => {
-        if (error) console.error('Failed to persist concept focus:', error)
-      })
-  }
-
-  const handleConceptDone = (conceptName: string) => {
-    if (isAwaitingStudentAnswerRef.current || isReviewingVerdictRef.current) {
-      console.log('[Page Guard] Blocked premature concept_done while awaiting answer / reviewing verdict on current page:', conceptName)
-      return
-    }
-    const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
-    if (keyConcepts.length === 0) return
-
-    const norm = (s: string) =>
-      String(s || '')
-        .toLowerCase()
-        .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
-        .replace(/^concept\s*\d*[:\-\s]*/i, '')
-        .replace(/^\d+[\.\:\)\-]\s*/, '')
-        .replace(/[^a-z0-9]/g, '')
-
-    const targetNorm = norm(conceptName)
-
-    let matchedIdx = -1
-    const numMatch = String(conceptName || '').match(/\b(\d+)\b/)
-    if (numMatch) {
-      const parsedNum = parseInt(numMatch[1], 10)
-      if (parsedNum >= 1 && parsedNum <= keyConcepts.length) {
-        matchedIdx = parsedNum - 1
-      }
-    }
-
-    if (matchedIdx === -1 && targetNorm) {
-      matchedIdx = keyConcepts.findIndex((c) => {
-        const cNorm = norm(c)
-        return (
-          cNorm === targetNorm ||
-          cNorm.includes(targetNorm) ||
-          targetNorm.includes(cNorm)
-        )
-      })
-    }
-
-    if (matchedIdx === -1) {
-      matchedIdx = currentConceptIndex
-    }
-
-    const canonicalConcept = keyConcepts[matchedIdx] || keyConcepts[currentConceptIndex]
-    if (!canonicalConcept) return
-
-    setCompletedConcepts((prev) => {
-      const alreadyDone = prev.some((p) => norm(p) === norm(canonicalConcept))
-      const updated = alreadyDone ? prev : [...prev, canonicalConcept]
-
-      const nextIdx = Math.min(
-        matchedIdx + 1,
-        Math.max(0, keyConcepts.length - 1)
-      )
-      currentConceptIndexRef.current = nextIdx
-      setCurrentConceptIndex(nextIdx)
-      setLastCoveredConcept(canonicalConcept)
-
-      if (nextIdx > matchedIdx && nextIdx < keyConcepts.length) {
-        // Whiteboard 1-Concept-Per-Page: Advance to next concept's page
-        chalkboardRef.current?.goToPage?.(nextIdx)
-        setTimeout(() => {
-          autoTriggerVisualForConcept(nextIdx)
-        }, 800)
-      }
-
-      const isAllDone = keyConcepts.length > 0 && updated.length >= keyConcepts.length
-
-      const supabase = createClient()
-      supabase
-        .from('user_progress')
-        .upsert(
-          {
-            user_id: userId,
-            syllabus_module_id: moduleId,
-            current_concept_index: nextIdx,
-            completed_concepts: updated,
-            last_covered_concept: canonicalConcept,
-            status: isCompletedBefore || isAllDone ? 'completed' : 'in_progress',
-            ...(isAllDone ? { completed_at: new Date().toISOString() } : {}),
-          },
-          { onConflict: 'user_id,syllabus_module_id' }
-        )
-        .then(({ error }) => {
-          if (error) console.error('Failed to persist completed concept:', error)
-        })
-
-      if (isAllDone && !isCompletedBefore && !isMarkingCompleteRef.current) {
-        markModuleAsCompleted()
-      }
-
-      return updated
-    })
-  }
-
-  // 7. Rewind / Concept Jump Navigation (Bidirectional sync with Supabase and UI)
+  // 6. Rewind / Concept Jump Navigation (Bidirectional sync with Supabase and UI)
   const handleConceptGoto = async (target: number | string) => {
     const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
     if (keyConcepts.length === 0) return
@@ -1160,22 +1154,25 @@ export default function ModuleClassroomPage() {
       }
     }
 
-    const newCompleted = keyConcepts.slice(0, targetIdx)
     const targetConceptName = keyConcepts[targetIdx] || activeModule?.title || 'Concept'
+
+    isAwaitingStudentAnswerRef.current = false
+    setIsAwaitingStudentAnswer(false)
+    isReviewingVerdictRef.current = false
+    setIsReviewingVerdict(false)
 
     currentConceptIndexRef.current = targetIdx
     setCurrentConceptIndex(targetIdx)
-    setCompletedConcepts(newCompleted)
     setLastCoveredConcept(targetConceptName)
     setIsCompletedBefore(false)
     setModuleCompletedSuccess(false)
 
-    // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page
-    chalkboardRef.current?.goToPage?.(targetIdx)
-
-    // Trigger visual for target concept only if not already rendered to prevent overlapping
-    if (!renderedVisualConceptsRef.current.has(targetIdx)) {
-      autoTriggerVisualForConcept(targetIdx)
+    // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page (or clean reset for Page 1)
+    if (targetIdx === 0) {
+      chalkboardRef.current?.resetBoard?.()
+      renderedVisualConceptsRef.current.clear()
+    } else {
+      chalkboardRef.current?.goToPage?.(targetIdx, targetConceptName)
     }
 
     try {
@@ -1187,7 +1184,7 @@ export default function ModuleClassroomPage() {
             user_id: userId,
             syllabus_module_id: moduleId,
             current_concept_index: targetIdx,
-            completed_concepts: newCompleted,
+            completed_concepts: completedConceptsRef.current,
             last_covered_concept: targetConceptName,
             status: 'in_progress',
             completed_at: null,
@@ -1196,7 +1193,7 @@ export default function ModuleClassroomPage() {
         )
 
       const newPercent =
-        keyConcepts.length > 0 ? Math.round((newCompleted.length / keyConcepts.length) * 100) : 0
+        keyConcepts.length > 0 ? Math.round((completedConceptsRef.current.length / keyConcepts.length) * 100) : 0
 
       triggerCompanionGuidance({
         animation: 'listening',
@@ -1212,44 +1209,146 @@ export default function ModuleClassroomPage() {
     }
   }
 
+  // 7. Concept Tracking Callbacks: auto-save progress and resume state
+  const handleConceptFocus = (conceptName: string | number) => {
+    const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
+    if (keyConcepts.length === 0) return
+
+    let targetIdx = -1
+
+    if (typeof conceptName === 'number') {
+      targetIdx = Math.max(0, Math.min(conceptName - 1, keyConcepts.length - 1))
+    } else {
+      const raw = String(conceptName || '').trim()
+      const numMatch = raw.match(/(?:concept\s*#?\s*)?(\d+)/i)
+      if (numMatch && numMatch[1]) {
+        const parsedNum = parseInt(numMatch[1], 10)
+        if (parsedNum >= 1 && parsedNum <= keyConcepts.length) {
+          targetIdx = parsedNum - 1
+        }
+      }
+
+      if (targetIdx === -1) {
+        const norm = (s: string) =>
+          String(s || '')
+            .toLowerCase()
+            .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
+            .replace(/^concept\s*\d*[:\-\s]*/i, '')
+            .replace(/^\d+[\.\:\)\-]\s*/, '')
+            .replace(/[^a-z0-9]/g, '')
+
+        const targetNorm = norm(raw)
+        if (targetNorm) {
+          const matchedIdx = keyConcepts.findIndex((c) => {
+            const cNorm = norm(c)
+            return cNorm === targetNorm || cNorm.includes(targetNorm) || targetNorm.includes(cNorm)
+          })
+          if (matchedIdx >= 0) {
+            targetIdx = matchedIdx
+          }
+        }
+      }
+
+      if (targetIdx === -1) {
+        if (currentConceptIndexRef.current < keyConcepts.length - 1) {
+          targetIdx = currentConceptIndexRef.current + 1
+        } else {
+          return
+        }
+      }
+    }
+
+    // Debounce guard: do not jump to the same page or rapid-fire jump within 1500ms
+    const now = Date.now()
+    if (
+      targetIdx === currentConceptIndexRef.current ||
+      (targetIdx === lastTargetIdxRef.current && now - lastPageJumpTimeRef.current < 1500)
+    ) {
+      return
+    }
+
+    lastPageJumpTimeRef.current = now
+    lastTargetIdxRef.current = targetIdx
+    handleConceptGoto(targetIdx + 1)
+  }
+
+  const handleConceptDone = (conceptName?: string) => {
+    isAwaitingStudentAnswerRef.current = false
+    setIsAwaitingStudentAnswer(false)
+    isReviewingVerdictRef.current = false
+    setIsReviewingVerdict(false)
+
+    const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
+    if (keyConcepts.length === 0) return
+
+    let matchedIdx = currentConceptIndexRef.current
+    if (conceptName?.trim()) {
+      const numMatch = String(conceptName).match(/\b(\d+)\b/)
+      if (numMatch) {
+        const parsed = parseInt(numMatch[1], 10)
+        if (parsed >= 1 && parsed <= keyConcepts.length) {
+          matchedIdx = parsed - 1
+        }
+      } else {
+        const norm = (s: string) =>
+          String(s || '')
+            .toLowerCase()
+            .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
+            .replace(/^concept\s*\d*[:\-\s]*/i, '')
+            .replace(/^\d+[\.\:\)\-]\s*/, '')
+            .replace(/[^a-z0-9]/g, '')
+
+        const targetNorm = norm(conceptName)
+        const found = keyConcepts.findIndex((c) => {
+          const cNorm = norm(c)
+          return cNorm === targetNorm || cNorm.includes(targetNorm) || targetNorm.includes(cNorm)
+        })
+        if (found >= 0) matchedIdx = found
+      }
+    }
+
+    const canonicalConcept = keyConcepts[matchedIdx] || keyConcepts[currentConceptIndexRef.current]
+    if (canonicalConcept && !completedConceptsRef.current.includes(canonicalConcept)) {
+      const updated = [...completedConceptsRef.current, canonicalConcept]
+      completedConceptsRef.current = updated
+      setCompletedConcepts(updated)
+
+      if (typeof window !== 'undefined' && moduleId) {
+        try {
+          localStorage.setItem(`completed_concepts_${moduleId}`, JSON.stringify(updated))
+        } catch {}
+      }
+
+      if (userId && moduleId) {
+        const supabase = createClient()
+        supabase
+          .from('user_progress')
+          .upsert(
+            {
+              user_id: userId,
+              syllabus_module_id: moduleId,
+              completed_concepts: updated,
+              current_concept_index: currentConceptIndexRef.current,
+              last_covered_concept: canonicalConcept,
+              status: updated.length >= keyConcepts.length ? 'completed' : 'in_progress',
+            },
+            { onConflict: 'user_id,syllabus_module_id' }
+          )
+          .then(() => {})
+      }
+    }
+
+    if (keyConcepts.length > 0 && completedConceptsRef.current.length >= keyConcepts.length) {
+      markModuleAsCompleted()
+    }
+  }
+
   const isCallActive =
     connectionState === 'CONNECTED' ||
     connectionState === 'LISTENING' ||
     connectionState === 'TEACHER_SPEAKING' ||
     connectionState === 'MUTED' ||
     connectionState === 'CONNECTING'
-
-  // Keyboard shortcuts (M to mute, Esc to end)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isCallActive) return
-      if (e.key === 'm' || e.key === 'M') {
-        e.preventDefault()
-        toggleMute()
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        handleOpenQuiz()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isCallActive, toggleMute])
-
-  // Automatic visual guarantee: ensures the active concept always displays its rich visual without waiting for student prompt
-  useEffect(() => {
-    if (isCallActive && (connectionState === 'TEACHER_SPEAKING' || connectionState === 'LISTENING')) {
-      if (!renderedVisualConceptsRef.current.has(currentConceptIndex)) {
-        if (autoVisualTimerRef.current) clearTimeout(autoVisualTimerRef.current)
-        autoVisualTimerRef.current = setTimeout(() => {
-          autoTriggerVisualForConcept(currentConceptIndex)
-        }, 1200)
-      }
-    }
-    return () => {
-      if (autoVisualTimerRef.current) clearTimeout(autoVisualTimerRef.current)
-    }
-  }, [isCallActive, connectionState, currentConceptIndex, activeModule, resolvedSubject, resolvedTitle])
 
   // Start Spoken Lesson: continuous teaching flow, explanation-first, worked-demonstrations second, strict chalkboard directives
   const handleStartClass = () => {
@@ -1349,17 +1448,21 @@ export default function ModuleClassroomPage() {
     const currentVisual = inferConceptVisualDirective(currentConcept, resolvedSubject, chapterName)
 
     const visualRoadmap = keyConcepts
-      .map((c: string, i: number) => {
-        const v = inferConceptVisualDirective(c, resolvedSubject, chapterName)
-        return `  * Concept #${i + 1} "${c}":\n    -> AUTO-TRIGGER VISUAL: ${v.toolCallExample}`
-      })
+      .map((c: string, i: number) => `  * Concept #${i + 1} "${c}": render_svg_diagram(title="${c}")`)
       .join('\n')
 
+    const studentFirstName = studentName ? studentName.split(' ')[0].trim() : ''
+
+    const boardSummary = chalkboardRef.current?.getBoardSummary()?.notesText || chapterNotes || ''
+    const boardContinuationNote = boardSummary.trim()
+      ? `\nCURRENT CHALKBOARD NOTES (DO NOT RE-WRITE OR DUPLICATE):\n"""\n${boardSummary.trim().slice(-500)}\n"""\nCONTINUATION MANDATE: The chalkboard already contains the notes above. Continue directly from where you left off. DO NOT re-write, duplicate, or re-draw any note or diagram already present on the board.\n`
+      : ''
+
     const kickoffPrompt = isCompletedModule
-      ? `Hello Teacher! I have completed this capsule. Please review the key takeaways on the whiteboard, and ask if I have any questions before the quiz.`
+      ? `[SESSION START]: Speak FIRST immediately! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}!"). State that I have completed this capsule, review the key takeaways on the chalkboard, and ask if I have any questions before the quiz.`
       : isResumed
-      ? `Hello Teacher! I am back. Please teach Concept ${currentConceptIndex + 1}: "${currentConcept}". Greet me in 4-6 words, explain the everyday example and plain meaning first, write notes on the whiteboard, show the visual diagram or shape, and guide me step-by-step.`
-      : `Hello Teacher! Please start our class now on Concept 1: "${firstConcept}". Greet me in 4-6 words, explain the everyday example and plain meaning first, write notes on the whiteboard, show the visual diagram or shape, and guide me step-by-step.`
+      ? `[SESSION START]: Speak FIRST immediately without waiting for me to say anything! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}!"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Immediately teach the intuition, write the definition, explain examples, and solve the worked question step-by-step on the board while speaking aloud.`
+      : `[SESSION START]: Speak FIRST immediately without waiting for me to say anything! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}."). Introduce yourself and immediately begin Concept 1: "${firstConcept}". Follow the full teaching cadence: provide everyday intuition, dynamic visual, formal definition, concrete examples, and solve the first worked question step-by-step on the board while explaining each step aloud. Do NOT wait for me to speak first!`
 
     const conceptDossiersText = buildConceptMicroDossiers(
       keyConcepts,
@@ -1373,54 +1476,117 @@ export default function ModuleClassroomPage() {
     )
 
     const lessonPrompt = `ROLE: Senior Academic Topper Tutor (1-on-1 spoken class with live chalkboard notes).
-STUDENT: ${resolvedClassLevel || 'Class 10'} (${resolvedBoard || 'CBSE'}) | Subject: ${resolvedSubject} (${subjectDirective}) | Capsule: "${resolvedTitle}"${
+STUDENT: ${studentFirstName ? studentFirstName + ' | ' : ''}${resolvedClassLevel || 'Class 10'} (${resolvedBoard || 'CBSE'}) | Subject: ${resolvedSubject} (${subjectDirective}) | Capsule: "${resolvedTitle}"${
   isLastCapsuleOfChapter && nextChapterInfo
     ? ` | Final Capsule (Next: #${nextChapterInfo.orderIndex} "${nextChapterInfo.chapterTitle}")`
     : ''
 }
+${boardContinuationNote}
+CORE INVARIANTS:
+1. SESSION START (SPEAK FIRST):
+   - You MUST speak FIRST immediately upon connection! Do NOT wait for ${studentFirstName || 'the student'} to speak.
+   - Greet ${studentFirstName || 'the student'} warmly by name: "Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}."
+   - Immediately begin teaching Concept 1 following the pedagogical cadence below.
 
-PEDAGOGICAL CADENCE FOR EACH CONCEPT (STRICT 5-STAGE SEQUENCE):
-1. Stage 1 - Real-World Intuitive Hook: Everyday physical phenomenon first before formulas.
-   write_chalkboard(action="draw_note", content="Intuition: <everyday example & plain meaning>", color="botanical")
-2. Stage 2 - Formal Law, Formula & Visual: Precise law, definition, SI units.
-   write_chalkboard(action="draw_highlight_box", content="Law / Formula: <exact law & SI units>", color="coral")
-   Execute mapped visual tool or 3D simulation or draw_shape.
-3. Stage 3 - Authentic Board Exam Numerical & Model Answer:
-   write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Answer: <Topper Model Answer with steps & units>", color="coral")
-4. Stage 4 - Checkpoint Question (1-2 Qs & INVIOLABLE HARD STOP):
-   write_chalkboard(action="draw_question", content="Checkpoint Q: <Question text>", color="amber")
-   STOP speaking at '?' and wait for student.
-   CRITICAL PAGE FLIP BARRIER: DO NOT CHANGE THE WHITEBOARD PAGE. DO NOT CALL action="concept_done" OR action="concept_focus" BEFORE THE STUDENT REPLIES!
-5. Stage 5 - Student Answer & Model Verdict (STAY ON CURRENT WHITEBOARD PAGE):
-   When student replies (spoken or typed in Sobi pod):
-   - write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
-   - write_chalkboard(action="draw_answer_verdict", content="Verdict: <Correct confirmation OR Correction & 100% Ideal Answer>", color="botanical"|"coral")
-   - INVIOLABLE RULE: DO NOT CHANGE THE WHITEBOARD PAGE. DO NOT CALL action="concept_done" OR action="concept_focus" IN THIS TURN!
-   - Speak 2-3 sentences explaining the topper answer and ask the student: "Does this solution make sense to you, or would you like to clarify any step?"
-   - ONLY in the NEXT turn, when the student explicitly replies confirming understanding (e.g., "yes", "understood", "clear", "let's move to next concept"):
-     a) Silently call: write_chalkboard(action="concept_done", content="<Current Concept Name>")
-     b) Silently call: write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean page!
-     c) Begin Stage 1 for the next concept on the new clean page.
-     d) If all concepts completed, call: conclude_and_open_quiz(summary="...")
+2. CONTINUOUS TEACHING (NEVER STOP PREMATURELY):
+   - Do NOT stop talking after just 2-3 sentences in the middle of a concept!
+   - Teach the full sequence: everyday intuition, dynamic visual, formal definition, concrete examples, and solve the worked question step-by-step.
+   - Only when this full sequence is completed on the board, pause and ask the student the understanding check question.
 
-FULL WHITEBOARD CANVAS & PALETTE:
-- Whiteboard is single source of truth for notes. 740px width with automatic line-wrapping.
-- color="botanical" (definitions, correct verdict) | "coral" (formulas, exam Qs, corrections) | "blue" (examples, student answers) | "amber" (checkpoint Qs, constants) | "primary" (general notes).
+3. EXPLAIN FIRST, READ ALOUD VERBATIM, WRITE STEP-BY-STEP (NEVER DUMP AT ONCE):
+   - For every definition, example, flowchart, numerical, or note:
+     a) Explain the intuitive concept and mechanism FIRST in conversational spoken English.
+     b) READ the exact definition, example, formula, flowchart step, or numerical aloud word-for-word so the student hears it clearly.
+     c) WRITE it to the chalkboard step-by-step using separate, progressive tool calls. NEVER dump an entire multi-line block, derivation, question, or flowchart all at once!
+   - You MUST speak aloud what you are writing while you write it (examples, definitions, flowcharts, steps). Never write or draw in silence.
 
-SPEECH PURITY:
-- All write_chalkboard calls must be silent function calls. NEVER speak code, action names, or syntax.
+4. RE-TEACHING & DOUBTS (HIGHEST PRIORITY):
+   - When a student asks to re-teach, re-explain, says "teach again", "explain again", "didn't understand", "why", "no", "repeat", or expresses ANY confusion:
+     a) NEVER say "perfect let's move on", "excellent let's continue", or advance to the next concept!
+     b) DO NOT call concept_done or concept_focus. STAY ON THE CURRENT WHITEBOARD PAGE.
+     c) Respond with warm encouragement: "Of course! Let us break this down from a fresh angle."
+     d) Explain WHY the concept works using a completely fresh, tangible real-life analogy.
+     e) Add a clarification note: write_chalkboard(action="draw_note", content="Breakdown: <fresh simplified intuition>", color="amber")
+     f) Ask: "Does this way of looking at it make sense to you now?"
+     g) Only advance when the student explicitly confirms understanding.
 
-STATUS: ${
-  isCompletedModule
-    ? `Review Mode. Greet in 4-6 words, write key points on board in varied colors, ask if doubts exist or proceed to quiz.`
-    : isResumed
-    ? `Resume Concept #${currentConceptIndex + 1}: "${currentConcept}". Greet in 4-6 words, everyday example first, write notes, follow 5 stages.`
-    : `Start Concept #1: "${firstConcept}". Greet in 4-6 words, everyday example first, write notes, follow 5 stages.`
-}
+DYNAMIC VISUAL & GRAPH ENGINE DIRECTIVES:
+1. Mathematical, Kinematic & Coordinate Graphs:
+   Call plot_mathematical_graph(formula="...", domain="[min,max]", range="[min,max]", title="...", callout="...")
+   (Powered by Mafs.dev pure vector React/SVG engine. Fully customizable for every curve, line, or kinematic motion. NEVER render static images for graphs).
+2. Scientific Diagrams & Physical Models:
+   Call render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision'>...</svg>", caption="...")
+   (Generate authentic vector SVG markup tailored to the exact topic, with clear shapes, contrasting labels, and leader lines. Never use fixed templates).
 
-TEXTBOOK CONCEPT MICRO-DOSSIERS (100% TEXTBOOK ALIGNMENT & 2-3 EXAM QUESTIONS PER CONCEPT):
+PEDAGOGICAL CADENCE (STRICT STEP-BY-STEP SEQUENCE PER CONCEPT):
+
+PHASE 1 - INTUITION & GENERATIVE VISUAL:
+1. Provide an everyday physical scenario or relatable hook before equations:
+   write_chalkboard(action="draw_note", content="Intuition: <everyday real-world hook>", color="botanical")
+2. Generative Visual Representation (Always tailored, never canned):
+   - For mathematical, coordinate, or kinematics graphs: Call plot_mathematical_graph(formula="...", domain="[min,max]", range="[min,max]", title="...", callout="...")
+   - For diagrams, biological structures, or physics setups: Call render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision'>...</svg>", caption="...")
+   - Walk through the visual aloud as you draw, explaining what it represents.
+
+PHASE 2 - FORMAL DEFINITION (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP):
+3. First explain the scientific law or definition clearly aloud in simple intuitive terms. Next, read the exact definition verbatim aloud to the student ("Now let us read the formal definition together: [exact definition]"). Then write it in the highlight box:
+   write_chalkboard(action="draw_highlight_box", content="Definition: <exact scientific formulation, law, or principle with SI units>", color="coral")
+
+PHASE 3 - CONCRETE EXAMPLES (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP):
+4. Explain 1-2 concrete practical applications illustrating the definition and common pitfalls. Speak the explanation first, read the example statement aloud, then write:
+   write_chalkboard(action="draw_note", content="Example: <concrete illustration addressing common pitfalls>", color="blue")
+   When drawing flowcharts: explain each step first, read it aloud, write it to board, then proceed to the next step. Never dump the entire flowchart in one go.
+
+PHASE 4 - TUTOR-SOLVED MODEL QUESTION (READ ALOUD & EXPLAIN STEP-BY-STEP):
+5. Solve a model question progressively step-by-step on the chalkboard.
+   CRITICAL CADENCE (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP, NEVER DUMP AT ONCE):
+   Speak what is being written on the board at each step:
+   a) Problem Context: Explain the physical setup first, read the question aloud verbatim, then write:
+      write_chalkboard(action="draw_note", content="Model Problem: <Question text>", color="coral")
+   b) Given Data: Explain each given quantity and unit, read aloud, then write:
+      write_chalkboard(action="draw_step", content="Given: <values with SI units>", color="amber")
+   c) Governing Formula: Explain why this formula applies, read formula aloud, then write:
+      write_chalkboard(action="draw_step", content="Formula: <governing formula>", color="coral")
+   d) Step-by-Step Calculation: Explain the calculation and algebraic substitution aloud, read aloud, then write:
+      write_chalkboard(action="draw_step", content="Calculation: <step-by-step calculation>", color="blue")
+   e) Final Boxed Answer: Explain the final numerical result, read boxed answer aloud with SI units, then write:
+      write_chalkboard(action="draw_highlight_box", content="Boxed Answer: <final result with SI units>", color="botanical")
+   (Alternatively, write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Given: <values> | Formula: <formula> | Solution: <step-by-step substitution & calculation> | Answer: <boxed answer with SI units>", color="coral") while narrating each step aloud).
+
+PHASE 5 - UNDERSTANDING CHECK (HARD STOP):
+6. Stop speaking at '?' and ask:
+   "Take a look at the board notes, diagram, and worked solution. Did you understand this concept and how we solved this question, or would you like me to explain anything differently?"
+   - If student has doubts or asks to re-teach: RE-TEACH immediately!
+   - If student confirms understanding: Proceed to Phase 6.
+
+PHASE 6 - STUDENT CHECKPOINT QUESTION:
+7. Pose an authentic board-exam question for the student to solve:
+   write_chalkboard(action="draw_question", content="Q: <Targeted board exam question testing this concept>", color="amber")
+   Read the question aloud: "Now, give this question a try! What do you get for the answer?"
+   HARD STOP: Wait for student's voice response.
+
+PHASE 7 - EVALUATION & TRANSITION:
+8. Evaluate student reply:
+   write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
+   write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring & correction>", color="botanical")
+   If correct: "Outstanding! Are you ready to move to the next concept?"
+9. ONLY WHEN STUDENT CONFIRMS (e.g. "yes", "understood", "clear", "next"):
+   a) write_chalkboard(action="concept_done", content="<Current Concept Name>")
+   b) write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
+   c) If all concepts completed, call: conclude_and_open_quiz(summary="...")
+
+QUIZ TIMING RULE:
+- NEVER mention the 10-MCQ quiz or call conclude_and_open_quiz until ALL concepts have been fully taught, solved, and marked done with concept_done!
+
+STUDENT IMAGE & DIAGRAM REQUEST DIRECTIVE:
+You have a real-time whiteboard graphics engine. NEVER tell the student "I am unable to generate images" or "I am an audio AI".
+When a student asks to see an image, picture, diagram, structure, visual, or sketch:
+1. Reply enthusiastically: "Drawing that on the chalkboard for you right now!"
+2. IMMEDIATELY call render_svg_diagram(title="...", svg="<svg ...>...</svg>", caption="...") or plot_mathematical_graph(...).
+
+TEXTBOOK CONCEPT MICRO-DOSSIERS:
 ${conceptDossiersText}
-${visualRoadmap ? `\nVISUAL ROADMAP (SUMMON VISUAL TOOL IN TURN 1 FOR EACH CONCEPT):\n${visualRoadmap}\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
+${visualRoadmap ? `\nVISUAL ROADMAP:\n${visualRoadmap}\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
 RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, intellectually rigorous topper tone.`
 
     // Whiteboard 1-Concept-Per-Page: Ensure active concept page is active
@@ -1432,26 +1598,17 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
       kickoffPrompt,
       (action, content, color) => {
         const isVisualAction = [
-          'draw_image', 'image', 'draw_video', 'video',
-          'draw_diagram', 'diagram', 'draw_graph', 'graph',
+          'draw_graph', 'graph',
           'draw_geometry', 'geometry', 'draw_table', 'table',
           'draw_shape', 'shape', 'draw_rectangle', 'draw_circle', 'draw_triangle',
           'draw_flowchart', 'draw_numerical', 'numerical', 'solve', 'worked_example',
-          'draw_cell', 'draw_atom', 'draw_optics', 'draw_forces', 'draw_magnet',
-          'draw_pressure', 'draw_matter', 'draw_photosynthesis', 'draw_circuit',
-          'draw_circuit_series', 'draw_circuit_parallel'
+          'render_svg_diagram', 'draw_svg', 'draw_svg_diagram',
+          'draw_video', 'video',
         ].includes(action)
         if (isVisualAction) {
           renderedVisualConceptsRef.current.add(currentConceptIndexRef.current)
         }
         if (chalkboardRef.current) {
-          // Whiteboard 1-Concept-Per-Page: Only switch page when concept explicitly changes
-          if (['concept_focus', 'concept_goto', 'goto_concept'].includes(action)) {
-            if (!isAwaitingStudentAnswerRef.current && !isReviewingVerdictRef.current) {
-              chalkboardRef.current.goToPage?.(currentConceptIndexRef.current)
-            }
-          }
-
           if (action === 'set_color' || action === 'chalk_color') {
             chalkboardRef.current.setChalkColor(color || content)
           }
@@ -1494,32 +1651,68 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           else if (action === 'draw_flowchart') chalkboardRef.current.drawFlowchart(content, color)
           else if (action === 'draw_table' || action === 'table') chalkboardRef.current.drawTable?.(content)
           else if (action === 'draw_geometry' || action === 'geometry') chalkboardRef.current.drawGeometry?.(content)
-          else if (action === 'draw_graph' || action === 'graph') chalkboardRef.current.drawGraph(content)
+          else if (action === 'draw_graph' || action === 'graph') {
+            chalkboardRef.current.drawGraph(content)
+            const pipeParts = (content || '').split('|').map((s: string) => s.trim())
+            let formula = ''
+            let domain: [number, number] = [-5, 5]
+            let range: [number, number] = [-5, 5]
+            let title = 'Graph'
+            let callout = ''
+            let points = ''
+            pipeParts.forEach((p: string) => {
+              if (p.startsWith('formula=')) formula = p.substring(8).trim()
+              else if (p.startsWith('title=')) title = p.substring(6).trim()
+              else if (p.startsWith('callout=')) callout = p.substring(8).trim()
+              else if (p.startsWith('points=')) points = p.substring(7).trim()
+              else if (p.startsWith('domain=')) {
+                const m = p.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
+                if (m) domain = [parseFloat(m[1]), parseFloat(m[2])]
+              } else if (p.startsWith('range=')) {
+                const m = p.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
+                if (m) range = [parseFloat(m[1]), parseFloat(m[2])]
+              } else if (!formula && (p.includes('x') || p.includes('^') || p.includes('sin') || p.includes('cos'))) {
+                formula = p
+              }
+            })
+            if (!formula) formula = pipeParts[0] || 'x^2 - 4'
+            setActiveGraph({ formula, domain, range, title, callout, points })
+          }
           else if (action === 'draw_numerical' || action === 'numerical' || action === 'worked_example' || action === 'solve') {
             if (typeof content === 'object') chalkboardRef.current.drawNumericalSolution?.(content)
             else chalkboardRef.current.handleAiDirective(`[NUMERICAL: ${content}]`)
           }
-          else if (action === 'draw_image' || action === 'image') {
+          else if (action === 'draw_image' || action === 'image' || action === 'draw_diagram' || action === 'diagram') {
             const parts = (content || '').split('|').map((s: string) => s.trim())
-            chalkboardRef.current.drawImageCard?.(parts[0] || 'Diagram', parts[1] || '', parts[2] || 'NCERT / Board Standard')
+            if (parts[1] && parts[1].includes('<svg')) {
+              chalkboardRef.current.drawSvgDiagram?.(parts[0] || 'Scientific Diagram', parts[1], parts[2] || '')
+            } else {
+              chalkboardRef.current.drawSvgDiagram?.(parts[0] || content || 'Scientific Diagram', '', parts[1] || '')
+            }
           }
           else if (action === 'draw_video' || action === 'video') {
             const parts = (content || '').split('|').map((s: string) => s.trim())
             chalkboardRef.current.drawVideoCard?.(parts[0] || 'Demonstration', parts[1] || '')
           }
-          else if (action === 'draw_cell') chalkboardRef.current.drawCellDiagram()
-          else if (action === 'draw_atom') chalkboardRef.current.drawAtomDiagram()
-          else if (action === 'draw_optics') chalkboardRef.current.drawOpticsDiagram()
-          else if (action === 'draw_forces') chalkboardRef.current.drawForcesDiagram()
-          else if (action === 'draw_magnet') chalkboardRef.current.drawMagnetDiagram()
-          else if (action === 'draw_pressure') chalkboardRef.current.drawPressureDiagram()
-          else if (action === 'draw_matter') chalkboardRef.current.drawStatesOfMatterDiagram()
-          else if (action === 'draw_photosynthesis') chalkboardRef.current.drawPhotosynthesisDiagram()
-          else if (action === 'draw_circuit' || action === 'draw_circuit_series') chalkboardRef.current.drawCircuitSeries()
-          else if (action === 'draw_circuit_parallel') chalkboardRef.current.drawCircuitParallel()
+          else if (action === 'render_svg_diagram' || action === 'draw_svg' || action === 'draw_svg_diagram') {
+            if (typeof content === 'object' && content !== null) {
+              chalkboardRef.current.drawSvgDiagram?.(content.title || 'Educational Diagram', content.svg || '', content.caption)
+            } else if (typeof content === 'string') {
+              const trimmed = content.trim()
+              if (trimmed.includes('|') && trimmed.includes('<svg')) {
+                const parts = trimmed.split('|').map((s: string) => s.trim())
+                chalkboardRef.current.drawSvgDiagram?.(parts[0] || 'Educational Diagram', parts[1] || '', parts[2])
+              } else if (trimmed.includes('<svg')) {
+                chalkboardRef.current.drawSvgDiagram?.('Educational Diagram', trimmed)
+              } else {
+                chalkboardRef.current.drawSvgDiagram?.(trimmed, '')
+              }
+            }
+          }
           else if (action === 'new_page') chalkboardRef.current.addNewPage?.()
           else if (action === 'clear_board' || action === 'erase_board') chalkboardRef.current.clearBoard()
           else if (action === 'start_quiz' || action === 'open_quiz') {
+            markModuleAsCompleted()
             handleOpenQuiz()
           }
           else if (action === 'chapter_summary') {
@@ -1529,11 +1722,19 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             markModuleAsCompleted(content)
           }
           else if (action === 'concept_focus') {
+            isReviewingVerdictRef.current = false
+            setIsReviewingVerdict(false)
+            isAwaitingStudentAnswerRef.current = false
+            setIsAwaitingStudentAnswer(false)
             const cleanContent = content.replace(/^[\s\(\[\{]+|[\s\)\]\}]+$/g, '').trim()
             if (cleanContent) {
               handleConceptFocus(cleanContent)
             }
           } else if (action === 'concept_done') {
+            isReviewingVerdictRef.current = false
+            setIsReviewingVerdict(false)
+            isAwaitingStudentAnswerRef.current = false
+            setIsAwaitingStudentAnswer(false)
             handleConceptDone(content)
           } else if (action === 'concept_goto' || action === 'goto_concept') {
             handleConceptGoto(content)
@@ -1548,16 +1749,26 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
       (action, params) => {
         renderedVisualConceptsRef.current.add(currentConceptIndexRef.current)
         handleVisualAction(action, params)
+      },
+      avatarConfig || undefined,
+      (pcm16, sampleRate) => {
+        simliControllerRef.current?.sendAudioChunk(pcm16, sampleRate)
+      },
+      () => {
+        simliControllerRef.current?.clearBuffer()
       }
     )
+  }
 
-    // Guarantee that visual is triggered on class kickoff without waiting for student to request
-    setTimeout(() => {
-      autoTriggerVisualForConcept(currentConceptIndex)
-    }, 1200)
+  const handleEndClass = () => {
+    endCall()
+    if (isCompletedBefore || moduleCompletedSuccess) {
+      setQuizOpen(true)
+    }
   }
 
   const handleOpenQuiz = () => {
+    if (!isCompletedBefore && !moduleCompletedSuccess) return
     endCall()
     setQuizOpen(true)
   }
@@ -1575,6 +1786,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
   const nextSiblingModule = siblingModules.find(
     (m) => m.order_index > (activeModule?.order_index || 0)
   )
+
   const normConcept = (s: string) =>
     String(s || '')
       .toLowerCase()
@@ -1600,123 +1812,23 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
 
   return (
     <main className="relative w-full h-[100dvh] flex flex-col overflow-hidden bg-[#F8F6F0]">
-      {/* Top Classroom Bar */}
-      <header className="relative z-30 w-full px-5 py-3 bg-white/95 backdrop-blur-md border-b border-[#E5E3DB] flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleBackToDashboard}
-            className="rounded-full hover:bg-stone-100 text-[#171817] cursor-pointer active:scale-95 transition-transform"
-            title="Return to Student Portal"
-          >
-            <ArrowLeft className="w-5 h-5" strokeWidth={1.5} />
-          </Button>
 
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#E8F0EA] border border-[#C8EBD2] flex items-center justify-center text-[#52715D] shadow-xs">
-              <GraduationCap className="w-4 h-4 text-[#52715D]" strokeWidth={1.5} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-[#171817] tracking-tight">
-                  {resolvedTitle || 'Spoken Classroom'}
-                </span>
-                {isCompletedBefore ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E8F0EA] text-[#52715D] border border-[#C8EBD2] flex items-center gap-1 font-mono">
-                    <CheckCircle2 className="w-3 h-3" strokeWidth={2} />
-                    <span>Mastered</span>
-                  </span>
-                ) : currentConceptIndex > 0 ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFF8F6] text-[#C85A43] border border-[#F5C2B8] flex items-center gap-1 font-mono">
-                    <Sparkles className="w-3 h-3" />
-                    <span>Concept {currentConceptIndex + 1} of {keyConceptsList.length || 1}</span>
-                  </span>
-                ) : null}
-              </div>
-              <p className="text-[11px] text-[#7A7C75] font-mono">
-                {[resolvedSubject, resolvedClassLevel, `Voice: ${preferredVoice}`]
-                  .filter(Boolean)
-                  .join(' • ')}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Header: Next Capsule / Next Chapter Quick Button, Chapter Notes, Take 10 MCQs, & Connection Status */}
-        <div className="flex items-center gap-2.5">
-          {(isCompletedBefore || moduleCompletedSuccess) && nextSiblingModule && (
-            <Button
-              id="header-next-capsule-btn"
-              onClick={() => {
-                endCall()
-                router.push(`/dashboard/${userId}/class/${nextSiblingModule.id}`)
-              }}
-              className="bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl px-3 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
-              title={`Advance to ${nextSiblingModule.title}`}
-            >
-              <span>Next Capsule</span>
-              <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
-            </Button>
-          )}
-
-          {(isCompletedBefore || moduleCompletedSuccess) && !nextSiblingModule && nextChapterInfo && (
-            <Button
-              id="header-next-chapter-btn"
-              onClick={() => {
-                endCall()
-                router.push(`/dashboard/${userId}/class/${nextChapterInfo.firstModuleId}`)
-              }}
-              className="bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl px-3 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
-              title={`Advance to Chapter ${nextChapterInfo.orderIndex}: ${nextChapterInfo.chapterTitle}`}
-            >
-              <span>Next Chapter</span>
-              <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
-            </Button>
-          )}
-
-          {/* Chapter Notes Button */}
-          <Button
-            id="view-chapter-notes-btn"
-            variant="outline"
-            size="sm"
-            onClick={() => setNotesModalOpen(true)}
-            className="bg-white hover:bg-[#F8F6F0] border-[#E5E3DB] text-[#171817] rounded-xl px-3 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
-            title="View Compiled Chapter Notes"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-[#52715D]" strokeWidth={1.5} />
-            <span>Chapter Notes</span>
-            {chapterNotes.trim().length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-[#52715D] animate-pulse" />
-            )}
-          </Button>
-
-          {/* Direct 10-MCQ Mastery Button */}
-          <Button
-            id="open-mastery-quiz-btn"
-            onClick={handleOpenQuiz}
-            className="bg-[#C85A43] hover:bg-[#A94734] text-white rounded-xl px-3.5 py-1.5 text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer"
-            title="Take 10 MCQs to test mastery anytime"
-          >
-            <Award className="w-4 h-4 text-white" strokeWidth={1.5} />
-            <span>Take 10 MCQs</span>
-          </Button>
-
-          <ConnectionStatus state={connectionState} />
-        </div>
-      </header>
-
-      {/* Main Classroom Stage: 2-Column Split */}
-      <div className="relative z-10 w-full flex-1 flex flex-col md:flex-row p-4 gap-4 overflow-hidden">
-        {/* Left Column: Avatar, Live Captions, Controls & Module Capsule */}
-        <div className="w-full md:w-[380px] lg:w-[420px] flex flex-col justify-between gap-3 h-full overflow-y-auto pr-1">
-          {/* Audio-Reactive Avatar with bottom movie-style captions */}
+      {/* Main Classroom Stage: Left Avatar Column + Right Full Whiteboard Stage */}
+      <div className="relative z-10 w-full flex-1 flex flex-col md:flex-row p-3 sm:p-4 gap-3 sm:gap-4 overflow-hidden min-h-0">
+        {/* Left Column: Avatar Section & Voice Controls (Positioned on the LEFT) */}
+        <div className="w-full md:w-[320px] lg:w-[360px] shrink-0 flex flex-col gap-3 h-full overflow-y-auto pr-1">
+          {/* Native Google Gemini 3.8 Live Avatar with bottom movie-style captions */}
           <ClassroomAvatar
             state={connectionState}
             teacherVolume={teacherVolume}
             userVolume={userVolume}
             isMuted={isMuted}
             latestTranscript={latestTranscript}
+            latestVideoFrame={latestVideoFrame}
+            videoMimeType={videoMimeType}
+            onCustomAvatarChange={handleCustomAvatarChange}
+            onSimliControllerReady={handleSimliControllerReady}
+            onSimliActiveChange={handleSimliActiveChange}
           />
 
           {/* Call Controls or Start Call Bar */}
@@ -1726,11 +1838,8 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                 isMuted={isMuted}
                 userVolume={userVolume}
                 onToggleMute={toggleMute}
-                onEndCall={handleOpenQuiz}
+                onEndCall={handleEndClass}
               />
-              <span className="text-[11px] text-[#7A7C75] font-mono">
-                Press [M] to mute • [Esc] to end
-              </span>
             </div>
           ) : (
             <div className="p-4 rounded-2xl bg-white border border-[#E5E3DB] shadow-sm space-y-3">
@@ -1769,6 +1878,15 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                   <span>Mark Capsule Complete & Unlock Next</span>
                 </Button>
               )}
+              <button
+                type="button"
+                onClick={handleBackToDashboard}
+                className="w-full text-center text-xs text-[#7A7C75] hover:text-[#171817] font-medium py-1 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                title="Return to Student Portal"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Return to Dashboard</span>
+              </button>
             </div>
           )}
 
@@ -1896,8 +2014,8 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             </div>
           )}
 
-          {/* Interactive Chapter End Confirmation Banner */}
-          {endChapterConfirmPrompt && (
+          {/* Interactive Chapter End Confirmation Banner - Only visible once module is completed */}
+          {(isCompletedBefore || moduleCompletedSuccess) && endChapterConfirmPrompt && (
             <div className="p-4 rounded-2xl bg-white border-2 border-[#52715D]/50 shadow-md space-y-3 animate-in fade-in duration-300">
               <div className="flex items-start gap-2.5">
                 <Sparkles className="w-4 h-4 text-[#52715D] shrink-0 mt-0.5" />
@@ -1977,7 +2095,6 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
               />
             </div>
 
-            {/* Concept Sequence in Order */}
             {keyConceptsList.length > 0 ? (
               <div className="space-y-1.5 pt-1">
                 {keyConceptsList.map((concept: string, idx: number) => {
@@ -2035,52 +2152,10 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
               </p>
             )}
           </div>
-
-          {/* Live Chapter Notes Ledger Preview */}
-          <div className="p-3.5 rounded-2xl bg-white border border-[#E5E3DB] text-[#171817] text-xs space-y-2 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-[#52715D]" />
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#52715D] font-bold">
-                  Exam-Ready Notes Ledger
-                </span>
-              </div>
-              <span className="text-[10px] font-mono text-[#7A7C75]">
-                {notesSaveStatus === 'saving' ? (
-                  <span className="text-[#C85A43]">Saving...</span>
-                ) : chapterNotes.trim() ? (
-                  <span className="text-[#52715D]">Auto-Saved</span>
-                ) : (
-                  'Live Sync'
-                )}
-              </span>
-            </div>
-
-            {chapterNotes.trim() ? (
-              <div className="space-y-2">
-                <div className="p-2.5 rounded-xl bg-[#F8F6F0] border border-[#E5E3DB] text-[11px] text-[#171817] max-h-24 overflow-hidden font-mono line-clamp-3 whitespace-pre-line">
-                  {chapterNotes.split('\n').filter(Boolean).slice(-3).join('\n')}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setNotesModalOpen(true)}
-                  className="w-full text-[#52715D] hover:text-[#3E5D4B] hover:bg-[#E8F0EA] text-xs flex items-center justify-center gap-1.5 py-1 h-7.5 cursor-pointer rounded-lg border border-[#E5E3DB]"
-                >
-                  <BookOpen className="w-3 h-3" />
-                  <span>Open Full Exam Notes</span>
-                </Button>
-              </div>
-            ) : (
-              <p className="text-[11px] text-[#7A7C75] italic leading-relaxed py-1">
-                Teacher notes, formulas, and derivations auto-save here in real time.
-              </p>
-            )}
-          </div>
         </div>
 
-        {/* Right Column: Classroom Dual Stage (AI Green Chalkboard + 3D Simulation) */}
-        <div className="flex-1 h-full min-h-[400px] flex flex-col">
+        {/* Right Column: Full Whiteboard Canvas Stage (Occupies main area to the right of avatar section) */}
+        <div className="flex-1 h-full min-h-0 flex flex-col overflow-hidden">
           <WhiteboardWorkspace
             ref={chalkboardRef}
             moduleId={moduleId}
@@ -2099,6 +2174,8 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             activeSceneParams={activeSceneParams}
             activeSceneTitle={activeSceneTitle}
             onCloseScene={() => setActiveSceneType(null)}
+            activeGraph={activeGraph}
+            onCloseGraph={() => setActiveGraph(null)}
             lessonManifest={lessonManifest}
             initialStepIndex={activeVisualStepIndex}
             onStepChange={(stepIdx) => setActiveVisualStepIndex(stepIdx)}
@@ -2107,15 +2184,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             onConceptFocus={handleConceptFocus}
             onConceptDone={handleConceptDone}
             onConceptGoto={handleConceptGoto}
-            onBoardContentChange={(summary) => {
-              setLatestBoardSummary(summary.fullSummary)
-              const notesContent = summary.notesText.trim()
-              if (notesContent && notesContent !== lastSentBoardNotesRef.current) {
-                lastSentBoardNotesRef.current = notesContent
-                setChapterNotes(notesContent)
-                saveNotesToSupabase(notesContent)
-              }
-            }}
+            onBoardContentChange={handleBoardContentChange}
             onModuleComplete={(summary) => {
               markModuleAsCompleted(summary ? `#### Chapter Summary:\n${summary}` : undefined)
             }}

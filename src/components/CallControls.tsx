@@ -22,7 +22,7 @@ export const CallControls: React.FC<CallControlsProps> = ({
       {/* Microphone Toggle Button */}
       <button
         onClick={onToggleMute}
-        title={isMuted ? "Unmute microphone (M)" : "Mute microphone (M)"}
+        title={isMuted ? "Unmute microphone" : "Mute microphone"}
         className={`relative group flex items-center justify-center w-14 h-14 rounded-full transition-all duration-200 active:scale-95 ${
           isMuted
             ? "bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20"
@@ -44,7 +44,7 @@ export const CallControls: React.FC<CallControlsProps> = ({
 
         {/* Tooltip */}
         <span className="absolute -top-10 px-2.5 py-1 text-xs text-ink-secondary bg-white border border-border rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-sm">
-          {isMuted ? "Unmute (M)" : "Mute (M)"}
+          {isMuted ? "Unmute" : "Mute"}
         </span>
       </button>
 

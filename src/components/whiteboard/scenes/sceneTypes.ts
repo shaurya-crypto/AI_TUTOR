@@ -3,14 +3,6 @@
 export type VisualizationSceneType =
   | 'geometry_3d'
   | 'geometry_cross_section'
-  | 'coordinate_geometry'
-  | 'linear_graphs'
-  | 'physics_forces'
-  | 'optics_refraction'
-  | 'circuits_interactive'
-  | 'bohr_atom'
-  | 'states_of_matter'
-  | 'wave_harmonics'
 
 export interface SceneParameterDefinition {
   name: string

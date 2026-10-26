@@ -34,3 +34,21 @@ Whenever designing, prompting, or updating the AI tutor voice instruction:
 - **CBSE**: Follows NCERT standard structure, derivation-centric, 50% NEP 2020 Competency-Based Questions, zero calculators.
 - **ICSE**: Exact verbatim definitions (penalize missing clauses), dual-column chalkboard with `[ROUGH_WORK]` margin on the right, Selina Concise / Morning Star publisher alignment, no calculators in Class 10.
 - **IB (MYP & DP)**: Statement of Inquiry (SOI), official IB command terms, measurement uncertainty ($\pm \Delta x$), GDC keystroke notes, and toggleable Formula Booklet HUD.
+
+## 7. Zero Hardcoded Fake Diagrams Invariant
+- The digital chalkboard must NEVER render static, canned diagrams with hardcoded numbers or fixed problem values (e.g., a fixed 5kg block or fixed refractive index).
+- All visual graphs, curves, and kinematic diagrams must be dynamically plotted using **Mafs.dev** pure React/SVG vector math based on the student's actual lesson and equations.
+- Diagram elements (forces, rays, circuits) must be drawn dynamically with user-provided parameters via geometry primitives (`draw_shape`).
+
+## 8. Universal Topic-Adaptive Flowcharts
+- Whiteboard flowcharts must NEVER be restricted to a single-line or rigid 4-step derivation pattern (`Given -> Formula -> Substitution -> Boxed Answer`).
+- The flowchart engine must support:
+  1. Multi-row wrapping with downward connecting return arrows.
+  2. Branching decision trees (`A -> B | C`).
+  3. Cyclical loops (`cycle: Step 1 -> Step 2 -> Step 3 -> Step 1`) for biological and chemical processes.
+  4. Adaptive node widths to prevent horizontal or vertical text overflow.
+
+## 9. Lean Tool Calling & Zero Alias Duplication
+- Keep Gemini Live WebSocket tool declarations canonical and lean (at most 12 distinct chalkboard actions).
+- NEVER introduce duplicate action aliases (e.g., `table` vs `draw_table`, `graph` vs `draw_graph`, or 5 separate `clear` actions).
+- Avoid registering heavy 3D simulation scene enums unless they provide genuine 3D spatial rotation value (e.g. 3D geometry solids).

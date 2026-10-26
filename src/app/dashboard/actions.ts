@@ -223,3 +223,162 @@ export async function updateStudyPlanAction(payload: {
   return { success: true }
 }
 
+
+
+export async function updateAccountAction(payload: {
+  fullName: string
+  classLevel?: string
+  targetBoard?: string
+}) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Unauthorized' }
+  }
+
+  const updateData: Record<string, any> = {
+    full_name: payload.fullName,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (payload.classLevel) {
+    updateData.class_level = payload.classLevel
+  }
+
+  if (payload.targetBoard) {
+    updateData.target_board = payload.targetBoard
+  }
+
+  const { error } = await supabase.from('profiles').update(updateData).eq('id', user.id)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/dashboard/${user.id}`)
+  revalidatePath(`/dashboard/${user.id}/settings`)
+  return { success: true }
+}
+
+export async function updateTeachingStyleAction(payload: {
+  learningStyle: string
+  preferredPacing: string
+}) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Unauthorized' }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      learning_style: payload.learningStyle,
+      preferred_pacing: payload.preferredPacing,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/dashboard/${user.id}`)
+  revalidatePath(`/dashboard/${user.id}/settings`)
+  return { success: true }
+}
+
+export async function updateGeneralSettingsAction(payload: {
+  preferredTeacherVoice: string
+}) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Unauthorized' }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      preferred_teacher_voice: payload.preferredTeacherVoice,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/dashboard/${user.id}`)
+  revalidatePath(`/dashboard/${user.id}/settings`)
+  return { success: true }
+}
+
+export async function updatePasswordAction(payload: {
+  newPassword: string
+}) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Unauthorized' }
+  }
+
+  if (!payload.newPassword || payload.newPassword.length < 6) {
+    return { error: 'Password must be at least 6 characters long' }
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: payload.newPassword,
+  })
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  return { success: true }
+}
+
+export async function updateAvatarPreferenceAction(payload: {
+  avatarId: string
+  avatarUrl?: string
+}) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Unauthorized' }
+  }
+
+  const updateData: Record<string, any> = {
+    selected_avatar_id: payload.avatarId,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (payload.avatarUrl) {
+    updateData.avatar_url = payload.avatarUrl
+  }
+
+  const { error } = await supabase.from('profiles').update(updateData).eq('id', user.id)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/dashboard/${user.id}`)
+  revalidatePath(`/dashboard/${user.id}/settings`)
+  return { success: true }
+}

@@ -6,7 +6,6 @@ import '@excalidraw/excalidraw/index.css'
 import {
   FileText,
   Plus,
-  Trash2,
   Sparkles,
   ChevronLeft,
   ChevronRight,
@@ -14,6 +13,7 @@ import {
   BookOpen,
 } from 'lucide-react'
 import { evaluateMathExpression } from '@/lib/mathEvaluator'
+import { createUniversalScientificSvg } from '@/services/universalScientificSvg'
 
 // Dynamically import Excalidraw with SSR disabled
 const Excalidraw = dynamic(
@@ -40,18 +40,10 @@ export interface GreenChalkboardRef {
   drawRoughWork: (workText: string, color?: string) => void
   clearRough: () => void
   clearBoard: () => void
+  resetBoard?: () => void
   setChalkColor: (colorNameOrHex: string) => void
   setBoardColor: (theme: 'green' | 'blackboard' | 'slate' | 'white') => void
-  drawForcesDiagram: () => void
-  drawPressureDiagram: () => void
-  drawMagnetDiagram: () => void
-  drawCellDiagram: () => void
-  drawOpticsDiagram: () => void
-  drawAtomDiagram: () => void
-  drawStatesOfMatterDiagram: () => void
-  drawPhotosynthesisDiagram: () => void
-  drawCircuitSeries: () => void
-  drawCircuitParallel: () => void
+  drawSvgDiagram: (title: string, svgMarkup: string, caption?: string) => void
   drawGraph: (type?: string) => void
   drawNumericalSolution?: (solution: {
     problem?: string
@@ -62,7 +54,6 @@ export interface GreenChalkboardRef {
     answer: string
     unit?: string
   }) => void
-  drawImageCard?: (title: string, caption?: string, attribution?: string) => void
   drawVideoCard?: (title: string, description?: string) => void
   drawTable?: (tableStr: string) => void
   drawGeometry?: (geomStr: string) => void
@@ -159,6 +150,33 @@ export { normalizeTitle, isRedundantConceptOrMasteredText }
 import { wrapText } from './textWrapper'
 export { wrapText }
 
+const EXCALIDRAW_INITIAL_DATA = {
+  appState: {
+    viewBackgroundColor: CANVAS_BG,
+    currentItemStrokeColor: INK_PRIMARY,
+    currentItemFontFamily: 1,
+    currentItemRoughness: 0,
+    zenModeEnabled: false,
+    viewModeEnabled: true,
+    zoom: { value: 0.7 as any },
+  },
+}
+
+const EXCALIDRAW_UI_OPTIONS = {
+  canvasActions: {
+    changeViewBackgroundColor: false,
+    clearCanvas: false,
+    loadScene: false,
+    saveToActiveFile: false,
+    toggleTheme: false,
+    saveAsImage: false,
+  },
+  tools: {
+    image: false,
+  },
+  welcomeScreen: false,
+}
+
 export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardProps>(
   (
     {
@@ -182,6 +200,15 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     ref
   ) => {
     const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null)
+    const excalidrawAPIRef = useRef<any>(null)
+
+    // Stable API assignment callback: prevents infinite render loops by setting state strictly once
+    const handleExcalidrawAPI = useCallback((api: any) => {
+      if (!api || excalidrawAPIRef.current) return
+      excalidrawAPIRef.current = api
+      setExcalidrawAPI(api)
+    }, [])
+
     const storageKey = moduleId ? `whiteboard_pages_${moduleId}` : `whiteboard_pages_${moduleTitle}`
 
     // Multi-page system state
@@ -207,6 +234,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const [activeChalkColor, setActiveChalkColor] = useState<string>(INK_PRIMARY)
     const activeChalkColorRef = useRef<string>(INK_PRIMARY)
     const lastDrawnStudentAnswerRef = useRef<{ text: string; time: number } | null>(null)
+    const lastExecutedActionTimeRef = useRef<Map<string, number>>(new Map())
 
     const notifyPositionChange = (lastAction?: string, lastText?: string) => {
       onWritingPositionChange?.({
@@ -249,6 +277,61 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         return boardElementsRef.current
       }
       return (excalidrawAPI?.getSceneElements() || []) as any[]
+    }
+
+    // Inspect board elements and history to guarantee zero duplicate writes
+    const isAlreadyOnBoard = (text: string): boolean => {
+      if (!text || !text.trim()) return false
+      const clean = text
+        .toLowerCase()
+        .replace(/^(note|step|breakdown|intuition|definition|q\d?|verdict|ans)[:\s\-]*/i, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim()
+      if (clean.length < 8) return false
+
+      if (executedTextHistoryRef.current.has(clean)) return true
+
+      const currentEls = getCurrentElements()
+      for (const el of currentEls) {
+        if (el.type === 'text' && el.text) {
+          const elClean = el.text
+            .toLowerCase()
+            .replace(/^(note|step|breakdown|intuition|definition|q\d?|verdict|ans)[:\s\-]*/i, '')
+            .replace(/[^a-z0-9]/g, '')
+            .trim()
+          if (
+            elClean === clean ||
+            (elClean.length > 20 && clean.length > 20 && (elClean.includes(clean) || clean.includes(elClean)))
+          ) {
+            return true
+          }
+        }
+      }
+      return false
+    }
+
+    const shouldSkipDuplicate = (action: string, content: string, windowMs = 15000): boolean => {
+      if (!content || !content.trim()) return false
+      const clean = content.toLowerCase().trim()
+      const cleanNorm = clean.replace(/[^a-z0-9]/g, '')
+
+      if (cleanNorm.length >= 8 && isAlreadyOnBoard(content)) {
+        return true
+      }
+
+      const key = `${action}:${cleanNorm.slice(0, 80)}`
+      const now = Date.now()
+      const prev = lastExecutedActionTimeRef.current.get(key)
+      if (prev && now - prev < windowMs) {
+        return true
+      }
+      lastExecutedActionTimeRef.current.set(key, now)
+      if (lastExecutedActionTimeRef.current.size > 200) {
+        for (const [k, t] of lastExecutedActionTimeRef.current.entries()) {
+          if (now - t > 120000) lastExecutedActionTimeRef.current.delete(k)
+        }
+      }
+      return false
     }
 
     const isInitializedRef = useRef(false)
@@ -438,6 +521,106 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       return { notesText, roughText, fullSummary }
     }
 
+    // Sanitize raw SVG markup: parse via DOMParser, fix common Gemini output issues, return clean SVG or null
+    const sanitizeSvg = (rawSvg: string): string | null => {
+      if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return rawSvg
+      try {
+        // Fix common malformed XML issues from Gemini Live output before parsing
+        let fixed = rawSvg
+        // Escape unescaped ampersands (not already part of &amp; &lt; &gt; &apos; &quot; &#...)
+        fixed = fixed.replace(/&(?!amp;|lt;|gt;|apos;|quot;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;')
+        // Self-close unclosed void elements common in SVG (e.g. <path d="..." > -> <path d="..." />)
+        fixed = fixed.replace(/<(path|circle|ellipse|rect|line|polygon|polyline|use|image|stop)\b([^>]*?)(?<!\/)>/gi,
+          (match, tag, attrs) => {
+            if (attrs.trim().endsWith('/')) return match
+            return `<${tag}${attrs}/>`
+          }
+        )
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(fixed, 'image/svg+xml')
+        const parseError = doc.querySelector('parsererror')
+        if (parseError) {
+          // Last resort: try with text/html parser which is more forgiving
+          const htmlDoc = parser.parseFromString(`<body>${fixed}</body>`, 'text/html')
+          const svgEl = htmlDoc.querySelector('svg')
+          if (svgEl) {
+            if (!svgEl.hasAttribute('xmlns')) svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+            return svgEl.outerHTML
+          }
+          return null
+        }
+        const svgEl = doc.querySelector('svg')
+        if (!svgEl) return null
+        if (!svgEl.hasAttribute('xmlns')) svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+        // Ensure width/height are set (Excalidraw requires them)
+        const vb = svgEl.getAttribute('viewBox')
+        if (vb && (!svgEl.getAttribute('width') || !svgEl.getAttribute('height'))) {
+          const parts = vb.trim().split(/[\s,]+/).map(Number)
+          if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+            if (!svgEl.getAttribute('width')) svgEl.setAttribute('width', String(parts[2]))
+            if (!svgEl.getAttribute('height')) svgEl.setAttribute('height', String(parts[3]))
+          }
+        }
+        return svgEl.outerHTML
+      } catch {
+        return null
+      }
+    }
+
+    // Rasterize SVG string to PNG data URL via offscreen canvas (bulletproof fallback for Excalidraw)
+    const rasterizeSvgToPng = (svgString: string, width: number, height: number): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        if (typeof window === 'undefined') { reject(new Error('No window')); return }
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const img = new Image()
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas')
+            canvas.width = width * 2  // 2x for sharpness
+            canvas.height = height * 2
+            const ctx = canvas.getContext('2d')
+            if (!ctx) { reject(new Error('No canvas context')); URL.revokeObjectURL(url); return }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+            const pngDataUrl = canvas.toDataURL('image/png')
+            URL.revokeObjectURL(url)
+            resolve(pngDataUrl)
+          } catch (err) {
+            URL.revokeObjectURL(url)
+            reject(err)
+          }
+        }
+        img.onerror = (err) => { URL.revokeObjectURL(url); reject(err) }
+        img.src = url
+      })
+    }
+
+    // Helper to safely encode arbitrary UTF-8 SVG markup to base64 Data URL for Excalidraw
+    const svgToBase64DataUrl = (svgString: string): string => {
+      try {
+        if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+          const bytes = new TextEncoder().encode(svgString)
+          let binary = ''
+          const len = bytes.byteLength
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          return `data:image/svg+xml;base64,${window.btoa(binary)}`
+        }
+        if (typeof Buffer !== 'undefined') {
+          return `data:image/svg+xml;base64,${Buffer.from(svgString, 'utf-8').toString('base64')}`
+        }
+        return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svgString)))}`
+      } catch (err) {
+        console.warn('svgToBase64DataUrl conversion error:', err)
+        try {
+          return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svgString)))}`
+        } catch {
+          return 'data:image/svg+xml;base64,'
+        }
+      }
+    }
+
     // Debounced persistence to localStorage
     const persistScene = (elements: readonly any[] | any[]) => {
       if (!storageKey || typeof window === 'undefined') return
@@ -452,6 +635,12 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       persistTimeoutRef.current = setTimeout(() => {
         try {
           localStorage.setItem(storageKey, JSON.stringify(pagesRef.current))
+          if (excalidrawAPI?.getFiles) {
+            const files = excalidrawAPI.getFiles()
+            if (files && Object.keys(files).length > 0) {
+              localStorage.setItem(`${storageKey}_files`, JSON.stringify(files))
+            }
+          }
           if (onBoardContentChange) {
             onBoardContentChange(getBoardSummary())
           }
@@ -460,6 +649,20 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         }
       }, 400)
     }
+
+    const persistSceneRef = useRef(persistScene)
+    persistSceneRef.current = persistScene
+
+    const lastElementCountRef = useRef<number>(0)
+    const handleExcalidrawChange = useCallback((elements: readonly any[]) => {
+      if (elements && elements.length > 0) {
+        boardElementsRef.current = elements as any[]
+        if (elements.length !== lastElementCountRef.current) {
+          lastElementCountRef.current = elements.length
+          persistSceneRef.current(elements)
+        }
+      }
+    }, [])
 
     // Helper to lock zoom to exactly 70% (0.7) and prevent zooming out/in
     const enforceLockedZoom = useCallback((api: any) => {
@@ -691,6 +894,97 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             console.error('Error reading saved whiteboard pages:', e)
           }
 
+          try {
+            if (typeof window !== 'undefined' && storageKey) {
+              const rawFiles = localStorage.getItem(`${storageKey}_files`)
+              if (rawFiles && excalidrawAPI?.addFiles) {
+                const parsedFiles = JSON.parse(rawFiles)
+                const filesArr = Object.values(parsedFiles) as any[]
+                const updatedFilesStore: Record<string, any> = {}
+
+                for (const file of filesArr) {
+                  if (!file || !file.id || !file.dataURL) continue
+                  let currentFile = { ...file }
+                  const isSvg =
+                    currentFile.mimeType === 'image/svg+xml' ||
+                    (typeof currentFile.dataURL === 'string' &&
+                      currentFile.dataURL.startsWith('data:image/svg+xml'))
+
+                  if (isSvg) {
+                    let rawSvg: string | null = null
+                    if (currentFile.dataURL.startsWith('data:image/svg+xml;utf8,')) {
+                      try {
+                        rawSvg = decodeURIComponent(currentFile.dataURL.slice('data:image/svg+xml;utf8,'.length))
+                      } catch {}
+                    } else if (currentFile.dataURL.startsWith('data:image/svg+xml;base64,')) {
+                      try {
+                        const b64 = currentFile.dataURL.slice('data:image/svg+xml;base64,'.length)
+                        const binary = atob(b64)
+                        const bytes = new Uint8Array(binary.length)
+                        for (let i = 0; i < binary.length; i++) {
+                          bytes[i] = binary.charCodeAt(i)
+                        }
+                        rawSvg = new TextDecoder().decode(bytes)
+                      } catch {}
+                    }
+
+                    if (rawSvg) {
+                      const clean = sanitizeSvg(rawSvg)
+                      if (clean) {
+                        currentFile = {
+                          ...currentFile,
+                          dataURL: svgToBase64DataUrl(clean),
+                          mimeType: 'image/svg+xml',
+                        }
+                      }
+                    }
+                  }
+
+                  // Add each file individually with try-catch and PNG rasterization fallback
+                  try {
+                    excalidrawAPI.addFiles([currentFile])
+                    updatedFilesStore[currentFile.id] = currentFile
+                  } catch (fileErr) {
+                    console.warn(`File ${currentFile.id} failed addFiles as SVG, attempting PNG fallback:`, fileErr)
+                    if (isSvg) {
+                      try {
+                        let rawSvg: string | null = null
+                        if (typeof currentFile.dataURL === 'string' && currentFile.dataURL.startsWith('data:image/svg+xml;base64,')) {
+                          const b64 = currentFile.dataURL.slice('data:image/svg+xml;base64,'.length)
+                          const binary = atob(b64)
+                          const bytes = new Uint8Array(binary.length)
+                          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+                          rawSvg = new TextDecoder().decode(bytes)
+                        }
+                        if (!rawSvg) {
+                          const universal = createUniversalScientificSvg('Scientific Diagram')
+                          rawSvg = universal.svg
+                        }
+                        const pngUrl = await rasterizeSvgToPng(rawSvg, 500, 260)
+                        const pngFile = {
+                          ...currentFile,
+                          dataURL: pngUrl,
+                          mimeType: 'image/png',
+                        }
+                        excalidrawAPI.addFiles([pngFile])
+                        updatedFilesStore[currentFile.id] = pngFile
+                      } catch (pngErr) {
+                        console.warn(`File ${currentFile.id} could not be rasterized:`, pngErr)
+                      }
+                    }
+                  }
+                }
+
+                // Resave cleaned files to localStorage so invalid SVGs are pruned
+                try {
+                  localStorage.setItem(`${storageKey}_files`, JSON.stringify(updatedFilesStore))
+                } catch {}
+              }
+            }
+          } catch (e) {
+            console.warn('Error reading saved whiteboard files:', e)
+          }
+
           const initialTargetIdx = typeof activeConceptIndex === 'number' && activeConceptIndex > 0 ? activeConceptIndex : 0
           const reachedPagesCount = Math.max(1, initialTargetIdx + 1)
           const hasValidElements =
@@ -902,6 +1196,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!excalidrawAPI || !noteText?.trim()) return
       const clean = noteText.trim()
       if (checkIsRedundant(clean)) return
+      if (shouldSkipDuplicate('draw_note', clean)) return
       if (executedTextHistoryRef.current.has(clean.toLowerCase())) return
       executedTextHistoryRef.current.add(clean.toLowerCase())
 
@@ -956,6 +1251,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!excalidrawAPI || !stepText?.trim()) return
       const clean = stepText.trim()
       if (checkIsRedundant(clean)) return
+      if (shouldSkipDuplicate('draw_step', clean)) return
       const lines = wrapText(clean, 60)
       const lineHeight = 21
       const totalH = Math.max(26, lines.length * lineHeight)
@@ -983,6 +1279,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + totalH + 12)
+        executedTextHistoryRef.current.add(clean.toLowerCase().replace(/[^a-z0-9]/g, ''))
         notifyPositionChange('draw_step', clean)
         onNoteRecorded?.(`  -> ${clean}`)
       } catch (err) {
@@ -995,6 +1292,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       if (!excalidrawAPI || !text?.trim()) return
       const clean = text.trim()
       if (checkIsRedundant(clean)) return
+      if (shouldSkipDuplicate('draw_highlight_box', clean)) return
       const lines = wrapText(clean, 60)
       const boxWidth = 740
       const lineHeight = 22
@@ -1038,6 +1336,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + boxHeight + 14)
+        executedTextHistoryRef.current.add(clean.toLowerCase().replace(/[^a-z0-9]/g, ''))
         notifyPositionChange('draw_highlight_box', clean)
         onNoteRecorded?.(`**[Key Principle]**: ${clean}`)
       } catch (err) {
@@ -1049,6 +1348,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const drawQuestion = async (questionText: string, color?: string) => {
       if (!excalidrawAPI || !questionText?.trim()) return
       const clean = questionText.trim()
+      if (shouldSkipDuplicate('draw_question', clean)) return
       const lines = wrapText(clean, 64)
       const lineHeight = 22
       const paddingTop = 28
@@ -1109,6 +1409,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + qHeight + 14)
+        executedTextHistoryRef.current.add(clean.toLowerCase().replace(/[^a-z0-9]/g, ''))
         notifyPositionChange('draw_question', clean)
         onNoteRecorded?.(`? **Question**: ${clean}`)
       } catch (err) {
@@ -1276,6 +1577,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       color?: string
     ) => {
       if (!excalidrawAPI || !question?.trim()) return
+      if (shouldSkipDuplicate('draw_exam_question', question)) return
 
       // Support "question | model answer" in single string if modelAnswer omitted
       let qText = question.trim()
@@ -1382,6 +1684,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + cardHeight + 16)
+        executedTextHistoryRef.current.add(qText.toLowerCase().replace(/[^a-z0-9]/g, ''))
         notifyPositionChange('draw_exam_question', qText)
         onNoteRecorded?.(`**Exam Question**: ${qText}\n**Model Answer**: ${aText}`)
       } catch (err) {
@@ -1790,29 +2093,45 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Draw Flowchart on Board
+    // Universal Topic-Adaptive Flowchart on Board (Multi-Row Wrapping, Decision Trees & Cycles)
     const drawFlowchart = async (flowText: string, color?: string) => {
       if (!excalidrawAPI || !flowText?.trim()) return
-      const steps = flowText.split(/->|>|\|/).map((s) => s.trim()).filter(Boolean)
+      if (shouldSkipDuplicate('draw_flowchart', flowText)) return
+      const rawText = flowText.trim()
+      const isCycle = rawText.toLowerCase().startsWith('cycle:') || rawText.toLowerCase().includes('[cycle]')
+      const cleanText = rawText.replace(/^cycle:\s*/i, '').replace(/\[cycle\]/gi, '').trim()
+      const steps = cleanText.split(/->|=>|\|/).map((s) => s.trim()).filter(Boolean)
       if (steps.length === 0) return
 
-      await checkAutoPageOverflow(65)
+      const maxBoxesPerRow = 3
+      const numRows = Math.ceil(steps.length / maxBoxesPerRow)
+      const estimatedHeight = Math.max(70, numRows * 76 + 20)
+      await checkAutoPageOverflow(estimatedHeight)
+
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
         const startY = getDynamicNextY(16)
-        let currentX = 60
         const flowColor = resolveChalkColor(color, INK_BOTANICAL)
         const skeletons: any[] = []
+        const rowPositions: { x: number; y: number; w: number; h: number }[] = []
 
         steps.forEach((st, i) => {
-          const w = Math.max(st.length * 9 + 20, 75)
+          const rowIdx = Math.floor(i / maxBoxesPerRow)
+          const colIdx = i % maxBoxesPerRow
+          const w = Math.min(210, Math.max(120, st.length * 8.5 + 24))
+          const h = 36
+          const boxX = 60 + colIdx * (210 + 28)
+          const boxY = startY + rowIdx * (h + 38)
+
+          rowPositions.push({ x: boxX, y: boxY, w, h })
+
           skeletons.push(
             {
               type: 'rectangle',
-              x: currentX,
-              y: startY,
+              x: boxX,
+              y: boxY,
               width: w,
-              height: 34,
+              height: h,
               strokeColor: flowColor,
               backgroundColor: '#F0F6F2',
               fillStyle: 'solid',
@@ -1822,8 +2141,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             },
             {
               type: 'text',
-              x: currentX + 8,
-              y: startY + 8,
+              x: boxX + 10,
+              y: boxY + 10,
               text: st,
               fontSize: 13,
               fontFamily: 1,
@@ -1831,88 +2150,180 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
               customData: { isRough: false },
             }
           )
-          currentX += w + 8
 
-          if (i < steps.length - 1 && currentX < 440) {
-            skeletons.push({
-              type: 'arrow',
-              x: currentX,
-              y: startY + 17,
-              points: [[0, 0], [20, 0]],
-              strokeColor: flowColor,
-              strokeWidth: 2,
-              customData: { isRough: false },
-            })
-            currentX += 28
+          // Connecting arrow to next step
+          if (i < steps.length - 1) {
+            const nextRowIdx = Math.floor((i + 1) / maxBoxesPerRow)
+            if (nextRowIdx === rowIdx) {
+              // Horizontal arrow to next box in same row
+              skeletons.push({
+                type: 'arrow',
+                x: boxX + w,
+                y: boxY + Math.floor(h / 2),
+                points: [[0, 0], [22, 0]],
+                strokeColor: flowColor,
+                strokeWidth: 2,
+                customData: { isRough: false },
+              })
+            } else {
+              // Row wrap: downward connector arrow to next row
+              skeletons.push({
+                type: 'arrow',
+                x: boxX + Math.floor(w / 2),
+                y: boxY + h,
+                points: [
+                  [0, 0],
+                  [0, 20],
+                  [-colIdx * (210 + 28), 20],
+                  [-colIdx * (210 + 28), 38],
+                ],
+                strokeColor: flowColor,
+                strokeWidth: 2,
+                customData: { isRough: false },
+              })
+            }
           }
         })
+
+        // If cycle, draw curved return arrow from last step back to first step
+        if (isCycle && rowPositions.length > 1) {
+          const lastPos = rowPositions[rowPositions.length - 1]
+          const firstPos = rowPositions[0]
+          skeletons.push({
+            type: 'arrow',
+            x: lastPos.x + Math.floor(lastPos.w / 2),
+            y: lastPos.y + lastPos.h,
+            points: [
+              [0, 0],
+              [0, 18],
+              [firstPos.x - lastPos.x, 18],
+              [firstPos.x - lastPos.x, -(lastPos.y - firstPos.y)],
+            ],
+            strokeColor: flowColor,
+            strokeWidth: 1.5,
+            strokeStyle: 'dashed',
+            customData: { isRough: false },
+          })
+        }
 
         const elements = convertToExcalidrawElements(skeletons)
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 48)
-        onNoteRecorded?.(`[Flow]: ${steps.join(' -> ')}`)
+        updateCurrentPageElements(merged, startY + estimatedHeight)
+        onNoteRecorded?.(`[Flow${isCycle ? ' Cycle' : ''}]: ${steps.join(' -> ')}`)
       } catch (err) {
         console.error('drawFlowchart error:', err)
       }
     }
 
-    // Universal Comparison / Data Table on Whiteboard (Any Subject)
+    // Universal Responsive & Auto-Wrapping Whiteboard Table Renderer
     const drawTable = async (tableStr: string) => {
       if (!excalidrawAPI || !tableStr?.trim()) return
-      await checkAutoPageOverflow(180)
+      if (shouldSkipDuplicate('draw_table', tableStr)) return
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(18)
+        const startX = 60
+        const totalTableWidth = 720
 
-        // Parse: "Header 1 | Header 2 || Row1A | Row1B || Row2A | Row2B"
-        const rows = tableStr.split('||').map((r) => r.split('|').map((c) => c.trim()))
+        // 1. Robust multiformat row parser: handles '||', '\n', and markdown table syntax
+        const rawLines = tableStr.includes('||')
+          ? tableStr.split('||')
+          : tableStr.split(/\r?\n/)
+
+        const rows: string[][] = []
+        for (const line of rawLines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          // Skip markdown divider rows like |---|---| or |:---:|
+          if (/^\|?[\s\-:]+(\|[\s\-:]+)+\|?$/.test(trimmed)) continue
+
+          // Remove leading and trailing pipe if present
+          const cleanLine = trimmed.replace(/^\|/, '').replace(/\|$/, '')
+          const cells = cleanLine.split('|').map((c) => c.trim())
+          if (cells.some((c) => c.length > 0)) {
+            rows.push(cells)
+          }
+        }
+
         if (rows.length === 0) return
 
         const numCols = Math.max(...rows.map((r) => r.length), 1)
-        const colWidth = Math.min(260, Math.floor(740 / numCols))
-        const rowHeight = 32
+        const colWidth = Math.floor(totalTableWidth / numCols)
+        // Approximate chars per line based on column width (average character is ~7.5px in Excalidraw font 1)
+        const maxCharsPerCellLine = Math.max(12, Math.floor((colWidth - 20) / 7.8))
 
-        const skeletons: any[] = []
+        // 2. Measure and pre-wrap all cells, computing dynamic row heights
+        const wrappedRows: { cellText: string; lines: string[] }[][] = []
+        const rowHeights: number[] = []
 
         rows.forEach((row, rowIdx) => {
-          const y = startY + rowIdx * rowHeight
-          const isHeader = rowIdx === 0
+          let maxLinesInRow = 1
+          const wrappedCells: { cellText: string; lines: string[] }[] = []
 
-          row.forEach((cell, colIdx) => {
+          // Pad row to have numCols
+          for (let colIdx = 0; colIdx < numCols; colIdx++) {
+            const rawCell = row[colIdx] || ''
+            const lines = rawCell ? wrapText(rawCell, maxCharsPerCellLine) : ['-']
+            if (lines.length > maxLinesInRow) {
+              maxLinesInRow = lines.length
+            }
+            wrappedCells.push({ cellText: rawCell, lines })
+          }
+
+          wrappedRows.push(wrappedCells)
+          // Line height: 16px per line + 14px vertical padding
+          const dynamicHeight = Math.max(34, 14 + maxLinesInRow * 16)
+          rowHeights.push(dynamicHeight)
+        })
+
+        const totalTableHeight = rowHeights.reduce((a, b) => a + b, 0)
+        await checkAutoPageOverflow(totalTableHeight + 24)
+        const startY = getDynamicNextY(16)
+
+        const skeletons: any[] = []
+        let currentY = startY
+
+        wrappedRows.forEach((row, rowIdx) => {
+          const isHeader = rowIdx === 0
+          const currentRowHeight = rowHeights[rowIdx]
+
+          row.forEach((cellData, colIdx) => {
             const x = startX + colIdx * colWidth
 
+            // Cell background box
             skeletons.push({
               type: 'rectangle',
               x,
-              y,
+              y: currentY,
               width: colWidth,
-              height: rowHeight,
-              strokeColor: isHeader ? INK_BOTANICAL : '#E5E3DB',
-              backgroundColor: isHeader ? '#E8F0EA' : rowIdx % 2 === 1 ? '#FFFFFF' : '#F9F8F5',
+              height: currentRowHeight,
+              strokeColor: isHeader ? INK_BOTANICAL : '#D5D2C8',
+              backgroundColor: isHeader ? '#EBF2ED' : rowIdx % 2 === 1 ? '#FFFFFF' : '#FAF9F6',
               fillStyle: 'solid',
-              strokeWidth: 1,
+              strokeWidth: isHeader ? 1.5 : 1,
               customData: { isRough: false },
             })
 
+            // Wrapped cell text
             skeletons.push({
               type: 'text',
-              x: x + 8,
-              y: y + 8,
-              text: cell || '-',
+              x: x + 10,
+              y: currentY + 8,
+              text: cellData.lines.join('\n'),
               fontSize: isHeader ? 12 : 11,
               fontFamily: 1,
               strokeColor: isHeader ? INK_PRIMARY : '#2E302D',
               customData: { isRough: false },
             })
           })
+
+          currentY += currentRowHeight
         })
 
         const elements = convertToExcalidrawElements(skeletons)
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + rows.length * rowHeight + 20)
+        updateCurrentPageElements(merged, currentY + 20)
         onNoteRecorded?.(`[Table]: ${rows[0]?.join(' | ')}`)
       } catch (err) {
         console.error('drawTable error:', err)
@@ -1987,9 +2398,57 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Clear entire board (or advance to fresh page to preserve notes)
+    // Reset entire board to clean state (clears localStorage and resets to clean Page 1)
+    const resetBoard = async () => {
+      if (!excalidrawAPI) return
+      try {
+        if (typeof window !== 'undefined' && storageKey) {
+          localStorage.removeItem(storageKey)
+          localStorage.removeItem(`${storageKey}_files`)
+        }
+        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
+        const firstConcept = keyConcepts && keyConcepts[0] ? keyConcepts[0] : undefined
+        const initialSkeleton = createHeaderSkeleton(1, firstConcept)
+        const initialElements = convertToExcalidrawElements(initialSkeleton)
+        const freshPages: WhiteboardPage[] = [
+          {
+            id: 1,
+            elements: initialElements,
+            nextY: firstConcept ? 200 : 140,
+            roughY: 140,
+          },
+        ]
+        pagesRef.current = freshPages
+        setPages(freshPages)
+        currentPageIndexRef.current = 0
+        setCurrentPageIndex(0)
+        boardElementsRef.current = initialElements
+        nextYRef.current = firstConcept ? 200 : 140
+        roughYRef.current = 140
+        executedTextHistoryRef.current.clear()
+        lastExecutedActionTimeRef.current.clear()
+        activeQuestionRef.current = null
+
+        excalidrawAPI.updateScene({
+          elements: initialElements,
+          appState: {
+            viewBackgroundColor: CANVAS_BG,
+            currentItemStrokeColor: INK_PRIMARY,
+            currentItemFontFamily: 1,
+            currentItemRoughness: 0,
+            zoom: { value: 0.7 },
+            scrollX: 0,
+            scrollY: 0,
+          },
+        })
+      } catch (err) {
+        console.error('resetBoard error:', err)
+      }
+    }
+
+    // Clear entire board (resets to Page 1 clean state)
     const clearBoard = async () => {
-      await addNewPage()
+      await resetBoard()
     }
 
     // Rewrite notes cleanly on board
@@ -2515,1134 +2974,189 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Draw Plant vs Animal Cell Diagram (NCERT Verified)
-    const drawCellDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(210)
+    // Draw Dynamic Vector SVG Diagram Card directly on Whiteboard
+    const drawSvgDiagram = async (title: string, svgMarkup: string, caption = '') => {
+      if (!excalidrawAPI || (!title?.trim() && !svgMarkup?.trim())) return
+      if (shouldSkipDuplicate('draw_svg_diagram', `${title}:${caption || ''}`)) return
+
+      await checkAutoPageOverflow(260)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
+        const startX = 60
+        const startY = getDynamicNextY(20)
 
-        const cellSkeleton: any[] = [
+        // Clean markdown code blocks, script tags, and whitespace
+        let cleanSvg = (svgMarkup || '').trim().replace(/^```(?:xml|svg|html)?\s*/i, '').replace(/\s*```$/i, '').trim()
+        cleanSvg = cleanSvg.replace(/<script[\s\S]*?<\/script>/gi, '')
+
+        let resolvedTitle = (title || '').trim() || 'Scientific Diagram'
+        let resolvedCaption = caption
+
+        // If SVG markup is missing or does not contain an <svg tag, dynamically generate an authentic scientific SVG
+        if (!cleanSvg.toLowerCase().includes('<svg')) {
+          const generated = createUniversalScientificSvg(resolvedTitle || cleanSvg, caption)
+          cleanSvg = generated.svg
+          resolvedTitle = generated.title
+          if (!resolvedCaption) resolvedCaption = generated.caption
+        }
+
+        // Sanitize SVG via DOMParser to catch malformed XML from Gemini Live output
+        const sanitized = sanitizeSvg(cleanSvg)
+        if (sanitized) {
+          cleanSvg = sanitized
+        } else {
+          // SVG is irreparably malformed, fall back to universal generator
+          const generated = createUniversalScientificSvg(resolvedTitle, caption)
+          cleanSvg = generated.svg
+          resolvedTitle = generated.title
+          if (!resolvedCaption) resolvedCaption = generated.caption
+        }
+
+        // Determine dimensions from viewBox or width/height
+        let svgWidth = 500
+        let svgHeight = 260
+        const viewBoxMatch = cleanSvg.match(/viewBox\s*=\s*["']([^"']+)["']/i)
+        if (viewBoxMatch) {
+          const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(Number)
+          if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+            const vbW = parts[2]
+            const vbH = parts[3]
+            const aspect = vbH / vbW
+            svgWidth = Math.min(520, Math.max(300, vbW))
+            svgHeight = Math.round(svgWidth * aspect)
+          }
+        } else {
+          const wMatch = cleanSvg.match(/width\s*=\s*["']?(\d+)/i)
+          const hMatch = cleanSvg.match(/height\s*=\s*["']?(\d+)/i)
+          if (wMatch && hMatch) {
+            const parsedW = parseInt(wMatch[1], 10)
+            const parsedH = parseInt(hMatch[1], 10)
+            if (parsedW > 0 && parsedH > 0) {
+              const aspect = parsedH / parsedW
+              svgWidth = Math.min(520, Math.max(300, parsedW))
+              svgHeight = Math.round(svgWidth * aspect)
+            }
+          }
+        }
+
+        // Clamp height for whiteboard balance
+        if (svgHeight > 340) {
+          const ratio = 340 / svgHeight
+          svgHeight = 340
+          svgWidth = Math.round(svgWidth * ratio)
+        }
+        if (svgHeight < 140) svgHeight = 160
+
+        const fileId = `svg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` as any
+        const dataURL = svgToBase64DataUrl(cleanSvg) as any
+        let resolvedDataURL = dataURL
+        let fileMimeType = 'image/svg+xml'
+
+        // Try adding as SVG first; if Excalidraw rejects it, rasterize to PNG as bulletproof fallback
+        let fileObj: any = {
+          id: fileId,
+          dataURL: resolvedDataURL,
+          mimeType: fileMimeType,
+          created: Date.now(),
+        }
+
+        if (excalidrawAPI.addFiles) {
+          try {
+            excalidrawAPI.addFiles([fileObj])
+          } catch (svgErr) {
+            // SVG rejected by Excalidraw's internal parser - rasterize to PNG
+            try {
+              const pngDataUrl = await rasterizeSvgToPng(cleanSvg, svgWidth, svgHeight)
+              fileMimeType = 'image/png'
+              resolvedDataURL = pngDataUrl
+              fileObj = { id: fileId, dataURL: pngDataUrl, mimeType: 'image/png', created: Date.now() }
+              excalidrawAPI.addFiles([fileObj])
+            } catch (pngErr) {
+              console.warn('Both SVG and PNG fallback failed:', pngErr)
+            }
+          }
+        }
+
+        // Persist SVG file to localStorage so it survives page reload
+        if (typeof window !== 'undefined' && storageKey) {
+          try {
+            const rawFiles = localStorage.getItem(`${storageKey}_files`)
+            const existingFiles = rawFiles ? JSON.parse(rawFiles) : {}
+            existingFiles[fileId] = fileObj
+            localStorage.setItem(`${storageKey}_files`, JSON.stringify(existingFiles))
+          } catch (e) {
+            console.warn('Error saving whiteboard file to localStorage:', e)
+          }
+        }
+
+        const cardWidth = Math.max(svgWidth + 32, 440)
+        const captionLines = caption?.trim()
+          ? wrapText(caption.trim(), 55)
+          : resolvedCaption?.trim()
+          ? wrapText(resolvedCaption.trim(), 55)
+          : []
+        const captionHeight = captionLines.length * 18
+        const cardHeight = svgHeight + 56 + (captionLines.length > 0 ? captionHeight + 12 : 0) + 16
+
+        const skeletons: any[] = [
+          // Background card container
           {
-            type: 'text',
+            type: 'rectangle',
             x: startX,
             y: startY,
-            text: 'Plant & Animal Cell Structural Organization (NCERT Class 9)',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Outer Cell Wall
-          {
-            type: 'rectangle',
-            x: startX + 10,
-            y: startY + 30,
-            width: 170,
-            height: 120,
+            width: cardWidth,
+            height: cardHeight,
             strokeColor: INK_BOTANICAL,
-            strokeWidth: 2,
-            backgroundColor: '#F0F6F2',
+            backgroundColor: '#FDFBF7',
             fillStyle: 'solid',
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          // Inner Cell Membrane
-          {
-            type: 'rectangle',
-            x: startX + 18,
-            y: startY + 38,
-            width: 154,
-            height: 104,
-            strokeColor: INK_SECONDARY,
             strokeWidth: 1.5,
             roundness: { type: 3 },
             customData: { isRough: false },
           },
-          // Nucleus
-          {
-            type: 'ellipse',
-            x: startX + 80,
-            y: startY + 70,
-            width: 38,
-            height: 38,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL_SOFT,
-            fillStyle: 'solid',
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          // Mitochondrion
-          {
-            type: 'ellipse',
-            x: startX + 35,
-            y: startY + 55,
-            width: 26,
-            height: 14,
-            strokeColor: INK_AMBER,
-            backgroundColor: '#FEF3C7',
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          // Large Central Vacuole
-          {
-            type: 'ellipse',
-            x: startX + 35,
-            y: startY + 90,
-            width: 32,
-            height: 24,
-            strokeColor: INK_BLUE,
-            backgroundColor: '#E0F2FE',
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          // Labels
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 35,
-            text: '• Cell Wall (Rigid cellulose support)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 60,
-            text: '• Plasma Membrane (Selectively permeable)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 85,
-            text: '• Nucleus (DNA & cellular regulation)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 110,
-            text: '• Mitochondria (ATP energy generator)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_AMBER,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 195,
-            y: startY + 135,
-            text: '• Vacuole (Turgidity and storage)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BLUE,
-            customData: { isRough: false },
-          },
-        ]
-
-        const elements = convertToExcalidrawElements(cellSkeleton)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 175)
-        onNoteRecorded?.('**Diagram**: Plant and Animal Cell Organelles')
-      } catch (err) {
-        console.error('drawCellDiagram error:', err)
-      }
-    }
-
-    // Draw Optics Light Ray Diagram (Snell's Law)
-    const drawOpticsDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(190)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const opticsSkeleton: any[] = [
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: "Refraction of Light: Snell's Law (n1 * sin(i) = n2 * sin(r))",
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Boundary line
-          {
-            type: 'line',
-            x: startX + 20,
-            y: startY + 80,
-            points: [[0, 0], [220, 0]],
-            strokeColor: INK_SECONDARY,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          // Normal line
-          {
-            type: 'line',
-            x: startX + 130,
-            y: startY + 20,
-            points: [[0, 0], [0, 120]],
-            strokeColor: INK_MUTED,
-            strokeStyle: 'dashed',
-            strokeWidth: 1.5,
-            customData: { isRough: false },
-          },
-          // Incident Ray
-          {
-            type: 'arrow',
-            x: startX + 50,
-            y: startY + 30,
-            points: [[0, 0], [80, 50]],
-            strokeColor: INK_CORAL,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          // Refracted Ray
-          {
-            type: 'arrow',
-            x: startX + 130,
-            y: startY + 80,
-            points: [[0, 0], [55, 60]],
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          // Medium Labels
-          {
-            type: 'text',
-            x: startX + 30,
-            y: startY + 50,
-            text: 'Air (n1 = 1.0)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 30,
-            y: startY + 95,
-            text: 'Glass (n2 = 1.5)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 255,
-            y: startY + 70,
-            text: 'Ray bends TOWARD normal\nas speed slows down in denser medium.',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-        ]
-
-        const elements = convertToExcalidrawElements(opticsSkeleton)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 165)
-        onNoteRecorded?.("Optics: Snell's Law Refraction Ray Diagram")
-      } catch (err) {
-        console.error('drawOpticsDiagram error:', err)
-      }
-    }
-
-    // Draw Bohr Atomic Model Diagram
-    const drawAtomDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(190)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const atomSkeleton: any[] = [
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: "Bohr Model of Atom: Nucleus (p+n) & Discrete Shells (2n^2)",
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // M Shell
-          {
-            type: 'ellipse',
-            x: startX + 30,
-            y: startY + 25,
-            width: 140,
-            height: 140,
-            strokeColor: BORDER_SUBTLE,
-            strokeStyle: 'dashed',
-            strokeWidth: 1.5,
-            customData: { isRough: false },
-          },
-          // L Shell
-          {
-            type: 'ellipse',
-            x: startX + 50,
-            y: startY + 45,
-            width: 100,
-            height: 100,
-            strokeColor: BORDER_SUBTLE,
-            strokeStyle: 'dashed',
-            strokeWidth: 1.5,
-            customData: { isRough: false },
-          },
-          // K Shell
-          {
-            type: 'ellipse',
-            x: startX + 70,
-            y: startY + 65,
-            width: 60,
-            height: 60,
-            strokeColor: BORDER_SUBTLE,
-            strokeStyle: 'dashed',
-            strokeWidth: 1.5,
-            customData: { isRough: false },
-          },
-          // Nucleus
-          {
-            type: 'ellipse',
-            x: startX + 88,
-            y: startY + 83,
-            width: 24,
-            height: 24,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          // Electrons
-          {
-            type: 'ellipse',
-            x: startX + 96,
-            y: startY + 61,
-            width: 8,
-            height: 8,
-            strokeColor: INK_BLUE,
-            backgroundColor: INK_BLUE,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'ellipse',
-            x: startX + 96,
-            y: startY + 121,
-            width: 8,
-            height: 8,
-            strokeColor: INK_BLUE,
-            backgroundColor: INK_BLUE,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          // Callout labels
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 45,
-            text: '• Shell K (n=1): max 2 electrons',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 70,
-            text: '• Shell L (n=2): max 8 electrons',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 95,
-            text: '• Nucleus: Protons (+e) & Neutrons',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 120,
-            text: 'Electrons orbit in non-radiating states.',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-        ]
-
-        const elements = convertToExcalidrawElements(atomSkeleton)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 175)
-        onNoteRecorded?.('Chemistry: Bohr Atomic Model Structure')
-      } catch (err) {
-        console.error('drawAtomDiagram error:', err)
-      }
-    }
-
-    // Draw Forces & Free Body Diagram
-    const drawForcesDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(180)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const forceSkeleton: any[] = [
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Newtonian Forces & Free Body Diagram: F_net = m * a',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Ground Plane
-          {
-            type: 'line',
-            x: startX + 10,
-            y: startY + 120,
-            points: [[0, 0], [180, 0]],
-            strokeColor: INK_SECONDARY,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          // Mass Block
-          {
-            type: 'rectangle',
-            x: startX + 60,
-            y: startY + 60,
-            width: 70,
-            height: 60,
-            strokeColor: INK_PRIMARY,
-            backgroundColor: '#F8F6F0',
-            fillStyle: 'solid',
-            strokeWidth: 2,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 78,
-            y: startY + 80,
-            text: 'm = 5kg',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Normal Force (Up)
-          {
-            type: 'arrow',
-            x: startX + 95,
-            y: startY + 60,
-            points: [[0, 0], [0, -40]],
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 102,
-            y: startY + 22,
-            text: 'F_N (Normal)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          // Gravity (Down)
-          {
-            type: 'arrow',
-            x: startX + 95,
-            y: startY + 120,
-            points: [[0, 0], [0, 40]],
-            strokeColor: INK_CORAL,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 102,
-            y: startY + 150,
-            text: 'F_g = m*g',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-          // Applied Force (Right)
-          {
-            type: 'arrow',
-            x: startX + 130,
-            y: startY + 90,
-            points: [[0, 0], [50, 0]],
-            strokeColor: INK_BLUE,
-            strokeWidth: 2.5,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 185,
-            y: startY + 82,
-            text: 'F_applied (20N)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_BLUE,
-            customData: { isRough: false },
-          },
-          // Friction (Left)
-          {
-            type: 'arrow',
-            x: startX + 60,
-            y: startY + 115,
-            points: [[0, 0], [-35, 0]],
-            strokeColor: INK_AMBER,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 5,
-            y: startY + 100,
-            text: 'f_k (Friction)',
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_AMBER,
-            customData: { isRough: false },
-          },
-        ]
-
-        const elements = convertToExcalidrawElements(forceSkeleton)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 185)
-        onNoteRecorded?.('Physics: Free Body Diagram & Forces')
-      } catch (err) {
-        console.error('drawForcesDiagram error:', err)
-      }
-    }
-
-    // Draw Pressure in Fluids
-    const drawPressureDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(175)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Hydrostatic Fluid Pressure: P = rho * g * h',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Beaker
-          {
-            type: 'line',
-            x: startX + 20,
-            y: startY + 30,
-            points: [[0, 0], [0, 95], [120, 95], [120, 0]],
-            strokeColor: INK_PRIMARY,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          // Fluid level
-          {
-            type: 'line',
-            x: startX + 20,
-            y: startY + 45,
-            points: [[0, 0], [120, 0]],
-            strokeColor: INK_BLUE,
-            strokeWidth: 2,
-            strokeStyle: 'dashed',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 160,
-            y: startY + 40,
-            text: '• Pressure increases linearly with depth (h)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_SECONDARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 160,
-            y: startY + 65,
-            text: '• Acts equally in all directions at given depth',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 160,
-            y: startY + 90,
-            text: '• Independent of container shape',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 145)
-        onNoteRecorded?.('Physics: Hydrostatic Pressure Principles')
-      } catch (err) {
-        console.error('drawPressureDiagram error:', err)
-      }
-    }
-
-    // Draw Magnetic Field Lines
-    const drawMagnetDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(175)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Bar Magnet: Continuous Closed Magnetic Field Lines (N -> S)',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // North Pole
-          {
-            type: 'rectangle',
-            x: startX + 40,
-            y: startY + 50,
-            width: 60,
-            height: 35,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 62,
-            y: startY + 58,
-            text: 'N',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: '#FFFFFF',
-            customData: { isRough: false },
-          },
-          // South Pole
-          {
-            type: 'rectangle',
-            x: startX + 100,
-            y: startY + 50,
-            width: 60,
-            height: 35,
-            strokeColor: INK_BLUE,
-            backgroundColor: INK_BLUE,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 122,
-            y: startY + 58,
-            text: 'S',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: '#FFFFFF',
-            customData: { isRough: false },
-          },
-          // Field Lines
-          {
-            type: 'line',
-            x: startX + 70,
-            y: startY + 50,
-            points: [[0, 0], [10, -25], [50, -25], [60, 0]],
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          {
-            type: 'line',
-            x: startX + 70,
-            y: startY + 85,
-            points: [[0, 0], [10, 25], [50, 25], [60, 0]],
-            strokeColor: INK_BOTANICAL,
-            strokeWidth: 2,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 45,
-            text: '• Outside magnet: North -> South',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 70,
-            text: '• Inside magnet: South -> North',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 190,
-            y: startY + 95,
-            text: '• Lines NEVER intersect each other.',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 145)
-        onNoteRecorded?.('Physics: Magnetic Field Lines Characteristics')
-      } catch (err) {
-        console.error('drawMagnetDiagram error:', err)
-      }
-    }
-
-    // Draw States of Matter
-    const drawStatesOfMatterDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(170)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'States of Matter: Solid, Liquid, Gas Particle Arrangement',
-            fontSize: 17,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Solid Box
-          {
-            type: 'rectangle',
-            x: startX,
-            y: startY + 30,
-            width: 75,
-            height: 75,
-            strokeColor: INK_BOTANICAL,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
+          // Header / Title
           {
             type: 'text',
             x: startX + 16,
-            y: startY + 110,
-            text: 'Solid\nFixed vol & shape',
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Liquid Box
-          {
-            type: 'rectangle',
-            x: startX + 105,
-            y: startY + 30,
-            width: 75,
-            height: 75,
-            strokeColor: INK_BLUE,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 115,
-            y: startY + 110,
-            text: 'Liquid\nFixed vol, flows',
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          // Gas Box
-          {
-            type: 'rectangle',
-            x: startX + 210,
-            y: startY + 30,
-            width: 75,
-            height: 75,
-            strokeColor: INK_CORAL,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 215,
-            y: startY + 110,
-            text: 'Gas\nHigh kinetic energy',
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 155)
-        onNoteRecorded?.('Chemistry: States of Matter Particle Models')
-      } catch (err) {
-        console.error('drawStatesOfMatterDiagram error:', err)
-      }
-    }
-
-    // Draw Photosynthesis Reaction
-    const drawPhotosynthesisDiagram = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(165)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Photosynthesis: 6CO2 + 6H2O + Sunlight -> C6H12O6 + 6O2',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX,
-            y: startY + 35,
-            text: 'Reactants: Carbon Dioxide (from air) + Water (from soil via xylem)',
-            fontSize: 13,
+            y: startY + 12,
+            text: `[DIAGRAM]: ${resolvedTitle.toUpperCase()}`,
+            fontSize: 14,
             fontFamily: 1,
             strokeColor: INK_BOTANICAL,
             customData: { isRough: false },
           },
+          // SVG Image Element
           {
+            type: 'image',
+            x: startX + 16,
+            y: startY + 44,
+            width: svgWidth,
+            height: svgHeight,
+            fileId,
+            status: 'saved',
+            customData: { isRough: false },
+          },
+        ]
+
+        if (captionLines.length > 0) {
+          skeletons.push({
             type: 'text',
-            x: startX,
-            y: startY + 60,
-            text: 'Catalysts: Chlorophyll in chloroplasts absorbs solar photons',
-            fontSize: 13,
+            x: startX + 16,
+            y: startY + 44 + svgHeight + 12,
+            text: captionLines.join('\n'),
+            fontSize: 12,
             fontFamily: 1,
             strokeColor: INK_SECONDARY,
             customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX,
-            y: startY + 85,
-            text: 'Products: Glucose (food) + Oxygen (byproduct released via stomata)',
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_CORAL,
-            customData: { isRough: false },
-          },
-        ])
+          })
+        }
 
+        const elements = convertToExcalidrawElements(skeletons)
         const current = getCurrentElements()
         const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 125)
-        onNoteRecorded?.('Biology: Photosynthesis Chemical Equation')
+        updateCurrentPageElements(merged, startY + cardHeight + 20)
+        onNoteRecorded?.(`[Diagram]: ${title}${caption ? ` - ${caption}` : ''}`)
       } catch (err) {
-        console.error('drawPhotosynthesisDiagram error:', err)
-      }
-    }
-
-    // Draw Circuit (Series)
-    const drawCircuitSeries = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(175)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Series Circuit: R_eq = R1 + R2 (Current I identical everywhere)',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'rectangle',
-            x: startX + 60,
-            y: startY + 40,
-            width: 70,
-            height: 28,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL_SOFT,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 75,
-            y: startY + 47,
-            text: 'R1 (4 Ohm)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'rectangle',
-            x: startX + 160,
-            y: startY + 40,
-            width: 70,
-            height: 28,
-            strokeColor: INK_BOTANICAL,
-            backgroundColor: '#F0F6F2',
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 175,
-            y: startY + 47,
-            text: 'R2 (6 Ohm)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 260,
-            y: startY + 47,
-            text: 'R_eq = 4 + 6 = 10 Ohm',
-            fontSize: 14,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 115)
-        onNoteRecorded?.('Physics: Series Circuit Equivalent Resistance')
-      } catch (err) {
-        console.error('drawCircuitSeries error:', err)
-      }
-    }
-
-    // Draw Circuit (Parallel)
-    const drawCircuitParallel = async () => {
-      if (!excalidrawAPI) return
-      await checkAutoPageOverflow(175)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'text',
-            x: startX,
-            y: startY,
-            text: 'Parallel Circuit: 1/R_p = 1/R1 + 1/R2 (Voltage V identical)',
-            fontSize: 16,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'rectangle',
-            x: startX + 60,
-            y: startY + 35,
-            width: 70,
-            height: 26,
-            strokeColor: INK_CORAL,
-            backgroundColor: INK_CORAL_SOFT,
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 75,
-            y: startY + 41,
-            text: 'R1 (6 Ohm)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'rectangle',
-            x: startX + 60,
-            y: startY + 75,
-            width: 70,
-            height: 26,
-            strokeColor: INK_BOTANICAL,
-            backgroundColor: '#F0F6F2',
-            fillStyle: 'solid',
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 75,
-            y: startY + 81,
-            text: 'R2 (3 Ohm)',
-            fontSize: 12,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 160,
-            y: startY + 58,
-            text: '1/R_p = 1/6 + 1/3 = 3/6 -> R_p = 2 Ohm',
-            fontSize: 14,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 125)
-        onNoteRecorded?.('Physics: Parallel Circuit Equivalent Resistance')
-      } catch (err) {
-        console.error('drawCircuitParallel error:', err)
-      }
-    }
-
-    // Draw Board Book Illustration Frame directly on Whiteboard
-    const drawImageCard = async (title: string, caption = '', attribution = 'NCERT / Board Standard') => {
-      if (!excalidrawAPI || !title?.trim()) return
-      await checkAutoPageOverflow(165)
-      try {
-        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startX = 70
-        const startY = getDynamicNextY(16)
-
-        const elements = convertToExcalidrawElements([
-          {
-            type: 'rectangle',
-            x: startX,
-            y: startY,
-            width: 390,
-            height: 110,
-            strokeColor: INK_BOTANICAL,
-            backgroundColor: '#FBF9F7',
-            fillStyle: 'solid',
-            strokeWidth: 1.5,
-            roundness: { type: 3 },
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 14,
-            y: startY + 10,
-            text: `[BOARD BOOK FIGURE]: ${title.toUpperCase()}`,
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_BOTANICAL,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 14,
-            y: startY + 38,
-            text: caption || `Authentic textbook schematic illustration for ${title}.`,
-            fontSize: 13,
-            fontFamily: 1,
-            strokeColor: INK_PRIMARY,
-            customData: { isRough: false },
-          },
-          {
-            type: 'text',
-            x: startX + 14,
-            y: startY + 82,
-            text: `Source: ${attribution}`,
-            fontSize: 11,
-            fontFamily: 1,
-            strokeColor: INK_MUTED,
-            customData: { isRough: false },
-          },
-        ])
-
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + 130)
-        onNoteRecorded?.(`[Figure]: ${title} (${attribution})`)
-      } catch (err) {
-        console.error('drawImageCard error:', err)
+        console.error('drawSvgDiagram error:', err)
       }
     }
 
@@ -3747,6 +3261,49 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             if (content) await drawExamQuestion(content, undefined, undefined, color);
           } else if (action === 'draw_shape' || action === 'shape' || action === 'draw_rectangle' || action === 'draw_circle' || action === 'draw_triangle') {
             if (content) await drawShape(content);
+          } else if (action === 'draw_table' || action === 'table') {
+            if (content) await drawTable(content);
+          } else if (action === 'draw_graph' || action === 'graph') {
+            if (content) await drawGraph(content);
+          } else if (action === 'draw_geometry' || action === 'geometry') {
+            if (content) await drawGeometry(content);
+          } else if (action === 'draw_image' || action === 'image') {
+            const parts = (content || '').split('|').map((s) => s.trim());
+            await drawFlowchart(`${parts[0] || 'Key Concept'} -> Fundamental Principle -> Board Application`);
+          } else if (action === 'draw_video' || action === 'video') {
+            const parts = (content || '').split('|').map((s) => s.trim());
+            await drawVideoCard(parts[0] || 'Demonstration', parts[1] || '');
+          } else if (action === 'draw_numerical' || action === 'numerical' || action === 'worked_example' || action === 'solve') {
+            if (typeof content === 'object') await drawNumericalSolution(content);
+            else {
+              const parts = (content || '').split('|').map((s) => s.trim());
+              const solutionData: any = { answer: '' };
+              parts.forEach((p) => {
+                const lower = p.toLowerCase();
+                if (lower.startsWith('problem:')) solutionData.problem = p.substring(8).trim();
+                else if (lower.startsWith('given:')) solutionData.given = p.substring(6).trim();
+                else if (lower.startsWith('formula:')) solutionData.formula = p.substring(8).trim();
+                else if (lower.startsWith('substitution:') || lower.startsWith('sub:')) solutionData.substitution = p.split(':')[1]?.trim();
+                else if (lower.startsWith('calculation:') || lower.startsWith('rough:')) solutionData.calculation = p.split(':')[1]?.trim();
+                else if (lower.startsWith('answer:') || lower.startsWith('final:')) solutionData.answer = p.split(':')[1]?.trim();
+                else if (lower.startsWith('unit:') || lower.startsWith('units:')) solutionData.unit = p.split(':')[1]?.trim();
+                else if (!solutionData.problem) solutionData.problem = p;
+                else if (!solutionData.answer) solutionData.answer = p;
+              });
+              await drawNumericalSolution(solutionData);
+            }
+          } else if (action === 'render_svg_diagram' || action === 'draw_svg' || action === 'draw_svg_diagram') {
+            if (content) {
+              const trimmed = content.trim();
+              if (trimmed.includes('|') && trimmed.includes('<svg')) {
+                const parts = trimmed.split('|').map((s) => s.trim());
+                await drawSvgDiagram(parts[0] || 'Educational Diagram', parts[1] || '', parts[2]);
+              } else if (trimmed.includes('<svg')) {
+                await drawSvgDiagram('Educational Diagram', trimmed);
+              } else {
+                await drawSvgDiagram(trimmed, '');
+              }
+            }
           } else if (action === 'draw_flowchart' || action === 'flowchart') {
             if (content) await drawFlowchart(content, color);
           } else if (action === 'draw_rough_work' || action === 'rough_work' || action === 'rough') {
@@ -3772,6 +3329,50 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             onModuleComplete?.(content);
           }
         });
+      }
+
+      // Match pseudo-code: render_svg_diagram(title="...", svg="...", caption="...") or JSON format
+      const svgToolRegex = /render_svg_diagram\s*\(([\s\S]*?)\)/gi;
+      const svgMatches = Array.from(rawText.matchAll(svgToolRegex));
+      for (const sm of svgMatches) {
+        const body = sm[1]?.trim();
+        if (!body) continue;
+        let title = 'Educational Diagram';
+        let svg = '';
+        let caption = '';
+        if (body.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(body);
+            title = parsed.title || title;
+            svg = parsed.svg || '';
+            caption = parsed.caption || '';
+          } catch {}
+        } else {
+          const explicitTitle = body.match(/\btitle\s*=\s*["']([^"']*)["']/i);
+          const explicitSvg = body.match(/\bsvg\s*=\s*["']([\s\S]*?)["'](?:\s*,\s*[a-zA-Z_]+\s*=|\s*$)/i);
+          const explicitCaption = body.match(/\bcaption\s*=\s*["']([^"']*)["']/i);
+          if (explicitSvg) {
+            title = explicitTitle ? explicitTitle[1] : 'Educational Diagram';
+            svg = explicitSvg[1];
+            caption = explicitCaption ? explicitCaption[1] : '';
+          } else {
+            const posMatch = body.match(/["']([^"']*)["']\s*,\s*["']([\s\S]*?)["'](?:\s*,\s*["']([^"']*)["'])?/);
+            if (posMatch) {
+              title = posMatch[1];
+              svg = posMatch[2];
+              caption = posMatch[3] || '';
+            }
+          }
+        }
+        if (svg) {
+          const signature = `SVG:${normalizeTitle(title)}:${svg.slice(0, 40)}`;
+          if (!executedDirectivesRef.current.has(signature)) {
+            executedDirectivesRef.current.add(signature);
+            enqueueOperation(async () => {
+              await drawSvgDiagram(title, svg, caption);
+            });
+          }
+        }
       }
 
       const directiveRegex = /\[([A-Z_]+)(?::\s*([^\]]+))?\]/gi;
@@ -3890,55 +3491,44 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           } else if (tagType === 'TIMELINE') {
             if (payload) await drawFlowchart(payload)
           }
-          // 3. Universal Diagrams & Graphs (Any Subject)
-          else if (tagType === 'GRAPH' || tagType === 'DRAW_GRAPH') {
+          // 3. Universal Diagrams, SVG & Graphs (Any Subject)
+          else if (tagType === 'SVG' || tagType === 'SVG_DIAGRAM' || tagType === 'RENDER_SVG' || tagType === 'RENDER_SVG_DIAGRAM') {
+            if (payload.includes('|') && payload.includes('<svg')) {
+              const parts = payload.split('|').map((s) => s.trim())
+              const title = parts[0] || 'Educational Diagram'
+              const svg = parts[1] || ''
+              const caption = parts[2] || ''
+              if (svg) await drawSvgDiagram(title, svg, caption)
+            } else if (payload.includes('<svg')) {
+              await drawSvgDiagram('Educational Diagram', payload)
+            }
+          } else if (tagType === 'GRAPH' || tagType === 'DRAW_GRAPH') {
             await drawGraph(payload)
           } else if (tagType === 'DIAGRAM' || tagType === 'DRAW_DIAGRAM') {
             const diag = payload.toLowerCase()
-            if (diag.includes('triangle') || diag.includes('circle') || diag.includes('geometry') || diag.includes('polygon') || diag.includes('angle')) {
+            if (payload.includes('<svg') && payload.includes('</svg>')) {
+              const titleMatch = payload.match(/title\s*=\s*["']([^"']+)["']/i)
+              const title = titleMatch ? titleMatch[1] : 'Educational Diagram'
+              const svgMatch = payload.match(/<svg[\s\S]*?<\/svg>/i)
+              if (svgMatch) await drawSvgDiagram(title, svgMatch[0])
+            } else if (diag.includes('triangle') || diag.includes('circle') || diag.includes('geometry') || diag.includes('polygon') || diag.includes('angle')) {
               await drawGeometry(payload)
             } else if (diag.includes('table') || diag.includes('compare') || diag.includes('vs')) {
               if (payload.includes('|')) await drawTable(payload)
-              else await drawImageCard(payload, 'Comparison Matrix', 'Board Standard')
+              else await drawFlowchart(payload)
             } else if (diag.includes('timeline') || diag.includes('flow')) {
               await drawFlowchart(payload)
             } else if (diag.includes('graph') || diag.includes('ohm') || diag.includes('linear') || diag.includes('velocity') || diag.includes('speed') || diag.includes('distance') || diag.includes('wave') || diag.includes('parabola') || diag.includes('quad') || diag.includes('boyle') || diag.includes('curve') || diag.includes('plot') || diag.includes('=')) {
               await drawGraph(diag)
-            } else if (diag.includes('force') || diag.includes('newton') || diag.includes('fbd')) {
-              await drawForcesDiagram()
-            } else if (diag.includes('pressure') || diag.includes('fluid')) {
-              await drawPressureDiagram()
-            } else if (diag.includes('magnet')) {
-              await drawMagnetDiagram()
-            } else if (
-              diag.includes('plant cell') ||
-              diag.includes('animal cell') ||
-              diag.includes('cell organelle') ||
-              diag.includes('cell structure') ||
-              (/\bcell\b/i.test(diag) && !diag.includes('electric') && !diag.includes('battery') && !diag.includes('dry cell') && !diag.includes('galvanic') && !diag.includes('electrolytic'))
-            ) {
-              await drawCellDiagram()
-            } else if (diag.includes('optic') || diag.includes('reflect') || diag.includes('light') || diag.includes('snell') || diag.includes('refract') || diag.includes('lens')) {
-              await drawOpticsDiagram()
-            } else if (diag.includes('atom') || diag.includes('bohr')) {
-              await drawAtomDiagram()
-            } else if (diag.includes('matter') || diag.includes('state')) {
-              await drawStatesOfMatterDiagram()
-            } else if (diag.includes('photo') || diag.includes('photosynthesis')) {
-              await drawPhotosynthesisDiagram()
-            } else if (diag.includes('series')) {
-              await drawCircuitSeries()
-            } else if (diag.includes('parallel')) {
-              await drawCircuitParallel()
             } else {
-              // Universal for ANY syllabus subject (History, Geography, Economics, Mathematics, Chemistry, Biology, Social Science, English)
-              await drawImageCard(payload || 'Curriculum Schematic', `Authentic textbook illustration and conceptual schematic for ${payload}.`, 'NCERT / Board Standard')
+              // Universal dynamic vector SVG diagram for any syllabus subject
+              await drawSvgDiagram(payload || 'Scientific Diagram', '', '')
             }
           }
-          // 4. Board Book Illustrations & Videos
+          // 4. Board Videos & Dynamic Vector Diagrams
           else if (tagType === 'IMAGE' || tagType === 'DRAW_IMAGE') {
-            const [imgTitle, imgCaption] = payload.split('|').map((s) => s.trim())
-            await drawImageCard(imgTitle || 'Textbook Diagram', imgCaption || '')
+            const [imgTitle, imgDesc] = payload.split('|').map((s) => s.trim())
+            await drawSvgDiagram(imgTitle || 'Scientific Diagram', '', imgDesc || '')
           } else if (tagType === 'VIDEO' || tagType === 'DRAW_VIDEO') {
             const [vidTitle, vidDesc] = payload.split('|').map((s) => s.trim())
             await drawVideoCard(vidTitle || 'Visual Demonstration', vidDesc || '')
@@ -3947,15 +3537,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           else if (tagType === 'BOARD_QUESTION' || tagType === 'QUESTION') {
             if (payload) {
               await drawQuestion(payload)
-              if (
-                payload.toLowerCase().includes('conclude') ||
-                payload.toLowerCase().includes('end chapter') ||
-                payload.toLowerCase().includes('10-mcq') ||
-                payload.toLowerCase().includes('10 mcq') ||
-                payload.toLowerCase().includes('quiz')
-              ) {
-                onConfirmEndChapter?.(payload)
-              }
             }
           } else if (tagType === 'CONFIRM_END_CHAPTER') {
             if (payload) {
@@ -4012,21 +3593,12 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       clearNotes,
       rewriteNotes,
       clearBoard,
+      resetBoard,
       setChalkColor: (colorNameOrHex: string) => setChalkColor(colorNameOrHex),
       setBoardColor: () => {},
-      drawForcesDiagram,
-      drawPressureDiagram,
-      drawMagnetDiagram,
-      drawCellDiagram,
-      drawOpticsDiagram,
-      drawAtomDiagram,
-      drawStatesOfMatterDiagram,
-      drawPhotosynthesisDiagram,
-      drawCircuitSeries,
-      drawCircuitParallel,
+      drawSvgDiagram,
       drawGraph,
       drawNumericalSolution,
-      drawImageCard,
       drawVideoCard,
       drawTable,
       drawGeometry,
@@ -4045,28 +3617,37 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
 
     return (
       <div className="whiteboard-container relative w-full h-full flex flex-col rounded-2xl overflow-hidden bg-white border border-[#E5E3DB] shadow-[0_10px_30px_-10px_rgba(23,24,23,0.06)]">
-        {/* Top Minimalist Whiteboard Header & Multi-Page Bar */}
-        <div className="relative z-20 px-4 py-2.5 bg-[#F8F6F0]/95 border-b border-[#E5E3DB] flex flex-wrap items-center justify-between gap-2 select-none">
-          <div className="flex items-center gap-2.5">
-            {subject && (
-              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#E8F0EA] text-[#52715D] border border-[#C8EBD2] uppercase tracking-wider font-mono">
-                {subject}
-              </span>
-            )}
-            <span className="text-xs font-semibold text-[#171817] truncate max-w-[200px] sm:max-w-[280px]">
-              {moduleTitle}
-            </span>
-          </div>
+        {/* Excalidraw Light Engine - 100% Uninterrupted Vertical Height */}
+        <div
+          ref={containerRef}
+          className="relative flex-1 w-full h-full bg-[#FFFFFF]"
+          onWheel={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault()
+            }
+          }}
+        >
+          <Excalidraw
+            excalidrawAPI={handleExcalidrawAPI}
+            onChange={handleExcalidrawChange}
+            theme="light"
+            viewModeEnabled={true}
+            initialData={EXCALIDRAW_INITIAL_DATA}
+            UIOptions={EXCALIDRAW_UI_OPTIONS}
+          />
+        </div>
 
+        {/* Minimalist Bottom Bar: Multi-Page Navigation, Chalk Swatches, and Page Counter */}
+        <div className="relative z-20 py-1.5 px-3 bg-[#F8F6F0] border-t border-[#E5E3DB] flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-[#7A7C75] select-none">
           {/* Multi-Page Navigation Bar */}
-          <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-xl border border-[#E5E3DB] shadow-xs">
-            <span className="text-[11px] text-[#7A7C75] font-mono mr-1">Pages:</span>
+          <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-[#E5E3DB] shadow-xs">
+            <span className="text-[10px] text-[#7A7C75] font-mono mr-0.5">Pages:</span>
             <div className="flex items-center gap-1">
               {pages.map((p, idx) => (
                 <button
                   key={p.id}
                   onClick={() => switchPage(idx)}
-                  className={`px-2.5 py-0.5 text-[11px] font-mono rounded-lg transition-all cursor-pointer ${
+                  className={`px-2 py-0.5 text-[10px] font-mono rounded-md transition-all cursor-pointer ${
                     currentPageIndex === idx
                       ? 'bg-[#52715D] text-white font-bold shadow-xs'
                       : 'text-[#555852] hover:bg-[#F8F6F0]'
@@ -4080,16 +3661,16 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
 
             <button
               onClick={addNewPage}
-              className="p-1 rounded-md text-[#52715D] hover:bg-[#E8F0EA] transition-colors cursor-pointer ml-1"
+              className="p-0.5 rounded text-[#52715D] hover:bg-[#E8F0EA] transition-colors cursor-pointer ml-0.5"
               title="Add New Whiteboard Page"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3 h-3" />
             </button>
           </div>
 
           {/* Multi-Color Chalk Palette */}
-          <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-xl border border-[#E5E3DB] shadow-xs">
-            <span className="text-[11px] text-[#7A7C75] font-mono mr-0.5">Chalk:</span>
+          <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-[#E5E3DB] shadow-xs">
+            <span className="text-[10px] text-[#7A7C75] font-mono mr-0.5">Chalk:</span>
             {[
               { name: 'Charcoal', value: INK_PRIMARY, title: 'Charcoal / Primary Ink' },
               { name: 'Botanical', value: INK_BOTANICAL, title: 'Botanical Green' },
@@ -4102,7 +3683,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
                 key={swatch.name}
                 type="button"
                 onClick={() => setChalkColor(swatch.value)}
-                className={`w-3.5 h-3.5 rounded-full transition-all cursor-pointer border ${
+                className={`w-3 h-3 rounded-full transition-all cursor-pointer border ${
                   activeChalkColor === swatch.value
                     ? 'scale-125 ring-2 ring-[#52715D] ring-offset-1 border-white shadow-xs'
                     : 'border-black/10 hover:scale-115'
@@ -4114,78 +3695,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             ))}
           </div>
 
-          {/* Quick Actions & Live Indicator */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={clearRough}
-              className="px-2.5 py-1 text-[11px] font-medium rounded-lg text-[#555852] hover:text-[#171817] hover:bg-[#E5E3DB]/50 border border-transparent hover:border-[#E5E3DB] transition-all cursor-pointer flex items-center gap-1"
-              title="Erase Scratchpad Calculations"
-            >
-              <Trash2 className="w-3 h-3 text-[#7A7C75]" />
-              <span className="hidden sm:inline">Clear Scratchpad</span>
-            </button>
-
-            <span className="px-2.5 py-1 text-[11px] rounded-lg bg-[#E8F0EA] text-[#52715D] border border-[#C8EBD2] font-mono flex items-center gap-1.5 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-[#52715D] animate-pulse" />
-              <span>AI Whiteboard Live</span>
-            </span>
+          {/* Page Counter & Status */}
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline text-[10px] text-[#7A7C75]">Notes • Zoom Locked 70%</span>
+            <span className="text-[#52715D] font-bold text-[11px]">Page {currentPageIndex + 1} of {pages.length}</span>
           </div>
-        </div>
-
-        {/* Excalidraw Light Engine */}
-        <div
-          ref={containerRef}
-          className="relative flex-1 w-full h-full bg-[#FFFFFF]"
-          onWheel={(e) => {
-            if (e.ctrlKey || e.metaKey) {
-              e.preventDefault()
-            }
-          }}
-        >
-          <Excalidraw
-            excalidrawAPI={(api) => {
-              setExcalidrawAPI(api)
-            }}
-            onChange={(elements) => {
-              if (elements && elements.length > 0) {
-                boardElementsRef.current = elements as any[]
-                persistScene(elements)
-              }
-            }}
-            theme="light"
-            viewModeEnabled={true}
-            initialData={{
-              appState: {
-                viewBackgroundColor: CANVAS_BG,
-                currentItemStrokeColor: INK_PRIMARY,
-                currentItemFontFamily: 1,
-                currentItemRoughness: 0,
-                zenModeEnabled: true,
-                viewModeEnabled: true,
-                zoom: { value: 0.7 as any },
-              },
-            }}
-            UIOptions={{
-              canvasActions: {
-                changeViewBackgroundColor: false,
-                clearCanvas: false,
-                loadScene: false,
-                saveToActiveFile: false,
-                toggleTheme: false,
-                saveAsImage: false,
-              },
-              tools: {
-                image: false,
-              },
-              welcomeScreen: false,
-            }}
-          />
-        </div>
-
-        {/* Minimal Bottom Bar */}
-        <div className="relative z-20 h-6 bg-[#F8F6F0] border-t border-[#E5E3DB] px-4 flex items-center justify-between text-[11px] font-mono text-[#7A7C75]">
-          <span>Single Source of Truth Notes • Zoom Locked 70%</span>
-          <span className="text-[#52715D]">Page {currentPageIndex + 1} of {pages.length}</span>
         </div>
       </div>
     )

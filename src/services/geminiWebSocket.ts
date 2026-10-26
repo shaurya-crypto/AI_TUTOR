@@ -1,15 +1,28 @@
 import { GoogleGenAI, Type, Behavior } from '@google/genai';
 
+export interface CustomizedAvatarConfig {
+  imageData?: string;
+  imageMimeType?: string;
+}
+
+export interface LiveAvatarConfig {
+  avatarName?: string;
+  customizedAvatar?: CustomizedAvatarConfig;
+  audioBitrateBps?: number;
+  videoBitrateBps?: number;
+}
+
 export interface GeminiLiveCallbacks {
   onSetupComplete: () => void;
   onAudioData: (pcmData: Int16Array, sampleRate: number) => void;
+  onVideoData?: (data: string, mimeType: string) => void;
   onInterrupted: () => void;
   onTurnComplete: () => void;
   onTranscript: (text: string, sender: "user" | "teacher") => void;
   onError: (error: Error) => void;
   onClose: (event: CloseEvent) => void;
   onUserSpeechStart?: () => void;
-  onChalkboardToolCall?: (action: string, content: string, color?: string) => void;
+  onChalkboardToolCall?: (action: string, content: any, color?: string) => void;
   onVisualAction?: (action: string, params: Record<string, any>) => void;
 }
 
@@ -26,7 +39,9 @@ export class GeminiLiveClient {
   private hasSentKickoff: boolean = false;
   private pendingKickoffText: string | null = null;
   private enableFunctionCalling: boolean = false;
+  private avatarConfig?: LiveAvatarConfig;
   private executedToolCallIds = new Set<string>();
+  private lastExecutedToolCalls = new Map<string, number>();
 
   constructor(
     authTokenOrApiKey: string,
@@ -36,6 +51,7 @@ export class GeminiLiveClient {
       voiceName?: string;
       systemInstruction?: string;
       enableFunctionCalling?: boolean;
+      avatarConfig?: LiveAvatarConfig;
     }
   ) {
     this.apiKey = authTokenOrApiKey;
@@ -47,9 +63,10 @@ export class GeminiLiveClient {
     this.model = model;
     this.voiceName = options?.voiceName || "Aoede";
     this.enableFunctionCalling = options?.enableFunctionCalling ?? false;
+    this.avatarConfig = options?.avatarConfig;
     this.systemInstruction =
       options?.systemInstruction ||
-      "You are an inspiring, patient Senior Academic Tutor conducting an engaging 1-on-1 spoken tutoring session with a live chalkboard. Explain concepts very simply using tangible, context-based real-world intuition. Speak continuously without stopping in the middle, write key notes on the chalkboard using inline tags, and ALWAYS end every spoken turn with a clear checkpoint question for the student.";
+      "You are an inspiring, patient Senior Academic Tutor conducting an engaging 1-on-1 spoken tutoring session with a live chalkboard. Explain concepts simply using tangible real-world intuition. Explain first, read definitions, examples, and flowcharts aloud word-for-word, and write notes to the chalkboard step-by-step rather than all at once. Always end turns with a clear checkpoint question.";
     this.ai = new GoogleGenAI({
       apiKey: this.apiKey,
       httpOptions: { apiVersion: "v1alpha" },
@@ -90,18 +107,7 @@ export class GeminiLiveClient {
       }
     }
 
-    // 3. Match show_educational_media(...)
-    const mediaRegex = /show_educational_media\s*\(\s*(?:mediaType\s*=\s*)?["']?([a-zA-Z0-9_\-]+)["']?\s*(?:,\s*(?:title\s*=\s*)?["']([^"']*)["'])?(?:,\s*(?:caption\s*=\s*)?["']([^"']*)["'])?(?:,\s*(?:attribution\s*=\s*)?["']([^"']*)["'])?\s*\)/gi;
-    let mm;
-    while ((mm = mediaRegex.exec(rawText)) !== null) {
-      const mediaType = mm[1]?.trim() || "image";
-      const title = mm[2]?.trim() || "";
-      const caption = mm[3]?.trim() || "";
-      const attribution = mm[4]?.trim() || "";
-      this.handleSingleToolCall("show_educational_media", { mediaType, title, caption, attribution });
-    }
-
-    // 3b. Match draw_shape(...)
+    // 3. Match draw_shape(...)
     const shapeRegex = /draw_shape\s*\(\s*([^()]+)\)/gi;
     let sm;
     while ((sm = shapeRegex.exec(rawText)) !== null) {
@@ -115,18 +121,88 @@ export class GeminiLiveClient {
       } catch {}
     }
 
-    // 4. Strip any leaked tool calls and bracket directives from spoken transcript text
+    // 3b. Match plot_mathematical_graph(...)
+    const graphRegex = /plot_mathematical_graph\s*\(([\s\S]*?)\)/gi;
+    let gm;
+    while ((gm = graphRegex.exec(rawText)) !== null) {
+      const body = gm[1]?.trim() || "";
+      if (!body) continue;
+      if (body.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(body);
+          this.handleSingleToolCall("plot_mathematical_graph", parsed);
+        } catch {}
+      } else {
+        const explicitFormula = body.match(/\bformula\s*=\s*["']([^"']*)["']/i);
+        const explicitTitle = body.match(/\btitle\s*=\s*["']([^"']*)["']/i);
+        const explicitDomain = body.match(/\bdomain\s*=\s*["']([^"']*)["']/i);
+        const explicitRange = body.match(/\brange\s*=\s*["']([^"']*)["']/i);
+        const explicitCallout = body.match(/\bcallout\s*=\s*["']([^"']*)["']/i);
+        const explicitPoints = body.match(/\bpoints\s*=\s*["']([^"']*)["']/i);
+        const formula = explicitFormula ? explicitFormula[1] : body.split(',')[0]?.replace(/^["']|["']$/g, '').trim() || 'x';
+        this.handleSingleToolCall("plot_mathematical_graph", {
+          formula,
+          title: explicitTitle ? explicitTitle[1] : undefined,
+          domain: explicitDomain ? explicitDomain[1] : undefined,
+          range: explicitRange ? explicitRange[1] : undefined,
+          callout: explicitCallout ? explicitCallout[1] : undefined,
+          points: explicitPoints ? explicitPoints[1] : undefined,
+        });
+      }
+    }
+
+    // 4. Match render_svg_diagram(...)
+    const svgRegex = /render_svg_diagram\s*\(([\s\S]*?)\)/gi;
+    let svgm;
+    while ((svgm = svgRegex.exec(rawText)) !== null) {
+      const body = svgm[1]?.trim() || "";
+      if (!body) continue;
+      if (body.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed.title || parsed.svg) {
+            this.handleSingleToolCall("render_svg_diagram", {
+              title: parsed.title || "Educational Diagram",
+              svg: parsed.svg || "",
+              caption: parsed.caption || "",
+            });
+          }
+        } catch {}
+      } else {
+        const explicitTitle = body.match(/\btitle\s*=\s*["']([^"']*)["']/i);
+        const explicitSvg = body.match(/\bsvg\s*=\s*["']([\s\S]*?)["'](?:\s*,\s*[a-zA-Z_]+\s*=|\s*$)/i);
+        const explicitCaption = body.match(/\bcaption\s*=\s*["']([^"']*)["']/i);
+        if (explicitTitle || explicitSvg) {
+          const title = explicitTitle ? explicitTitle[1] : "Educational Diagram";
+          const svg = explicitSvg ? explicitSvg[1] : "";
+          const caption = explicitCaption ? explicitCaption[1] : "";
+          this.handleSingleToolCall("render_svg_diagram", { title, svg, caption });
+        } else {
+          const posMatch = body.match(/["']([^"']*)["'](?:\s*,\s*["']([\s\S]*?)["'])?(?:\s*,\s*["']([^"']*)["'])?/);
+          if (posMatch && posMatch[1]) {
+            this.handleSingleToolCall("render_svg_diagram", {
+              title: posMatch[1],
+              svg: posMatch[2] || "",
+              caption: posMatch[3] || "",
+            });
+          }
+        }
+      }
+    }
+
+    // 5. Strip any leaked tool calls and bracket directives from spoken transcript text
     const stripCall = (name: string) => new RegExp(`${name}\\s*\\((?:'[^']*'|"[^"]*"|[^()]*|\\([^()]*\\))*\\)`, "gi");
     return rawText
       .replace(stripCall("write_chalkboard"), "")
       .replace(stripCall("execute_visual_action"), "")
-      .replace(stripCall("show_educational_media"), "")
       .replace(stripCall("plot_mathematical_graph"), "")
       .replace(stripCall("open_interactive_simulation"), "")
       .replace(stripCall("update_interactive_simulation"), "")
       .replace(stripCall("draw_shape"), "")
       .replace(stripCall("solve_step_by_step_numerical"), "")
       .replace(stripCall("conclude_and_open_quiz"), "")
+      .replace(stripCall("render_svg_diagram"), "")
+      .replace(/render_svg_diagram\s*\([\s\S]*?\)/gi, "")
       .replace(/\[[A-Z_]+(?::\s*[^\]]*)?\]/gi, "")
       .replace(/\s+/g, " ")
       .trim();
@@ -141,6 +217,20 @@ export class GeminiLiveClient {
       if (this.executedToolCallIds.size > 200) {
         const first = this.executedToolCallIds.values().next().value;
         if (first) this.executedToolCallIds.delete(first);
+      }
+    }
+
+    const argKey = typeof args === 'string' ? args : JSON.stringify(args);
+    const callSignature = `${name}:${argKey}`;
+    const now = Date.now();
+    const lastTime = this.lastExecutedToolCalls.get(callSignature);
+    if (lastTime && (now - lastTime) < 2500) {
+      return;
+    }
+    this.lastExecutedToolCalls.set(callSignature, now);
+    if (this.lastExecutedToolCalls.size > 200) {
+      for (const [k, t] of this.lastExecutedToolCalls.entries()) {
+        if (now - t > 60000) this.lastExecutedToolCalls.delete(k);
       }
     }
     if (name === "write_chalkboard") {
@@ -173,14 +263,13 @@ export class GeminiLiveClient {
       this.callbacks.onVisualAction?.("UPDATE_SCENE", { title, ...parameters });
     } else if (name === "draw_shape") {
       this.callbacks.onChalkboardToolCall?.("draw_shape", args, args.color);
-    } else if (name === "show_educational_media") {
-      if (args.mediaType === "video") {
-        this.callbacks.onChalkboardToolCall?.("draw_video", `${args.title || "Demonstration"} | ${args.caption || ""}`);
-      } else {
-        this.callbacks.onChalkboardToolCall?.("draw_image", `${args.title || "Diagram"} | ${args.caption || ""} | ${args.attribution || "NCERT / Board Standard"}`);
-      }
     } else if (name === "solve_step_by_step_numerical") {
       this.callbacks.onChalkboardToolCall?.("draw_numerical", args);
+    } else if (name === "render_svg_diagram") {
+      const title = args.title || "Educational Diagram";
+      const svg = args.svg || "";
+      const caption = args.caption || "";
+      this.callbacks.onChalkboardToolCall?.("render_svg_diagram", { title, svg, caption });
     } else if (name === "conclude_and_open_quiz") {
       if (args.summary) {
         this.callbacks.onChalkboardToolCall?.("chapter_summary", args.summary);
@@ -200,10 +289,14 @@ export class GeminiLiveClient {
     }
 
     try {
-      console.log(`[GeminiLive] Connecting session with model: ${this.model}, voice: ${this.voiceName}, enableFunctionCalling: ${this.enableFunctionCalling}`);
+      console.log(`[GeminiLive] Connecting session with model: ${this.model}, voice: ${this.voiceName}, enableFunctionCalling: ${this.enableFunctionCalling}, avatarEnabled: ${!!this.avatarConfig}`);
+
+      const responseModalities = this.avatarConfig
+        ? ["VIDEO" as any, "AUDIO" as any]
+        : ["AUDIO" as any];
 
       const liveConfig: any = {
-        responseModalities: ["AUDIO" as any],
+        responseModalities,
         systemInstruction: { parts: [{ text: this.systemInstruction }] },
         speechConfig: {
           voiceConfig: {
@@ -216,13 +309,17 @@ export class GeminiLiveClient {
         outputAudioTranscription: {},
       };
 
+      if (this.avatarConfig) {
+        liveConfig.avatarConfig = this.avatarConfig;
+      }
+
       if (this.enableFunctionCalling) {
         liveConfig.tools = [
           {
             functionDeclarations: [
               {
                 name: "write_chalkboard",
-                description: "Draw or write notes, titles, formulas, steps, rough scratch work, math equations, or scientific diagrams on the student's live whiteboard.",
+                description: "Draw or write notes, titles, formulas, steps, rough scratch work, math equations, tables, flowcharts, or set chalk colors on the student's live whiteboard.",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -234,60 +331,23 @@ export class GeminiLiveClient {
                         "draw_note",
                         "draw_step",
                         "draw_highlight_box",
-                        "draw_rough_work",
-                        "clear_rough",
-                        "clear_notes",
-                        "clear_board",
-                        "erase_board",
-                        "new_page",
                         "draw_question",
-                        "draw_flowchart",
-                        "draw_table",
-                        "draw_geometry",
-                        "draw_numerical",
-                        "draw_graph",
-                        "draw_image",
-                        "draw_video",
-                        "draw_diagram",
-                        "draw_cell",
-                        "draw_atom",
-                        "draw_optics",
-                        "draw_forces",
-                        "draw_magnet",
-                        "draw_pressure",
-                        "draw_matter",
-                        "draw_photosynthesis",
-                        "draw_circuit",
-                        "draw_circuit_series",
-                        "draw_circuit_parallel",
-                        "rewrite_notes",
-                        "start_quiz",
-                        "open_quiz",
-                        "chapter_summary",
-                        "concept_focus",
-                        "concept_done",
-                        "concept_goto",
-                        "worked_example",
-                        "draw_shape",
                         "draw_student_answer",
                         "draw_answer_verdict",
                         "draw_exam_question",
-                        "draw_rectangle",
-                        "draw_circle",
-                        "draw_triangle",
-                        "table",
-                        "geometry",
-                        "graph",
-                        "diagram",
-                        "image",
-                        "video",
+                        "draw_flowchart",
+                        "draw_table",
+                        "draw_rough_work",
+                        "concept_done",
+                        "concept_focus",
                         "set_color",
+                        "new_page",
                       ],
-                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_shape, new_page, concept_focus, concept_done)",
+                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_flowchart, draw_table, draw_rough_work, concept_done, concept_focus, set_color, new_page)",
                     },
                     content: {
                       type: Type.STRING,
-                      description: "The text to write, equation, or diagram name (forces, cell, atom, optics, matter, magnet, photosynthesis, series, parallel, graph, velocity-time, linear)",
+                      description: "The text to write, equation, table markup, flowchart text, or color name to apply to the chalkboard.",
                     },
                     color: {
                       type: Type.STRING,
@@ -380,6 +440,29 @@ export class GeminiLiveClient {
                 },
               },
               {
+                name: "render_svg_diagram",
+                description: "Render a clean, high-precision vector SVG educational diagram directly on the chalkboard. Provide concise title (e.g. 'Plant Cell Wall', 'Reflection of Light', 'Simple Circuit'). You may optionally supply svg markup; if omitted, the high-precision vector diagram is rendered automatically.",
+                behavior: Behavior.NON_BLOCKING,
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: {
+                      type: Type.STRING,
+                      description: "Concise academic title of the diagram (e.g. 'Plant Cell Wall & Cellulose Microfibrils', 'Reflection of Light at Plane Mirror', 'Simple Resistor-Battery Circuit')",
+                    },
+                    svg: {
+                      type: Type.STRING,
+                      description: "Optional complete, well-formed XML <svg> element with xmlns='http://www.w3.org/2000/svg'. If omitted, an authentic vector diagram is automatically generated and rendered.",
+                    },
+                    caption: {
+                      type: Type.STRING,
+                      description: "1-2 sentence pedagogical explanation or key takeaway highlighting the governing law or anatomical feature.",
+                    },
+                  },
+                  required: ["title"],
+                },
+              },
+              {
                 name: "draw_shape",
                 description: "Draw custom 2D or 3D geometric shapes (rectangle, square, circle, ellipse, triangle, right_triangle, cylinder, cube, polygon, line, arrow) on the whiteboard with complete control over width, height, radius, labels, and colors.",
                 behavior: Behavior.NON_BLOCKING,
@@ -442,7 +525,7 @@ export class GeminiLiveClient {
               },
               {
                 name: "open_interactive_simulation",
-                description: "Summon an interactive 3D WebGL physics, chemistry, biology, or math simulation container directly on the whiteboard stage with full control over title, values, and parameters.",
+                description: "Summon an interactive 3D WebGL geometry solid or cross-section model directly on the whiteboard stage with full control over title, shape, and dimensions.",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -450,33 +533,18 @@ export class GeminiLiveClient {
                     sceneType: {
                       type: Type.STRING,
                       enum: [
-                        "circuits",
-                        "forces",
-                        "optics",
-                        "matter",
-                        "waves",
-                        "geometry",
-                        "linear_graph",
-                        "3d_vectors",
-                        "bohr_atom",
-                        "circuits_interactive",
-                        "physics_forces",
-                        "optics_refraction",
-                        "wave_harmonics",
-                        "states_of_matter",
-                        "coordinate_geometry",
                         "geometry_3d",
                         "geometry_cross_section",
                       ],
-                      description: "The 3D interactive simulation scene to open",
+                      description: "The 3D geometric simulation scene to open ('geometry_3d' for 3D solids or 'geometry_cross_section' for cutting plane slices)",
                     },
                     title: {
                       type: Type.STRING,
-                      description: "Custom title for the 3D model simulation (e.g. 'Parallel Circuit: 12V Battery', 'Bohr Atom: Carbon Shell Model')",
+                      description: "Custom title for the 3D model simulation",
                     },
                     parameters: {
                       type: Type.OBJECT,
-                      description: "Dynamic simulation parameters and values (e.g. { voltage: 12, circuitType: 'parallel', r1: 6, r2: 12, mass: 10, temperature: 400, shape: 'cylinder', radius: 4, height: 8 })",
+                      description: "Dynamic simulation parameters and values (e.g. { shape: 'cylinder', radius: 4, height: 8 })",
                     },
                   },
                   required: ["sceneType"],
@@ -484,7 +552,7 @@ export class GeminiLiveClient {
               },
               {
                 name: "update_interactive_simulation",
-                description: "Update values, variables, sliders, or title of the currently active 3D simulation scene in real time (e.g. adjust voltage, change solid shape, alter temperature, update angle).",
+                description: "Update values, variables, sliders, or title of the currently active 3D simulation scene in real time (e.g. adjust shape, change radius or height, alter slice angle).",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -498,34 +566,6 @@ export class GeminiLiveClient {
                       description: "Updated parameters and values to apply to the 3D model",
                     },
                   },
-                },
-              },
-              {
-                name: "show_educational_media",
-                description: "Display an authentic textbook illustration card or educational video demonstration card on the whiteboard.",
-                behavior: Behavior.NON_BLOCKING,
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: {
-                    mediaType: {
-                      type: Type.STRING,
-                      enum: ["image", "video"],
-                      description: "Whether to display an illustration card ('image') or a practical demonstration card ('video')",
-                    },
-                    title: {
-                      type: Type.STRING,
-                      description: "Title of the diagram, figure, or video demonstration",
-                    },
-                    caption: {
-                      type: Type.STRING,
-                      description: "Concise educational caption explaining the figure",
-                    },
-                    attribution: {
-                      type: Type.STRING,
-                      description: "Textbook source, e.g. 'NCERT / CBSE Standard' or 'Selina ICSE'",
-                    },
-                  },
-                  required: ["mediaType", "title"],
                 },
               },
               {
@@ -587,132 +627,155 @@ export class GeminiLiveClient {
         ];
       }
 
-      this.session = await this.ai.live.connect({
-        model: this.model,
-        config: liveConfig,
-        callbacks: {
-          onopen: () => {
-            console.log("[GeminiLive] WebSocket TCP connection open; awaiting setupComplete...");
-          },
-          onmessage: (msg: any) => {
-             const content = msg.serverContent;
-             
-             // Server Voice Activity Detection (VAD) events
-             const isVoiceActivityStart = msg.voiceActivity?.voiceActivityType === "ACTIVITY_START" || msg.voiceActivity?.type === "ACTIVITY_START";
-             if (isVoiceActivityStart) {
-                this.callbacks.onUserSpeechStart?.();
-             }
+      const sessionCallbacks = {
+        onopen: () => {
+          console.log("[GeminiLive] WebSocket TCP connection open; awaiting setupComplete...");
+        },
+        onmessage: (msg: any) => {
+           const content = msg.serverContent;
+           
+           // Server Voice Activity Detection (VAD) events
+           const isVoiceActivityStart = msg.voiceActivity?.voiceActivityType === "ACTIVITY_START" || msg.voiceActivity?.type === "ACTIVITY_START";
+           if (isVoiceActivityStart) {
+              this.callbacks.onUserSpeechStart?.();
+           }
 
-             // Handle root tool calls for chalkboard writing, visual stage, and dedicated tools
-             if (msg.toolCall && msg.toolCall.functionCalls) {
-               const responses: any[] = [];
-               for (const call of msg.toolCall.functionCalls) {
-                 this.handleSingleToolCall(call.name, call.args || {}, call.id);
-                 responses.push({
-                   id: call.id,
-                   name: call.name,
-                   response: { result: "ok" },
-                 });
-               }
-               if (responses.length > 0 && this.session) {
-                 try {
-                   this.session.sendToolResponse({ functionResponses: responses });
-                 } catch (e) {
-                   console.warn("[GeminiLive] Failed to send tool response:", e);
-                 }
+           // Handle root tool calls for chalkboard writing, visual stage, and dedicated tools
+           if (msg.toolCall && msg.toolCall.functionCalls) {
+             const responses: any[] = [];
+             for (const call of msg.toolCall.functionCalls) {
+               this.handleSingleToolCall(call.name, call.args || {}, call.id);
+               responses.push({
+                 id: call.id,
+                 name: call.name,
+                 response: { result: "ok" },
+               });
+             }
+             if (responses.length > 0 && this.session) {
+               try {
+                 this.session.sendToolResponse({ functionResponses: responses });
+               } catch (e) {
+                 console.warn("[GeminiLive] Failed to send tool response:", e);
                }
              }
+           }
 
-             if (!content) return;
+           if (!content) return;
 
-             if (content.interrupted) {
-               this.callbacks.onInterrupted();
-               return;
-             }
-             
-             // Transcripts extraction
-             if (content.inputTranscription && content.inputTranscription.text) {
-               this.callbacks.onTranscript(content.inputTranscription.text, "user");
-             }
-             if (content.inputTranscription && content.inputTranscription.parts) {
-               for (const part of content.inputTranscription.parts) {
-                   if (part.text) {
-                       this.callbacks.onTranscript(part.text, "user");
-                   }
-               }
-             }
-             
-             let hasTeacherTranscript = false;
-             if (content.outputTranscription && content.outputTranscription.text) {
-               const cleaned = this.extractAndExecuteEmbeddedToolCalls(content.outputTranscription.text);
-                if (cleaned) this.callbacks.onTranscript(cleaned, "teacher");
-               hasTeacherTranscript = true;
-             }
-             if (content.outputTranscription && content.outputTranscription.parts) {
-               for (const part of content.outputTranscription.parts) {
+           if (content.interrupted) {
+             this.callbacks.onInterrupted();
+             return;
+           }
+           
+           // Transcripts extraction
+           if (content.inputTranscription && content.inputTranscription.text) {
+             this.callbacks.onTranscript(content.inputTranscription.text, "user");
+           }
+           if (content.inputTranscription && content.inputTranscription.parts) {
+             for (const part of content.inputTranscription.parts) {
                  if (part.text) {
-                   const cleaned = this.extractAndExecuteEmbeddedToolCalls(part.text);
-                   if (cleaned) {
-                     this.callbacks.onTranscript(cleaned, "teacher");
-                     hasTeacherTranscript = true;
-                   }
+                     this.callbacks.onTranscript(part.text, "user");
+                 }
+             }
+           }
+           
+           let hasTeacherTranscript = false;
+           if (content.outputTranscription && content.outputTranscription.text) {
+             const cleaned = this.extractAndExecuteEmbeddedToolCalls(content.outputTranscription.text);
+              if (cleaned) this.callbacks.onTranscript(cleaned, "teacher");
+             hasTeacherTranscript = true;
+           } else if (content.outputTranscription && content.outputTranscription.parts) {
+             for (const part of content.outputTranscription.parts) {
+               if (part.text) {
+                 const cleaned = this.extractAndExecuteEmbeddedToolCalls(part.text);
+                 if (cleaned) {
+                   this.callbacks.onTranscript(cleaned, "teacher");
+                   hasTeacherTranscript = true;
                  }
                }
              }
+           }
 
-             // Incoming audio or text model turns
-             if (content.modelTurn && content.modelTurn.parts) {
-               for (const part of content.modelTurn.parts) {
-                 if (part.inlineData && part.inlineData.data) {
+           // Incoming audio, video frames, or text model turns
+           if (content.modelTurn && content.modelTurn.parts) {
+             for (const part of content.modelTurn.parts) {
+               if (part.inlineData && part.inlineData.data) {
+                 const mime = part.inlineData.mimeType || "audio/pcm;rate=24000";
+                 if (mime.startsWith("video/") || mime.startsWith("image/")) {
+                   // Native Gemini 3.8 Live Avatar video frame streaming
+                   this.callbacks.onVideoData?.(part.inlineData.data, mime);
+                 } else {
                    const pcm16 = this.base64ToInt16(part.inlineData.data);
                    this.callbacks.onAudioData(pcm16, 24000); // SDK returns 24kHz
                  }
-                 // Deliver model turn text if it contains chalkboard bracket tags or if no audio transcript was emitted
-                 if (part.text) {
-                   const cleaned = this.extractAndExecuteEmbeddedToolCalls(part.text);
-                   if (cleaned && (part.text.includes("[") || part.text.includes("write_chalkboard") || !hasTeacherTranscript)) {
-                     this.callbacks.onTranscript(cleaned, "teacher");
-                   }
+               }
+               // Deliver model turn text if it contains chalkboard bracket tags or if no audio transcript was emitted
+               if (part.text) {
+                 const cleaned = this.extractAndExecuteEmbeddedToolCalls(part.text);
+                 if (cleaned && (part.text.includes("[") || part.text.includes("write_chalkboard") || !hasTeacherTranscript)) {
+                   this.callbacks.onTranscript(cleaned, "teacher");
                  }
-                 if (part.functionCall) {
-                   this.handleSingleToolCall(part.functionCall.name, part.functionCall.args || {}, part.functionCall.id);
-                   try {
-                     this.session?.sendToolResponse({
-                       functionResponses: [
-                         {
-                           id: part.functionCall.id,
-                           name: part.functionCall.name,
-                           response: { result: "ok" },
-                         },
-                       ],
-                     });
-                   } catch (e) {
-                     console.warn(`[GeminiLive] Failed to send tool response for ${part.functionCall.name}:`, e);
-                   }
+               }
+               if (part.functionCall) {
+                 this.handleSingleToolCall(part.functionCall.name, part.functionCall.args || {}, part.functionCall.id);
+                 try {
+                   this.session?.sendToolResponse({
+                     functionResponses: [
+                       {
+                         id: part.functionCall.id,
+                         name: part.functionCall.name,
+                         response: { result: "ok" },
+                       },
+                     ],
+                   });
+                 } catch (e) {
+                   console.warn(`[GeminiLive] Failed to send tool response for ${part.functionCall.name}:`, e);
                  }
                }
              }
+           }
 
-             if (content.turnComplete) {
-               this.callbacks.onTurnComplete();
-             }
-          },
-          onerror: (err: any) => {
-            if (!this.isManuallyClosed) {
-              console.error("[GeminiLive] Connection error:", err);
-              this.callbacks.onError(new Error(err.message || "Connection to Gemini Live was interrupted."));
-            }
-          },
-          onclose: (event: any) => {
-            this.isConnected = false;
-            this.hasSentKickoff = false;
-            if (!this.isManuallyClosed) {
-               this.callbacks.onClose(event as CloseEvent);
-            }
-            this.session = null;
+           if (content.turnComplete) {
+             this.callbacks.onTurnComplete();
+           }
+        },
+        onerror: (err: any) => {
+          if (!this.isManuallyClosed) {
+            console.error("[GeminiLive] Connection error:", err);
+            this.callbacks.onError(new Error(err.message || "Connection to Gemini Live was interrupted."));
           }
         },
-      });
+        onclose: (event: any) => {
+          this.isConnected = false;
+          this.hasSentKickoff = false;
+          if (!this.isManuallyClosed) {
+             this.callbacks.onClose(event as CloseEvent);
+          }
+          this.session = null;
+        }
+      };
+
+      try {
+        this.session = await this.ai.live.connect({
+          model: this.model,
+          config: liveConfig,
+          callbacks: sessionCallbacks,
+        });
+      } catch (connectError: any) {
+        if (this.avatarConfig) {
+          console.warn("[GeminiLive] Native video avatar modality rejected or unsupported by current endpoint/credentials. Self-healing fallback to high-fidelity audio stream:", connectError);
+          this.avatarConfig = undefined;
+          liveConfig.responseModalities = ["AUDIO" as any];
+          delete liveConfig.avatarConfig;
+          this.session = await this.ai.live.connect({
+            model: this.model,
+            config: liveConfig,
+            callbacks: sessionCallbacks,
+          });
+        } else {
+          throw connectError;
+        }
+      }
 
       this.isConnected = true;
       console.log("[GeminiLive] Handshake verified and session ready.");

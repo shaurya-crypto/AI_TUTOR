@@ -6,6 +6,8 @@
 export class AudioPlayer {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
+  private gainNode: GainNode | null = null;
+  private isOutputMuted: boolean = false;
   private nextStartTime: number = 0;
   private scheduledNodes: AudioBufferSourceNode[] = [];
   private isPlaying: boolean = false;
@@ -31,7 +33,12 @@ export class AudioPlayer {
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 256;
       this.analyser.smoothingTimeConstant = 0.2;
-      this.analyser.connect(this.audioCtx.destination);
+
+      this.gainNode = this.audioCtx.createGain();
+      this.gainNode.gain.setValueAtTime(this.isOutputMuted ? 0 : 1, this.audioCtx.currentTime);
+
+      this.analyser.connect(this.gainNode);
+      this.gainNode.connect(this.audioCtx.destination);
     }
 
     if (this.audioCtx && this.audioCtx.state === "suspended") {
@@ -39,6 +46,17 @@ export class AudioPlayer {
     }
 
     return this.audioCtx;
+  }
+
+  /**
+   * Mute or unmute speaker output.
+   * When Simli WebRTC is connected, speaker output is muted so Simli's synced audio plays without echo.
+   */
+  public setOutputMuted(muted: boolean): void {
+    this.isOutputMuted = muted;
+    if (this.gainNode && this.audioCtx) {
+      this.gainNode.gain.setValueAtTime(muted ? 0 : 1, this.audioCtx.currentTime);
+    }
   }
 
   /**
