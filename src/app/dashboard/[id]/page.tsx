@@ -131,7 +131,7 @@ export default async function DashboardPage({
 
   let modulesQuery = supabase
     .from("syllabus_modules")
-    .select("*, curriculums(*)")
+    .select("id, curriculum_id, order_index, title, description, estimated_minutes, key_concepts, success_criteria, class_level, board, curriculums(*)")
     .order("order_index", { ascending: true });
 
   if (targetCurriculumIds.length > 0) {
@@ -143,31 +143,19 @@ export default async function DashboardPage({
   const { data: modulesData } = await modulesQuery;
   const allModules = modulesData || [];
 
-  // 5. Fetch user progress records
-  const { data: progressData } = await supabase
-    .from("user_progress")
-    .select("*")
-    .eq("user_id", user.id);
+  // 5. Parallelized Read Execution: progress, memories, and active study plan
+  const [
+    { data: progressData },
+    { data: memoriesData },
+    { data: studyPlan }
+  ] = await Promise.all([
+    supabase.from("user_progress").select("*").eq("user_id", user.id),
+    supabase.from("ai_user_memories").select("*").eq("user_id", user.id).order("importance_score", { ascending: false }).limit(10),
+    supabase.from("student_study_plans").select("*").eq("user_id", user.id).eq("is_active", true).maybeSingle(),
+  ]);
 
   const userProgress = progressData || [];
-
-  // 6. Fetch AI Memories
-  const { data: memoriesData } = await supabase
-    .from("ai_user_memories")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("importance_score", { ascending: false })
-    .limit(10);
-
   const userMemories = memoriesData || [];
-
-  // 6b. Fetch Active Student Study Plan
-  const { data: studyPlan } = await supabase
-    .from("student_study_plans")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("is_active", true)
-    .maybeSingle();
 
   // 7. Dynamic Active Curriculum Resolution:
   // Strictly database-driven:

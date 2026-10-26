@@ -14,6 +14,7 @@ export class AudioStreamer {
   private analyser: AnalyserNode | null = null;
   private isMuted: boolean = false;
   private isTeacherSpeaking: boolean = false;
+  private teacherSpeakingHangoverTimer: NodeJS.Timeout | null = null;
   private teacherSpeechStartTime: number = 0;
   private lastSpeechTime: number = 0;
   private consecutiveBargeInFrames: number = 0;
@@ -228,12 +229,23 @@ export class AudioStreamer {
     this.onAudioChunk?.(base64);
   }
 
-  public setTeacherSpeaking(speaking: boolean): void {
-    this.isTeacherSpeaking = speaking;
-    if (speaking) {
-      this.teacherSpeechStartTime = Date.now();
+  public setTeacherSpeaking(speaking: boolean, isSimliActive: boolean = false): void {
+    if (this.teacherSpeakingHangoverTimer) {
+      clearTimeout(this.teacherSpeakingHangoverTimer);
+      this.teacherSpeakingHangoverTimer = null;
     }
-    this.consecutiveBargeInFrames = 0;
+    if (speaking) {
+      this.isTeacherSpeaking = true;
+      this.teacherSpeechStartTime = Date.now();
+      this.consecutiveBargeInFrames = 0;
+    } else {
+      const delayMs = isSimliActive ? 650 : 200;
+      this.teacherSpeakingHangoverTimer = setTimeout(() => {
+        this.isTeacherSpeaking = false;
+        this.consecutiveBargeInFrames = 0;
+        this.teacherSpeakingHangoverTimer = null;
+      }, delayMs);
+    }
   }
 
   public setMuted(muted: boolean): void {

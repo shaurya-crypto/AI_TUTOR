@@ -85,6 +85,7 @@ export interface WritingPositionInfo {
   lastAction?: string
   lastText?: string
   activeQuestion?: { text: string; y: number; height: number; pageIndex: number } | null
+  scrollY?: number
 }
 
 interface GreenChalkboardProps {
@@ -237,12 +238,14 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const lastExecutedActionTimeRef = useRef<Map<string, number>>(new Map())
 
     const notifyPositionChange = (lastAction?: string, lastText?: string) => {
+      const scrollY = excalidrawAPIRef.current?.getAppState?.()?.scrollY || 0
       onWritingPositionChange?.({
         nextY: nextYRef.current,
         pageIndex: currentPageIndexRef.current,
         lastAction,
         lastText,
         activeQuestion: activeQuestionRef.current,
+        scrollY,
       })
     }
 

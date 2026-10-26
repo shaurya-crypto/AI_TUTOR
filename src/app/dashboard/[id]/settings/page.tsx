@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { SettingsView } from '@/components/settings/SettingsView'
@@ -29,9 +29,11 @@ export default async function SettingsPage({
     .maybeSingle()
 
   return (
-    <SettingsView
-      user={{ id: user.id, email: user.email }}
-      profile={profile || {}}
-    />
+    <Suspense fallback={<div className="min-h-screen bg-[#FBFBF9] flex items-center justify-center font-serif text-[#555852]">Loading settings...</div>}>
+      <SettingsView
+        user={{ id: user.id, email: user.email }}
+        profile={profile || {}}
+      />
+    </Suspense>
   )
 }

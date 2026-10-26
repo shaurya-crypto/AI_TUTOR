@@ -239,9 +239,10 @@ export function SobiCompanion({
   const zoomFactor = 0.7
   const topOffset = 48 // Header offset
   const maxSafeTop = Math.max(60, containerHeight - (isQuestionActive ? 280 : 160))
+  const scrollY = writingPosition?.scrollY || 0
   const rawTargetY = isQuestionActive && activeQuestion?.y
-    ? activeQuestion.y * zoomFactor + topOffset - 15
-    : (writingPosition?.nextY || 140) * zoomFactor + topOffset - 30
+    ? (activeQuestion.y + scrollY) * zoomFactor + topOffset - 15
+    : ((writingPosition?.nextY || 140) + scrollY) * zoomFactor + topOffset - 30
   const computedY = Math.min(Math.max(rawTargetY, 50), maxSafeTop)
 
   // When question is active and screen is wide enough, dock Sobi directly to the right of the question box (560px)

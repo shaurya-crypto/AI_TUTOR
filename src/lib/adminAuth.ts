@@ -1,10 +1,12 @@
 import crypto from 'crypto'
 import { cookies } from 'next/headers'
 
-const DEFAULT_SECRET = 'ai_tutor_admin_hmac_secret_key_2026_production'
-
 function getSecretKey(): string {
-  return process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PORTAL_PASSWORD || DEFAULT_SECRET
+  const secret = process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PORTAL_PASSWORD
+  if (!secret) {
+    throw new Error('FATAL: Neither ADMIN_SESSION_SECRET nor ADMIN_PORTAL_PASSWORD is set in environment.')
+  }
+  return secret
 }
 
 export function signAdminToken(): string {

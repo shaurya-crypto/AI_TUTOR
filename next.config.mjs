@@ -8,7 +8,7 @@ const cspHeader = `
   object-src 'none';
   base-uri 'self';
   form-action 'self';
-  frame-ancestors 'self' http://localhost:* http://127.0.0.1:* https://*.microsoft.com https://*.bing.com https://*.office.com vscode-webview:;
+  frame-ancestors 'self';
   worker-src 'self' blob:;
   media-src 'self' blob: data:;
   connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://api.simli.ai wss://api.simli.ai https://*.simli.ai wss://*.simli.ai https://*.livekit.cloud wss://*.livekit.cloud;

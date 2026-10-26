@@ -456,6 +456,14 @@ export default function ModuleClassroomPage() {
           } catch {}
         }
 
+        // Security Invariant: Validate active authenticated user matches route userId
+        const { data: authData } = await supabase.auth.getUser()
+        if (!authData?.user || authData.user.id !== userId) {
+          console.warn('[Classroom Guard] IDOR mismatch: current user is not authorized for this classroom URL.')
+          router.replace('/login')
+          return
+        }
+
         // Fetch student profile class_level, voice preference, and name
         const { data: profile } = await supabase
           .from('profiles')
@@ -467,7 +475,6 @@ export default function ModuleClassroomPage() {
         if (profile?.full_name?.trim()) {
           foundName = profile.full_name.trim()
         } else {
-          const { data: authData } = await supabase.auth.getUser()
           const meta = authData?.user?.user_metadata
           foundName = (meta?.full_name || meta?.name || authData?.user?.email?.split('@')[0] || '').trim()
         }
