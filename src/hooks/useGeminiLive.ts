@@ -13,7 +13,7 @@ export function useGeminiLive() {
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [teacherVolume, setTeacherVolume] = useState(0);
   const [userVolume, setUserVolume] = useState(0);
-  const [selectedVoice, setSelectedVoice] = useState<GeminiVoice>("Aoede");
+  const [selectedVoice, setSelectedVoice] = useState<GeminiVoice>("Leda");
   const [latestVideoFrame, setLatestVideoFrame] = useState<string | null>(null);
   const [videoMimeType, setVideoMimeType] = useState<string>("image/jpeg");
 
@@ -78,7 +78,12 @@ export function useGeminiLive() {
     onVisualAction?: (action: string, params: Record<string, any>) => void,
     avatarConfig?: LiveAvatarConfig,
     onAudioOutputChunk?: (pcm16: Int16Array, sampleRate: number) => void,
-    onSpeechInterrupted?: () => void
+    onSpeechInterrupted?: () => void,
+    languageOptions?: {
+      preferredLanguage?: string;
+      supportedLanguages?: string[];
+      languageCode?: string;
+    }
   ) => {
     setErrorMessage(null);
     setConnectionState("CONNECTING");
@@ -140,7 +145,7 @@ export function useGeminiLive() {
       await streamer.start(audioCtx);
       audioStreamerRef.current = streamer;
 
-      const activeVoice = voiceOverride || selectedVoice || "Aoede";
+      const activeVoice = voiceOverride || selectedVoice || config.voiceName || "Leda";
       if (voiceOverride && voiceOverride !== selectedVoice) {
         setSelectedVoice(voiceOverride);
       }
@@ -222,6 +227,9 @@ export function useGeminiLive() {
           systemInstruction: systemInstructionOverride,
           enableFunctionCalling: true,
           avatarConfig,
+          preferredLanguage: languageOptions?.preferredLanguage || config.preferredLanguage,
+          supportedLanguages: languageOptions?.supportedLanguages || config.supportedLanguages || ["en-IN", "hi-IN"],
+          languageCode: languageOptions?.languageCode || config.languageCode || "en-IN",
         }
       );
 

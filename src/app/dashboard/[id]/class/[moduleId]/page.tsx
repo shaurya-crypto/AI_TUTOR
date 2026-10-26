@@ -23,6 +23,7 @@ const WhiteboardWorkspace = dynamicImport(
 )
 import { VisualizationSceneType } from '@/components/whiteboard/scenes/sceneTypes'
 import { resolveSceneType, parseSceneParams } from '@/components/whiteboard/scenes/sceneRegistry'
+import { getLanguageVoiceConfig } from '@/lib/voiceAndLanguageConfig'
 import type { MafsGraphCanvasProps } from '@/components/whiteboard/MafsGraphCanvas'
 import { VisualLessonManifest, LessonStep } from '@/types/lessonManifest'
 import {
@@ -356,7 +357,7 @@ export default function ModuleClassroomPage() {
   const [moduleCompletedSuccess, setModuleCompletedSuccess] = useState(false)
   const [isLoadingLesson, setIsLoadingLesson] = useState(true)
   const [quizOpen, setQuizOpen] = useState(false)
-  const [preferredVoice, setPreferredVoice] = useState('Aoede')
+  const [preferredVoice, setPreferredVoice] = useState('Leda')
   const [isCompletedBefore, setIsCompletedBefore] = useState(false)
   const [studentProfileClassLevel, setStudentProfileClassLevel] = useState<string>('')
   const [studentName, setStudentName] = useState<string>('')
@@ -1548,12 +1549,17 @@ export default function ModuleClassroomPage() {
       ? `Focus & Struggle Areas: ${studentWeakSubjects.join(', ')}. Pay special attention here! Break down steps with extra patience and clarity; do not rush through these topics.`
       : ''
 
+    const langVoiceConfig = getLanguageVoiceConfig(studentPreferredLanguage)
+
     const pedagogicalDossier = `
 STUDENT PERSONALIZATION & PEDAGOGICAL DOSSIER:
 - Name: ${studentFirstName || 'Student'}
 - Grade / Class: ${resolvedClassLevel || 'Class 10'}
 - Board Curriculum: ${resolvedBoard || studentTargetBoard || 'CBSE'}
 - Spoken Conversation Language (Talking): ${studentPreferredLanguage}
+- Voice Persona: ${preferredVoice} (${langVoiceConfig.recommendedVoices.includes(preferredVoice as any) ? 'Recommended Persona' : 'Selected Persona'})
+- Speech Inflection & Cadence: ${langVoiceConfig.accentPromptInstruction}
+- Supported Language Parameters: ["en-IN", "hi-IN"] (Primary: ${langVoiceConfig.primaryLanguageCode})
 - Medium of Study (Whiteboard Notes & Formal Instruction): ${studentStudyMedium} Medium
 - ${spokenLanguageDirective}
 - ${studyMediumDirective}
@@ -1877,6 +1883,11 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
       },
       () => {
         simliControllerRef.current?.clearBuffer()
+      },
+      {
+        preferredLanguage: studentPreferredLanguage,
+        supportedLanguages: langVoiceConfig.supportedLanguageCodes || ['en-IN', 'hi-IN'],
+        languageCode: langVoiceConfig.primaryLanguageCode || 'en-IN',
       }
     )
   }

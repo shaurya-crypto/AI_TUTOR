@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { createClient } from '@/utils/supabase/client'
 import { SobiVectorBot } from '@/components/mascot/SobiVectorBot'
 import { completeOnboardingAction, Phase4OnboardingData } from './actions'
+import { getLanguageVoiceConfig } from '@/lib/voiceAndLanguageConfig'
 import { ArrowLeft, ArrowRight, Volume2, VolumeX, Loader2 } from 'lucide-react'
 
 // Sparkle Icon matching Aristotle's selection option styling
@@ -197,11 +198,12 @@ const QUESTIONS: QuestionConfig[] = [
     type: 'select',
     audioFile: '/audio/onboarding/q10_voice.mp3',
     options: [
-      { value: 'Aoede', label: 'Aoede — Warm, natural, and encouraging mentor' },
-      { value: 'Charon', label: 'Charon — Calm, deep, and methodical guide' },
+      { value: 'Leda', label: 'Leda — Warm, youthful, natural Indian inflection (Recommended)' },
+      { value: 'Puck', label: 'Puck — Upbeat, lively, energetic Indian inflection (Recommended)' },
+      { value: 'Aoede', label: 'Aoede — Breezy, relaxed, and methodical mentor' },
+      { value: 'Charon', label: 'Charon — Calm, deep, and patient guide' },
       { value: 'Kore', label: 'Kore — Crisp, attentive, and academically clear' },
       { value: 'Fenrir', label: 'Fenrir — Confident, energetic, and engaging' },
-      { value: 'Puck', label: 'Puck — Playful, conversational, and lively' },
     ],
   },
 ]
@@ -224,7 +226,7 @@ export default function OnboardingPage() {
     favoriteSubject: 'Physics',
     weakArea: 'formula_derivations',
     learningStyle: 'socratic',
-    preferredVoice: 'Aoede',
+    preferredVoice: 'Leda',
   })
 
   const [reactionExpression, setReactionExpression] = useState<string | undefined>(undefined)
@@ -273,6 +275,13 @@ export default function OnboardingPage() {
       ...answers,
       [currentQ.id]: currentQ.type === 'number' && valueToSave ? parseInt(valueToSave, 10) : valueToSave,
     }
+
+    // Auto-align recommended voice persona when preferredLanguage is chosen
+    if (currentQ.id === 'preferredLanguage' && typeof valueToSave === 'string') {
+      const langConfig = getLanguageVoiceConfig(valueToSave)
+      updatedAnswers.preferredVoice = langConfig.defaultVoice
+    }
+
     setAnswers(updatedAnswers)
 
     if (currentStep < QUESTIONS.length - 1) {
@@ -314,7 +323,7 @@ export default function OnboardingPage() {
       favoriteSubject: dataToSubmit.favoriteSubject || 'Physics',
       weakArea: dataToSubmit.weakArea || 'Derivations',
       learningStyle: dataToSubmit.learningStyle || 'socratic',
-      preferredVoice: dataToSubmit.preferredVoice || 'Aoede',
+      preferredVoice: dataToSubmit.preferredVoice || 'Leda',
     }
 
     const res = await completeOnboardingAction(payload)

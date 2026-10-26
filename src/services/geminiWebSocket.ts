@@ -32,6 +32,8 @@ export class GeminiLiveClient {
   private apiKey: string;
   private model: string;
   private voiceName: string;
+  private supportedLanguages: string[];
+  private languageCode: string;
   private systemInstruction: string;
   private callbacks: GeminiLiveCallbacks;
   private isManuallyClosed: boolean = false;
@@ -52,6 +54,9 @@ export class GeminiLiveClient {
       systemInstruction?: string;
       enableFunctionCalling?: boolean;
       avatarConfig?: LiveAvatarConfig;
+      supportedLanguages?: string[];
+      languageCode?: string;
+      preferredLanguage?: string;
     }
   ) {
     this.apiKey = authTokenOrApiKey;
@@ -61,7 +66,14 @@ export class GeminiLiveClient {
       model = model.replace("models/", "");
     }
     this.model = model;
-    this.voiceName = options?.voiceName || "Aoede";
+    this.voiceName = options?.voiceName || "Leda";
+    this.supportedLanguages =
+      options?.supportedLanguages && options.supportedLanguages.length > 0
+        ? options.supportedLanguages
+        : ["en-IN", "hi-IN"];
+    this.languageCode =
+      options?.languageCode ||
+      (options?.preferredLanguage?.toLowerCase().includes("hindi") ? "hi-IN" : "en-IN");
     this.enableFunctionCalling = options?.enableFunctionCalling ?? false;
     this.avatarConfig = options?.avatarConfig;
     this.systemInstruction =
@@ -304,9 +316,16 @@ export class GeminiLiveClient {
               voiceName: this.voiceName,
             },
           },
+          languageCode: this.languageCode,
+          supportedLanguages: this.supportedLanguages,
+          supportedLanguageCodes: this.supportedLanguages,
         },
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
+        inputAudioTranscription: {
+          languageCodes: this.supportedLanguages,
+        },
+        outputAudioTranscription: {
+          languageCodes: this.supportedLanguages,
+        },
       };
 
       if (this.avatarConfig) {

@@ -76,7 +76,7 @@ export function CognitiveProfileCard({ profile, memories }: CognitiveProfileCard
                 </span>
                 <span className="font-medium text-sm text-ink-primary capitalize flex items-center gap-2">
                   <Mic className="w-4 h-4 text-botanical-dark" />
-                  {profile.preferred_teacher_voice || 'Aoede'}
+                  {profile.preferred_teacher_voice || 'Leda'}
                 </span>
                 <span className="text-[11px] text-ink-muted mt-1 block">
                   Gemini 3.8 Live neural synthesis

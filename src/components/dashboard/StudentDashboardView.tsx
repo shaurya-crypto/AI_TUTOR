@@ -418,7 +418,7 @@ export function StudentDashboardView({
                             Tutor Persona
                           </h4>
                           <span className="text-xs text-ink-muted capitalize">
-                            Voice: {profile.preferred_teacher_voice || 'Aoede'}
+                            Voice: {profile.preferred_teacher_voice || 'Leda'}
                           </span>
                         </div>
                       </div>

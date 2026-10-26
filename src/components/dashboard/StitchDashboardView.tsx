@@ -17,6 +17,7 @@ import { triggerCompanionGuidance } from '@/components/mascot/Mascot'
 import { MasteryQuizModal } from '@/components/quiz/MasteryQuizModal'
 import { StudyPlannerCard, StudyPlanData } from './StudyPlannerCard'
 import { WeakConceptsReviewCard } from './WeakConceptsReviewCard'
+import { VOICE_OPTIONS } from '@/lib/voiceAndLanguageConfig'
 
 interface Module {
   id: string
@@ -97,13 +98,7 @@ interface StitchDashboardViewProps {
   studyPlan?: StudyPlanData | null
 }
 
-const VOICE_OPTIONS = [
-  { id: 'Aoede', name: 'Aoede', desc: 'Warm, clear, and reassuring' },
-  { id: 'Puck', name: 'Puck', desc: 'Energetic, engaging, and inquisitive' },
-  { id: 'Charon', name: 'Charon', desc: 'Deep, calm, and deliberate' },
-  { id: 'Kore', name: 'Kore', desc: 'Gentle, analytical, and structured' },
-  { id: 'Fenrir', name: 'Fenrir', desc: 'Confident, assertive, and direct' },
-]
+
 
 export function StitchDashboardView({
   user,
@@ -139,7 +134,7 @@ export function StitchDashboardView({
   const [selectedDiscipline, setSelectedDiscipline] = useState(availableDisciplines[0] || 'General Studies')
 
   // Preferences form state
-  const [selectedVoice, setSelectedVoice] = useState(profile.preferred_teacher_voice || 'Aoede')
+  const [selectedVoice, setSelectedVoice] = useState(profile.preferred_teacher_voice || 'Leda')
   const [selectedStyle, setSelectedStyle] = useState(profile.learning_style || 'socratic')
   const [selectedPacing, setSelectedPacing] = useState(profile.preferred_pacing || 'standard')
   const [selectedClass, setSelectedClass] = useState(profile.class_level || 'Class 10')

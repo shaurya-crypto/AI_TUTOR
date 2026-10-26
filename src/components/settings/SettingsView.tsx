@@ -23,6 +23,7 @@ import {
   updateAvatarPreferenceAction,
   signOutAction,
 } from '@/app/dashboard/actions'
+import { VOICE_OPTIONS } from '@/lib/voiceAndLanguageConfig'
 
 export interface PrebuiltAvatar {
   id: string
@@ -87,13 +88,7 @@ export const PREBUILT_AVATARS: PrebuiltAvatar[] = [
   },
 ]
 
-export const VOICE_OPTIONS = [
-  { id: 'Aoede', name: 'Aoede', desc: 'Deep, academic, and measured cadence' },
-  { id: 'Charon', name: 'Charon', desc: 'Calm, authoritative scholar tone' },
-  { id: 'Fenrir', name: 'Fenrir', desc: 'Direct, focused, and crisp' },
-  { id: 'Kore', name: 'Kore', desc: 'Warm, encouraging, and lucid explanations' },
-  { id: 'Puck', name: 'Puck', desc: 'Engaging, energetic, and inquisitive' },
-]
+
 
 export const BOARD_OPTIONS = [
   {
@@ -157,7 +152,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
   // General state
-  const [preferredVoice, setPreferredVoice] = useState<string>(profile?.preferred_teacher_voice || 'Aoede')
+  const [preferredVoice, setPreferredVoice] = useState<string>(profile?.preferred_teacher_voice || 'Leda')
   const [speechRate, setSpeechRate] = useState<string>('1.0')
   const [autoListen, setAutoListen] = useState<boolean>(true)
   const [generalStatus, setGeneralStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)

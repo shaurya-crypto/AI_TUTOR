@@ -9,7 +9,7 @@ export type ConnectionState =
   | "ERROR"
   | "DISCONNECTED";
 
-export type GeminiVoice = "Aoede" | "Kore" | "Puck" | "Charon" | "Fenrir";
+export type GeminiVoice = "Leda" | "Puck" | "Aoede" | "Charon" | "Fenrir" | "Kore";
 
 export interface TranscriptItem {
   id: string;

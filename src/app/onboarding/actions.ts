@@ -14,7 +14,7 @@ const VALID_LANGUAGES = ['English', 'Hinglish', 'Hindi', 'Spanish', 'French', 'G
 const VALID_STUDY_MEDIUMS = ['English', 'Hindi', 'Other']
 const VALID_PACING = ['fast_and_curious', 'steady_and_balanced', 'slow_deep_intuitive']
 const VALID_STYLES = ['socratic', 'visual', 'board_numerical', 'storytelling']
-const VALID_VOICES = ['Aoede', 'Charon', 'Kore', 'Fenrir', 'Puck']
+const VALID_VOICES = ['Leda', 'Puck', 'Aoede', 'Charon', 'Kore', 'Fenrir']
 
 export interface Phase4OnboardingData {
   fullName: string
@@ -78,7 +78,7 @@ export async function completeOnboardingAction(data: Phase4OnboardingData) {
     : 'Derivations'
 
   const learningStyle = VALID_STYLES.includes(data.learningStyle) ? data.learningStyle : 'socratic'
-  const preferredVoice = VALID_VOICES.includes(data.preferredVoice) ? data.preferredVoice : 'Aoede'
+  const preferredVoice = VALID_VOICES.includes(data.preferredVoice) ? data.preferredVoice : 'Leda'
 
   // 3. Persist to Supabase Profiles
   const profilePayload: Record<string, any> = {

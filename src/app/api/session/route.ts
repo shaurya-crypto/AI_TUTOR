@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { GoogleGenAI } from '@google/genai'
 import { createClient } from '@/utils/supabase/server'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
+import { getLanguageVoiceConfig } from '@/lib/voiceAndLanguageConfig'
 
 export async function GET(req: Request) {
   try {
@@ -54,17 +55,25 @@ export async function GET(req: Request) {
       )
     }
 
-    // 4. Fetch student's preferred teacher voice from profile
-    let voiceName = 'Aoede'
+    // 4. Fetch student's preferred teacher voice & language from profile
+    let voiceName = 'Leda'
+    let preferredLanguage = 'English'
     const { data: profile } = await supabase
       .from('profiles')
-      .select('preferred_teacher_voice')
+      .select('preferred_teacher_voice, preferred_language')
       .eq('id', user.id)
       .maybeSingle()
 
     if (profile?.preferred_teacher_voice) {
       voiceName = profile.preferred_teacher_voice
     }
+    if (profile?.preferred_language) {
+      preferredLanguage = profile.preferred_language
+    }
+
+    const langVoiceConfig = getLanguageVoiceConfig(preferredLanguage)
+    const supportedLanguages = langVoiceConfig.supportedLanguageCodes || ['en-IN', 'hi-IN']
+    const languageCode = langVoiceConfig.primaryLanguageCode || 'en-IN'
 
     // 5. Mint single-use ephemeral auth token for live classroom session
     const ai = new GoogleGenAI({ apiKey })
@@ -85,6 +94,9 @@ export async function GET(req: Request) {
       token: token.name,
       model: 'gemini-3.8-live',
       voiceName,
+      preferredLanguage,
+      supportedLanguages,
+      languageCode,
     })
   } catch (err: any) {
     console.error('[Session API] Error minting ephemeral token:', err)

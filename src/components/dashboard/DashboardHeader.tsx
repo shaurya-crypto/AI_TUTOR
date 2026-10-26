@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { signOutAction, updatePreferencesAction } from '@/app/dashboard/actions'
+import { VOICE_OPTIONS } from '@/lib/voiceAndLanguageConfig'
 
 interface DashboardHeaderProps {
   user: {
@@ -41,13 +42,7 @@ interface DashboardHeaderProps {
   }
 }
 
-const VOICE_OPTIONS = [
-  { id: 'Aoede', name: 'Aoede', desc: 'Warm, clear, and reassuring' },
-  { id: 'Puck', name: 'Puck', desc: 'Energetic, engaging, and inquisitive' },
-  { id: 'Charon', name: 'Charon', desc: 'Deep, calm, and deliberate' },
-  { id: 'Kore', name: 'Kore', desc: 'Gentle, analytical, and structured' },
-  { id: 'Fenrir', name: 'Fenrir', desc: 'Confident, assertive, and direct' },
-]
+
 
 const LEARNING_STYLES = [
   { id: 'socratic', name: 'Socratic', desc: 'Guides with probing questions' },
@@ -64,7 +59,7 @@ const PACING_OPTIONS = [
 
 export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
   const [preferencesOpen, setPreferencesOpen] = useState(false)
-  const [selectedVoice, setSelectedVoice] = useState(profile.preferred_teacher_voice || 'Aoede')
+  const [selectedVoice, setSelectedVoice] = useState(profile.preferred_teacher_voice || 'Leda')
   const [selectedStyle, setSelectedStyle] = useState(profile.learning_style || 'socratic')
   const [selectedPacing, setSelectedPacing] = useState(profile.preferred_pacing || 'standard')
   const [saving, setSaving] = useState(false)
