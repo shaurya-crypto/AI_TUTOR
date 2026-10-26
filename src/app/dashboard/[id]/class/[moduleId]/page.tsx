@@ -361,6 +361,7 @@ export default function ModuleClassroomPage() {
   const [studentProfileClassLevel, setStudentProfileClassLevel] = useState<string>('')
   const [studentName, setStudentName] = useState<string>('')
   const [studentPreferredLanguage, setStudentPreferredLanguage] = useState<string>('English')
+  const [studentStudyMedium, setStudentStudyMedium] = useState<string>('English')
   const [studentTargetBoard, setStudentTargetBoard] = useState<string>('CBSE')
   const [studentLearningPace, setStudentLearningPace] = useState<string>('steady_and_balanced')
   const [studentLearningStyle, setStudentLearningStyle] = useState<string>('socratic')
@@ -472,15 +473,34 @@ export default function ModuleClassroomPage() {
           return
         }
 
-        // Fetch student profile class_level, voice preference, and name
-        const { data: profile } = await supabase
+        // Fetch student profile class_level, voice preference, name, language & medium
+        let profile: any = null
+        const { data: profData, error: profErr } = await supabase
           .from('profiles')
-          .select('class_level, target_board, preferred_teacher_voice, full_name, preferred_language, learning_pace, learning_style, career_aspiration, favorite_subject, strong_subjects, weak_subjects')
+          .select('class_level, target_board, preferred_teacher_voice, full_name, preferred_language, study_medium, learning_pace, learning_style, career_aspiration, favorite_subject, strong_subjects, weak_subjects')
           .eq('id', userId)
           .single()
 
+        if (
+          profErr &&
+          (profErr.message?.toLowerCase().includes('study_medium') ||
+            profErr.code === '42703' ||
+            profErr.code === 'PGRST204')
+        ) {
+          // Graceful fallback if study_medium column has not yet been applied on remote DB
+          const { data: fallbackProf } = await supabase
+            .from('profiles')
+            .select('class_level, target_board, preferred_teacher_voice, full_name, preferred_language, learning_pace, learning_style, career_aspiration, favorite_subject, strong_subjects, weak_subjects')
+            .eq('id', userId)
+            .single()
+          profile = fallbackProf
+        } else {
+          profile = profData
+        }
+
         if (profile?.target_board) setStudentTargetBoard(profile.target_board)
         if (profile?.preferred_language) setStudentPreferredLanguage(profile.preferred_language)
+        if (profile?.study_medium) setStudentStudyMedium(profile.study_medium)
         if (profile?.learning_pace) setStudentLearningPace(profile.learning_pace)
         if (profile?.learning_style) setStudentLearningStyle(profile.learning_style)
         if (profile?.career_aspiration) setStudentCareerAspiration(profile.career_aspiration)
@@ -1477,20 +1497,32 @@ export default function ModuleClassroomPage() {
 
     const studentFirstName = studentName ? studentName.split(' ')[0].trim() : ''
 
-    // Language Directive: Strict spoken instruction
-    let languageDirective = ''
+    // 1. Spoken Language Directive (Language of Talking & Verbal Guidance)
+    let spokenLanguageDirective = ''
     if (studentPreferredLanguage === 'Hindi') {
-      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: Hindi (हिंदी).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach primarily in conversational Hindi (हिंदी). Maintain standard scientific symbols, formulas, and English keywords on the chalkboard while explaining concepts, intuitions, and dialogue thoroughly in natural, warm Hindi.'
+      spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: Hindi (हिंदी).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach verbally primarily in conversational Hindi (हिंदी). Explain concepts, intuitions, and dialogue thoroughly in natural, warm Hindi.'
     } else if (studentPreferredLanguage === 'Hinglish') {
-      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: Hinglish (Conversational English + Hindi).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in natural Hinglish — blending English academic terminology with warm, everyday conversational Hindi/English explanations, just like a top school tutor in India. Write English scientific terms and formulas on the chalkboard while conversing naturally in Hinglish.'
+      spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: Hinglish (Conversational English + Hindi).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak and converse in natural Hinglish — blending English academic terminology with warm, everyday conversational Hindi/English explanations, just like a top school tutor in India.'
     } else if (studentPreferredLanguage === 'Spanish') {
-      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: Spanish (Español).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in Spanish (Español). Maintain standard mathematical and scientific notation on the chalkboard while delivering all spoken intuitions, definitions, and explanations in fluent Spanish.'
+      spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: Spanish (Español).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and deliver all spoken intuitions, definitions, and explanations in fluent Spanish.'
     } else if (studentPreferredLanguage === 'French') {
-      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: French (Français).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in French (Français). Maintain standard scientific notation on the chalkboard while delivering all spoken explanations in fluent French.'
+      spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: French (Français).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and deliver all spoken explanations in fluent French.'
     } else if (studentPreferredLanguage === 'German') {
-      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: German (Deutsch).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in German (Deutsch). Maintain standard scientific notation on the chalkboard while delivering all spoken explanations in fluent German.'
+      spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: German (Deutsch).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and deliver all spoken explanations in fluent German.'
     } else {
-      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: English.\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in clear, articulate, and encouraging academic English.'
+      spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: English.\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach verbally in clear, articulate, and encouraging academic English.'
+    }
+
+    // 2. Study Medium Directive (Language of Whiteboard Notes & Formal Instruction)
+    let studyMediumDirective = ''
+    if (studentStudyMedium === 'Hindi') {
+      studyMediumDirective = 'STUDY MEDIUM (WHITEBOARD NOTES & FORMAL TEACHING): Hindi Medium (हिंदी माध्यम).\nMANDATORY WHITEBOARD REQUIREMENT: You MUST write structured chalkboard notes, formulas, definitions, and derivations primarily in formal Hindi (हिंदी), while preserving standard international scientific symbols, SI units, and mathematical variables (e.g. F = ma, v = u + at, SI unit: N).'
+    } else if (studentStudyMedium === 'Hinglish') {
+      studyMediumDirective = 'STUDY MEDIUM (WHITEBOARD NOTES & FORMAL TEACHING): Bilingual / Hinglish.\nMANDATORY WHITEBOARD REQUIREMENT: Write core chalkboard notes, formulas, and derivations in clean English notation, supplemented with brief Hinglish explanations for maximum conceptual clarity.'
+    } else if (studentStudyMedium === 'Other') {
+      studyMediumDirective = 'STUDY MEDIUM (WHITEBOARD NOTES & FORMAL TEACHING): Universal Academic Notation.\nMANDATORY WHITEBOARD REQUIREMENT: Write clean, precise chalkboard notes using standard mathematical and scientific notation.'
+    } else {
+      studyMediumDirective = 'STUDY MEDIUM (WHITEBOARD NOTES & FORMAL TEACHING): English Medium.\nMANDATORY WHITEBOARD REQUIREMENT: All chalkboard notes, formal definitions, formulas, derivations, and board-exam steps MUST be written in crisp, topper-standard academic English.'
     }
 
     // Pedagogical Dossier (strictly excluding age and non-teaching metadata)
@@ -1521,7 +1553,10 @@ STUDENT PERSONALIZATION & PEDAGOGICAL DOSSIER:
 - Name: ${studentFirstName || 'Student'}
 - Grade / Class: ${resolvedClassLevel || 'Class 10'}
 - Board Curriculum: ${resolvedBoard || studentTargetBoard || 'CBSE'}
-- ${languageDirective}
+- Spoken Conversation Language (Talking): ${studentPreferredLanguage}
+- Medium of Study (Whiteboard Notes & Formal Instruction): ${studentStudyMedium} Medium
+- ${spokenLanguageDirective}
+- ${studyMediumDirective}
 - ${paceDirective}
 - ${styleDirective}
 ${careerHook ? `- ${careerHook}\n` : ''}${weakAreaHook ? `- ${weakAreaHook}\n` : ''}`
@@ -1544,10 +1579,10 @@ ${careerHook ? `- ${careerHook}\n` : ''}${weakAreaHook ? `- ${weakAreaHook}\n` :
       : `Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}.`
 
     const kickoffPrompt = isCompletedModule
-      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that I have completed this capsule, review the key takeaways on the chalkboard, and ask if I have any questions before the quiz in ${studentPreferredLanguage}.`
+      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that I have completed this capsule, review the key takeaways on the chalkboard in ${studentStudyMedium} medium, and ask if I have any questions before the quiz in ${studentPreferredLanguage}.`
       : isResumed
-      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage} without waiting for me to say anything! Warmly greet me by my name ("${langGreeting}"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Immediately teach the intuition, write the definition, explain examples, and solve the worked question step-by-step on the board while speaking aloud in ${studentPreferredLanguage}.`
-      : `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage} without waiting for me to say anything! Warmly greet me by my name ("${langGreeting}"). Introduce yourself and immediately begin Concept 1: "${firstConcept}" in ${studentPreferredLanguage}. Follow the full teaching cadence: provide everyday intuition, dynamic visual, formal definition, concrete examples, and solve the first worked question step-by-step on the board while explaining each step aloud in ${studentPreferredLanguage}. Do NOT wait for me to speak first!`
+      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage} without waiting for me to say anything! Warmly greet me by my name ("${langGreeting}"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Immediately teach the intuition, write the definition in ${studentStudyMedium} medium on the board, explain examples, and solve the worked question step-by-step on the board while speaking aloud in ${studentPreferredLanguage}.`
+      : `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage} without waiting for me to say anything! Warmly greet me by my name ("${langGreeting}"). Introduce yourself and immediately begin Concept 1: "${firstConcept}" speaking in ${studentPreferredLanguage}. Follow the full teaching cadence: provide everyday intuition, dynamic visual, formal definition in ${studentStudyMedium} medium, concrete examples, and solve the first worked question step-by-step on the board while explaining each step aloud in ${studentPreferredLanguage}. Do NOT wait for me to speak first!`
 
     const conceptDossiersText = buildConceptMicroDossiers(
       keyConcepts,

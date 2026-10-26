@@ -37,6 +37,8 @@ function SparkleStar({ className = 'w-5 h-5' }: { className?: string }) {
 interface QuestionConfig {
   id: string
   title: string
+  subtitle?: string
+  sobiExpression: string
   type: 'text' | 'number' | 'select'
   placeholder?: string
   options?: { value: string; label: string }[]
@@ -47,20 +49,38 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'preferredLanguage',
     title: 'Which language do you prefer for your AI tutor?',
+    subtitle: 'Language of talking & spoken conversation during class',
+    sobiExpression: 'attentive-left',
     type: 'select',
     audioFile: '/audio/onboarding/q0_language.mp3',
     options: [
-      { value: 'English', label: 'English (Standard Academic English)' },
+      { value: 'English', label: 'English (Academic & Conversational English)' },
       { value: 'Hinglish', label: 'Hinglish (Conversational English + Hindi)' },
-      { value: 'Hindi', label: 'Hindi (हिंदी)' },
+      { value: 'Hindi', label: 'Hindi (हिंदी — Conversational Hindi)' },
       { value: 'Spanish', label: 'Spanish (Español)' },
       { value: 'French', label: 'French (Français)' },
       { value: 'German', label: 'German (Deutsch)' },
     ],
   },
   {
+    id: 'studyMedium',
+    title: 'Which medium of study do you follow for notes & teaching?',
+    subtitle: 'Language for whiteboard chalkboard notes and formal teaching',
+    sobiExpression: 'curious-left',
+    type: 'select',
+    audioFile: '/audio/onboarding/q0_medium.mp3',
+    options: [
+      { value: 'English', label: 'English Medium (Notes & whiteboard in English)' },
+      { value: 'Hindi', label: 'Hindi Medium (हिंदी माध्यम — Notes & whiteboard in Hindi)' },
+      { value: 'Hinglish', label: 'Bilingual / Hinglish (English chalkboard notes with Hindi explanation)' },
+      { value: 'Other', label: 'Other Language Medium (Regional / International Medium)' },
+    ],
+  },
+  {
     id: 'fullName',
     title: "What's your name?",
+    subtitle: 'Let Sobi know who they are pair-learning with',
+    sobiExpression: 'joyful-wide',
     type: 'text',
     placeholder: 'Type your name...',
     audioFile: '/audio/onboarding/q1_name.mp3',
@@ -68,6 +88,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'age',
     title: 'How old are you?',
+    subtitle: 'Calibrates problem depth and foundational analogies',
+    sobiExpression: 'curious-left',
     type: 'number',
     placeholder: 'Type your age (e.g. 15)...',
     audioFile: '/audio/onboarding/q2_age.mp3',
@@ -75,6 +97,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'classLevel',
     title: 'What grade are you in?',
+    subtitle: 'Loads your authentic board syllabus from Classes 6 to 12',
+    sobiExpression: 'small-attentive',
     type: 'select',
     audioFile: '/audio/onboarding/q3_grade.mp3',
     options: [
@@ -90,6 +114,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'targetBoard',
     title: 'Which educational board are you studying under?',
+    subtitle: 'Selects authentic curriculum format, definitions, and grading rubrics',
+    sobiExpression: 'attentive-left',
     type: 'select',
     audioFile: '/audio/onboarding/q4_board.mp3',
     options: [
@@ -101,6 +127,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'careerAspiration',
     title: 'What do you want to pursue or become in the future?',
+    subtitle: 'Sobi connects abstract physics and math concepts to your real-world dream',
+    sobiExpression: 'upward-side-glance',
     type: 'text',
     placeholder: 'e.g. Aerospace Engineer, Doctor, AI Researcher, Astrophysicist...',
     audioFile: '/audio/onboarding/q5_aspiration.mp3',
@@ -108,6 +136,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'learningPace',
     title: 'How fast do you usually understand new concepts?',
+    subtitle: 'Determines pause frequencies and question checkpoints',
+    sobiExpression: 'curious-left',
     type: 'select',
     audioFile: '/audio/onboarding/q6_pacing.mp3',
     options: [
@@ -119,6 +149,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'favoriteSubject',
     title: 'Which subject do you enjoy or find easiest?',
+    subtitle: 'Highlights your strongest academic foundation',
+    sobiExpression: 'joyful-wide',
     type: 'select',
     audioFile: '/audio/onboarding/q7_strong_subject.mp3',
     options: [
@@ -131,6 +163,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'weakArea',
     title: 'Where do you encounter the most friction or struggle?',
+    subtitle: 'Sobi provides extra patience and visual co-solving here',
+    sobiExpression: 'gentle-downward-gaze',
     type: 'select',
     audioFile: '/audio/onboarding/q8_weak_area.mp3',
     options: [
@@ -144,6 +178,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'learningStyle',
     title: 'How would you like your AI tutor to teach you?',
+    subtitle: 'Shapes the chalkboard style and dialogue structure',
+    sobiExpression: 'attentive-left',
     type: 'select',
     audioFile: '/audio/onboarding/q9_learning_style.mp3',
     options: [
@@ -156,6 +192,8 @@ const QUESTIONS: QuestionConfig[] = [
   {
     id: 'preferredVoice',
     title: "Pick your personal AI tutor's voice persona",
+    subtitle: 'Select the voice tone that best motivates your daily study sessions',
+    sobiExpression: 'attentive-left',
     type: 'select',
     audioFile: '/audio/onboarding/q10_voice.mp3',
     options: [
@@ -176,6 +214,7 @@ export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(0)
   const [answers, setAnswers] = useState<Record<string, any>>({
     preferredLanguage: 'English',
+    studyMedium: 'English',
     fullName: '',
     age: '',
     classLevel: 'Class 10',
@@ -188,6 +227,8 @@ export default function OnboardingPage() {
     preferredVoice: 'Aoede',
   })
 
+  const [reactionExpression, setReactionExpression] = useState<string | undefined>(undefined)
+  const [hoverExpression, setHoverExpression] = useState<string | undefined>(undefined)
   const [textInputValue, setTextInputValue] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
@@ -219,8 +260,14 @@ export default function OnboardingPage() {
     }
   }, [currentStep, currentQ])
 
-  // Advance to next question or submit
+  // Advance to next question or submit with visible celebration reaction
   const handleNext = async (customValue?: any) => {
+    // Sobi joyful celebration reaction on answer confirmation
+    setReactionExpression('joyful-wide')
+    setTimeout(() => {
+      setReactionExpression(undefined)
+    }, 700)
+
     const valueToSave = customValue !== undefined ? customValue : textInputValue
     const updatedAnswers = {
       ...answers,
@@ -257,6 +304,7 @@ export default function OnboardingPage() {
     setIsSubmitting(true)
     const payload: Phase4OnboardingData = {
       preferredLanguage: dataToSubmit.preferredLanguage || 'English',
+      studyMedium: dataToSubmit.studyMedium || 'English',
       fullName: dataToSubmit.fullName || 'Student',
       age: typeof dataToSubmit.age === 'number' ? dataToSubmit.age : parseInt(dataToSubmit.age, 10) || null,
       classLevel: dataToSubmit.classLevel || 'Class 10',
@@ -283,43 +331,53 @@ export default function OnboardingPage() {
     }
   }
 
-  // Text submit on Enter
   const handleTextFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!textInputValue.trim()) return
-    handleNext()
+    if (!textInputValue.trim() || isSubmitting) return
+    handleNext(textInputValue.trim())
   }
 
-  return (
-    <div
-      className="relative flex min-h-screen w-full flex-col justify-between overflow-x-hidden font-sans text-[#2A231C]"
-      style={{
-        backgroundColor: '#FBFBF9',
-        backgroundImage: `
-          linear-gradient(to right, rgba(50, 70, 60, 0.05) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(50, 70, 60, 0.05) 1px, transparent 1px)
-        `,
-        backgroundSize: '24px 24px',
-      }}
-    >
-      {/* 1. Top Navigation Bar (matching media_1793023711813_a34aa090.png) */}
-      <header className="relative z-20 flex w-full items-center justify-between px-6 py-5 md:px-10">
-        {/* Back Button */}
-        <button
-          type="button"
-          onClick={handleBack}
-          disabled={currentStep === 0 || isSubmitting}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-neutral-200/50 disabled:invisible"
-          aria-label="Back to previous question"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+  // Active expression resolution: priority reaction > hover > typing > question resting expression
+  const activeSobiExpression =
+    reactionExpression ||
+    hoverExpression ||
+    (textInputValue.trim().length > 0 ? 'downward-gaze' : currentQ.sobiExpression)
 
-        {/* Progress Bar Capsule */}
-        <div className="flex flex-1 items-center justify-center px-4">
-          <div className="h-2 w-full max-w-[280px] md:max-w-[420px] rounded-full bg-neutral-200/80 overflow-hidden">
+  return (
+    <div className="relative min-h-screen w-full bg-[#FAF8F5] text-[#2A231C] overflow-hidden flex flex-col font-sans select-none">
+      {/* Aristotle Fine Paper Grid Canvas Background */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0 opacity-40"
+        style={{
+          backgroundImage: `
+            linear-gradient(to right, #E7E5E0 1px, transparent 1px),
+            linear-gradient(to bottom, #E7E5E0 1px, transparent 1px)
+          `,
+          backgroundSize: '24px 24px',
+        }}
+      />
+
+      {/* 1. Header Toolbar */}
+      <header className="relative z-20 flex h-16 w-full items-center justify-between px-6 sm:px-10">
+        <div className="flex items-center gap-3">
+          {currentStep > 0 && (
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={isSubmitting}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white/80 text-neutral-600 shadow-sm transition-all hover:bg-white hover:text-neutral-900 active:scale-95 disabled:opacity-50"
+              aria-label="Previous question"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Minimal Progress Bar (Top Center) */}
+        <div className="w-48 sm:w-64">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200/80">
             <motion.div
-              className="h-full rounded-full bg-[#BACD3B]"
+              className="h-full bg-[#8F847D] rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${progressPercent}%` }}
               transition={{ duration: 0.35, ease: 'easeOut' }}
@@ -327,13 +385,12 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        {/* Controls: Mute toggle & Skip button */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setIsMuted(!isMuted)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-200/50"
-            title={isMuted ? 'Unmute voice' : 'Mute voice'}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white/80 text-neutral-600 shadow-sm transition-all hover:bg-white hover:text-neutral-900 active:scale-95"
+            title={isMuted ? 'Unmute voice questions' : 'Mute voice questions'}
             aria-label="Toggle voice"
           >
             {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
@@ -352,7 +409,7 @@ export default function OnboardingPage() {
       {/* 2. Main Question Area */}
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-28 pt-2">
         <AnimatePresence mode="wait">
-          {/* A. TEXT / NUMBER INPUT MODE (media_1793024556487_ff83e4ee.png) */}
+          {/* A. TEXT / NUMBER INPUT MODE */}
           {(currentQ.type === 'text' || currentQ.type === 'number') && (
             <motion.div
               key={`q-text-${currentQ.id}`}
@@ -365,17 +422,20 @@ export default function OnboardingPage() {
               {/* Centered Sobi Bot with Speech Bubble directly above */}
               <SobiVectorBot
                 message={currentQ.title}
+                subtitle={currentQ.subtitle}
                 bubblePosition="top"
                 audioSrc={currentQ.audioFile}
                 isMuted={isMuted}
                 onToggleMute={() => setIsMuted(!isMuted)}
-                size={110}
+                size={140}
                 lookAt="input"
+                expression={activeSobiExpression}
+                isTyping={textInputValue.trim().length > 0}
               />
             </motion.div>
           )}
 
-          {/* B. OPTION SELECTION MODE (media_1793023711813_a34aa090.png) */}
+          {/* B. OPTION SELECTION MODE */}
           {currentQ.type === 'select' && (
             <motion.div
               key={`q-select-${currentQ.id}`}
@@ -389,12 +449,14 @@ export default function OnboardingPage() {
               <div className="mb-6 flex w-full items-center justify-start pl-2">
                 <SobiVectorBot
                   message={currentQ.title}
+                  subtitle={currentQ.subtitle}
                   bubblePosition="right"
                   audioSrc={currentQ.audioFile}
                   isMuted={isMuted}
                   onToggleMute={() => setIsMuted(!isMuted)}
-                  size={76}
+                  size={105}
                   lookAt="cursor"
+                  expression={activeSobiExpression}
                 />
               </div>
 
@@ -408,6 +470,8 @@ export default function OnboardingPage() {
                         key={opt.value}
                         type="button"
                         onClick={() => handleNext(opt.value)}
+                        onMouseEnter={() => setHoverExpression('attentive-left')}
+                        onMouseLeave={() => setHoverExpression(undefined)}
                         className={`group flex w-full items-center gap-3.5 rounded-xl border px-4 py-3.5 text-left transition-all active:scale-[0.99] ${
                           isSelected
                             ? 'border-neutral-800 bg-neutral-50 shadow-sm'
@@ -428,7 +492,7 @@ export default function OnboardingPage() {
         </AnimatePresence>
       </main>
 
-      {/* 3. Bottom Pill Input (For Text/Number Questions) (media_1793024556487_ff83e4ee.png) */}
+      {/* 3. Bottom Pill Input (For Text/Number Questions) */}
       {(currentQ.type === 'text' || currentQ.type === 'number') && (
         <footer className="fixed bottom-10 left-1/2 z-30 w-full max-w-[480px] -translate-x-1/2 px-4">
           <form

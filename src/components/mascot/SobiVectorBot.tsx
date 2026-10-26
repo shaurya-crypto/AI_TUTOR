@@ -1,10 +1,16 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useId } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Volume2, VolumeX } from 'lucide-react'
+import { createAvatar, type AvatarController } from '@bible-strong/avatar-react'
+import '@bible-strong/avatar-react/styles.css'
+import avatarDefinition from '@/cloudee.avatar.json'
+
+const SobiAvatar = createAvatar(avatarDefinition as any)
 
 export interface SobiVectorBotProps {
   message?: string
+  subtitle?: string
   bubblePosition?: 'top' | 'right'
   audioSrc?: string
   isMuted?: boolean
@@ -12,82 +18,53 @@ export interface SobiVectorBotProps {
   size?: number
   className?: string
   lookAt?: { x: number; y: number } | 'cursor' | 'input' | 'center'
+  expression?: string
+  animation?: string
+  isTyping?: boolean
+  onClick?: () => void
 }
 
 export function SobiVectorBot({
   message = "What's your name?",
+  subtitle,
   bubblePosition = 'top',
   audioSrc,
   isMuted = false,
   onToggleMute,
-  size = 120,
+  size = 140,
   className = '',
   lookAt = 'cursor',
+  expression,
+  animation,
+  isTyping = false,
+  onClick,
 }: SobiVectorBotProps) {
-  const gradientId = useId()
-  const [pupilOffset, setPupilOffset] = useState({ x: 0, y: 0 })
-  const [isBlinking, setIsBlinking] = useState(false)
+  const avatarRef = useRef<AvatarController>(null)
+  const botContainerRef = useRef<HTMLDivElement>(null)
   const [isPlayingAudio, setIsPlayingAudio] = useState(false)
   const [audioAvailable, setAudioAvailable] = useState(true)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const botRef = useRef<SVGSVGElement | null>(null)
+  const clickReactionTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [isClickReacting, setIsClickReacting] = useState(false)
 
-  // 1. Natural Pupil Tracking
-  useEffect(() => {
-    if (lookAt === 'center') {
-      setPupilOffset({ x: 0, y: 0 })
-      return
+  // Safe expression and animation triggers
+  const triggerExpression = useCallback((expr: string) => {
+    try {
+      avatarRef.current?.setExpression(expr as any)
+    } catch {
+      // Degrade gracefully if key is unknown
     }
-
-    if (lookAt === 'input') {
-      // Look downwards towards the bottom input pill
-      setPupilOffset({ x: 0, y: 4.5 })
-      return
-    }
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!botRef.current) return
-      const rect = botRef.current.getBoundingClientRect()
-      const botCenterX = rect.left + rect.width / 2
-      const botCenterY = rect.top + rect.height / 2
-
-      const dx = e.clientX - botCenterX
-      const dy = e.clientY - botCenterY
-      const dist = Math.hypot(dx, dy) || 1
-
-      // Hyperbolic tangent clamping: smooth natural gaze
-      const maxOrbit = 4.5
-      const factor = Math.min(1, Math.tanh(dist / 220))
-      const offsetX = (dx / dist) * maxOrbit * factor
-      const offsetY = (dy / dist) * maxOrbit * factor
-
-      setPupilOffset({ x: offsetX, y: offsetY })
-    }
-
-    window.addEventListener('mousemove', handleMouseMove, { passive: true })
-    return () => window.removeEventListener('mousemove', handleMouseMove)
-  }, [lookAt])
-
-  // 2. Periodic natural eye blinking
-  useEffect(() => {
-    let blinkTimer: NodeJS.Timeout
-
-    const scheduleBlink = () => {
-      const nextInterval = 3200 + Math.random() * 2500
-      blinkTimer = setTimeout(() => {
-        setIsBlinking(true)
-        setTimeout(() => {
-          setIsBlinking(false)
-          scheduleBlink()
-        }, 140)
-      }, nextInterval)
-    }
-
-    scheduleBlink()
-    return () => clearTimeout(blinkTimer)
   }, [])
 
-  // 3. Audio Question Pronunciation Playback
+  const triggerAnimation = useCallback((anim: string) => {
+    try {
+      avatarRef.current?.play(anim as any)
+    } catch {
+      // Degrade gracefully if key is unknown
+    }
+  }, [])
+
+  // 1. Audio Question Pronunciation Playback
   useEffect(() => {
     if (!audioSrc || isMuted) {
       if (audioRef.current) {
@@ -101,19 +78,24 @@ export function SobiVectorBot({
     const audio = new Audio(audioSrc)
     audioRef.current = audio
 
-    audio.onplay = () => setIsPlayingAudio(true)
-    audio.onended = () => setIsPlayingAudio(false)
+    audio.onplay = () => {
+      setIsPlayingAudio(true)
+      triggerAnimation('listening')
+      triggerExpression('attentive-left')
+    }
+    audio.onended = () => {
+      setIsPlayingAudio(false)
+      triggerExpression(expression || 'neutral')
+    }
     audio.onerror = () => {
       // Audio file not yet dropped in public folder - degrade silently without errors
       setAudioAvailable(false)
       setIsPlayingAudio(false)
     }
 
-    // Attempt playback with user gesture handling
     const playPromise = audio.play()
     if (playPromise !== undefined) {
       playPromise.catch(() => {
-        // Autoplay policy prevented playback until user interaction
         setIsPlayingAudio(false)
       })
     }
@@ -122,7 +104,113 @@ export function SobiVectorBot({
       audio.pause()
       audio.currentTime = 0
     }
-  }, [audioSrc, isMuted])
+  }, [audioSrc, isMuted, expression, triggerAnimation, triggerExpression])
+
+  // 2. React to expression & animation props
+  useEffect(() => {
+    if (isClickReacting || isPlayingAudio) return
+
+    if (animation) {
+      triggerAnimation(animation)
+      return
+    }
+
+    if (expression) {
+      triggerExpression(expression)
+      return
+    }
+
+    // Default resting states when no override prop is provided
+    if (isTyping) {
+      triggerExpression('downward-gaze')
+      return
+    }
+
+    if (lookAt === 'input') {
+      triggerExpression('downward-gaze')
+      return
+    }
+
+    if (lookAt === 'center') {
+      triggerExpression('neutral')
+      return
+    }
+
+    // If lookAt === 'cursor', mouse movement will govern or default to neutral
+    triggerExpression('neutral')
+  }, [expression, animation, isTyping, lookAt, isClickReacting, isPlayingAudio, triggerAnimation, triggerExpression])
+
+  // 3. Natural gaze tracking when lookAt === 'cursor' and not in active reaction
+  useEffect(() => {
+    if (lookAt !== 'cursor' || expression || animation || isPlayingAudio || isClickReacting || isTyping) {
+      return
+    }
+
+    let throttleTimer: NodeJS.Timeout | null = null
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (throttleTimer) return
+      throttleTimer = setTimeout(() => {
+        throttleTimer = null
+      }, 120)
+
+      if (!botContainerRef.current) return
+      const rect = botContainerRef.current.getBoundingClientRect()
+      const botCenterX = rect.left + rect.width / 2
+      const botCenterY = rect.top + rect.height / 2
+
+      const dx = e.clientX - botCenterX
+      const dy = e.clientY - botCenterY
+      const dist = Math.hypot(dx, dy)
+
+      if (dist < 50) {
+        triggerExpression('neutral')
+        return
+      }
+
+      // Responsive gaze direction based on mouse position relative to Sobi
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx < -50) {
+          triggerExpression('attentive-left')
+        } else if (dx > 50) {
+          triggerExpression('playful-right')
+        }
+      } else {
+        if (dy > 50) {
+          triggerExpression('downward-gaze')
+        } else if (dy < -50) {
+          triggerExpression('upward-side-glance')
+        }
+      }
+    }
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true })
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      if (throttleTimer) clearTimeout(throttleTimer)
+    }
+  }, [lookAt, expression, animation, isPlayingAudio, isClickReacting, isTyping, triggerExpression])
+
+  // 4. Click reaction on Sobi
+  const handleSobiClick = () => {
+    setIsClickReacting(true)
+    triggerAnimation('celebrate')
+    triggerExpression('joyful-wide')
+
+    if (clickReactionTimerRef.current) clearTimeout(clickReactionTimerRef.current)
+    clickReactionTimerRef.current = setTimeout(() => {
+      setIsClickReacting(false)
+      if (expression) {
+        triggerExpression(expression)
+      } else if (lookAt === 'input' || isTyping) {
+        triggerExpression('downward-gaze')
+      } else {
+        triggerExpression('neutral')
+      }
+    }, 1200)
+
+    if (onClick) onClick()
+  }
 
   const toggleManualAudio = () => {
     if (onToggleMute) {
@@ -133,10 +221,13 @@ export function SobiVectorBot({
     if (isPlayingAudio) {
       audioRef.current.pause()
       setIsPlayingAudio(false)
+      triggerExpression(expression || 'neutral')
     } else {
       audioRef.current.play().catch(() => {})
     }
   }
+
+  const initialDefaultExpr = lookAt === 'input' ? 'downward-gaze' : 'neutral'
 
   return (
     <div
@@ -150,9 +241,16 @@ export function SobiVectorBot({
       {bubblePosition === 'top' && message && (
         <div className="relative mb-3 animate-in fade-in zoom-in-95 duration-200">
           <div className="relative z-10 flex items-center gap-2 rounded-2xl border border-neutral-200/80 bg-white px-5 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
-            <span className="text-[17px] font-medium tracking-tight text-[#2A231C]">
-              {message}
-            </span>
+            <div className="flex flex-col">
+              <span className="text-[17px] font-medium tracking-tight text-[#2A231C]">
+                {message}
+              </span>
+              {subtitle && (
+                <span className="text-[13px] text-neutral-500 font-normal mt-0.5">
+                  {subtitle}
+                </span>
+              )}
+            </div>
             {audioSrc && audioAvailable && (
               <button
                 type="button"
@@ -176,139 +274,42 @@ export function SobiVectorBot({
         </div>
       )}
 
-      {/* Sobi Apple Mascot */}
-      <div className="relative flex items-center justify-center">
-        <svg
-          ref={botRef}
-          width={size}
-          height={size}
-          viewBox="0 0 140 140"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className={`transition-transform duration-300 ease-out ${
-            isPlayingAudio ? 'animate-[bounce_1.5s_infinite]' : 'animate-[pulse_4s_ease-in-out_infinite]'
-          }`}
-          style={{
-            filter: 'drop-shadow(0 6px 12px rgba(220, 38, 38, 0.14))',
-          }}
-        >
-          <defs>
-            <linearGradient id={`${gradientId}-apple`} x1="70" y1="36" x2="70" y2="124" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#FF6161" />
-              <stop offset="50%" stopColor="#F04242" />
-              <stop offset="100%" stopColor="#D92B2B" />
-            </linearGradient>
-            <linearGradient id={`${gradientId}-leaf`} x1="72" y1="20" x2="98" y2="34" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#A0CE4E" />
-              <stop offset="100%" stopColor="#7EAA35" />
-            </linearGradient>
-          </defs>
-
-          {/* Soft ambient ground shadow */}
-          <ellipse cx="70" cy="132" rx="36" ry="6" fill="#1C1917" fillOpacity="0.08" />
-
-          {/* Wooden Stem */}
-          <path
-            d="M 68 37 C 68 25, 62 16, 58 13 C 62 13, 69 22, 72 37 Z"
-            fill="#5D3E24"
-            stroke="#4A2F18"
-            strokeWidth="0.8"
-            strokeLinejoin="round"
-          />
-
-          {/* Fresh Botanical Leaf */}
-          <path
-            d="M 72 27 C 86 16, 99 22, 97 34 C 86 36, 75 32, 72 27 Z"
-            fill={`url(#${gradientId}-leaf)`}
-            stroke="#65882B"
-            strokeWidth="0.8"
-          />
-          {/* Subtle leaf center vein */}
-          <path
-            d="M 73 28 C 81 27, 88 29, 93 33"
-            stroke="#5D7E26"
-            strokeWidth="1.2"
-            strokeLinecap="round"
-          />
-
-          {/* Apple Plump Body with iconic top dip */}
-          <path
-            d="M 70 37 C 83 37, 115 42, 115 77 C 115 106, 88 124, 70 122 C 52 124, 25 106, 25 77 C 25 42, 57 37, 70 37 Z"
-            fill={`url(#${gradientId}-apple)`}
-          />
-
-          {/* Soft organic gloss highlight */}
-          <ellipse
-            cx="48"
-            cy="56"
-            rx="12"
-            ry="7"
-            fill="#FFFFFF"
-            fillOpacity="0.22"
-            transform="rotate(-26 48 56)"
-          />
-
-          {/* Left Eye */}
-          <g
-            style={{
-              transformOrigin: '52px 75px',
-              transform: isBlinking ? 'scaleY(0.08)' : 'scaleY(1)',
-              transition: 'transform 0.12s ease-in-out',
-            }}
-          >
-            {/* White Sclera */}
-            <ellipse cx="52" cy="75" rx="13" ry="17" fill="#FFFFFF" />
-            {/* Pupil */}
-            <circle
-              cx={52 + pupilOffset.x}
-              cy={75 + pupilOffset.y}
-              r="7.5"
-              fill="#1C1917"
-            />
-            {/* Specular White Highlight */}
-            <circle
-              cx={54 + pupilOffset.x * 0.8}
-              cy={72 + pupilOffset.y * 0.8}
-              r="2.8"
-              fill="#FFFFFF"
-            />
-          </g>
-
-          {/* Right Eye */}
-          <g
-            style={{
-              transformOrigin: '82px 75px',
-              transform: isBlinking ? 'scaleY(0.08)' : 'scaleY(1)',
-              transition: 'transform 0.12s ease-in-out',
-            }}
-          >
-            {/* White Sclera */}
-            <ellipse cx="82" cy="75" rx="13" ry="17" fill="#FFFFFF" />
-            {/* Pupil */}
-            <circle
-              cx={82 + pupilOffset.x}
-              cy={75 + pupilOffset.y}
-              r="7.5"
-              fill="#1C1917"
-            />
-            {/* Specular White Highlight */}
-            <circle
-              cx={84 + pupilOffset.x * 0.8}
-              cy={72 + pupilOffset.y * 0.8}
-              r="2.8"
-              fill="#FFFFFF"
-            />
-          </g>
-        </svg>
+      {/* Sobi Avatar Mascot with physical grounding shadow and atmospheric depth */}
+      <div
+        ref={botContainerRef}
+        onClick={handleSobiClick}
+        className="relative flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95 group"
+        style={{
+          width: size,
+          height: size,
+          filter: 'drop-shadow(0 10px 22px rgba(42, 35, 28, 0.12))',
+        }}
+        title="Sobi, your learning companion"
+      >
+        <SobiAvatar
+          ref={avatarRef}
+          size={size}
+          defaultExpression={initialDefaultExpr}
+          className="select-none pointer-events-none"
+        />
+        {/* Soft ambient ground shadow beneath Sobi cloud */}
+        <div className="absolute -bottom-2 w-3/5 h-2 bg-[#2A231C]/10 rounded-full blur-[3px] pointer-events-none transition-transform duration-300 group-hover:scale-90" />
       </div>
 
       {/* Speech Bubble on the Right (for Option Selection mode) */}
       {bubblePosition === 'right' && message && (
         <div className="relative animate-in fade-in slide-in-from-left-2 duration-200">
           <div className="relative z-10 flex items-center gap-2 rounded-2xl border border-neutral-200/80 bg-white px-5 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
-            <span className="text-[17px] font-medium tracking-tight text-[#2A231C]">
-              {message}
-            </span>
+            <div className="flex flex-col">
+              <span className="text-[17px] font-medium tracking-tight text-[#2A231C]">
+                {message}
+              </span>
+              {subtitle && (
+                <span className="text-[13px] text-neutral-500 font-normal mt-0.5">
+                  {subtitle}
+                </span>
+              )}
+            </div>
             {audioSrc && audioAvailable && (
               <button
                 type="button"

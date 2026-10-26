@@ -7,18 +7,18 @@ import '@bible-strong/avatar-react/styles.css'
 import avatarDefinition from '@/avatar.avatar.json'
 import { X, Sparkles, AlertCircle, HelpCircle, Key, ArrowRight } from 'lucide-react'
 
-// Available animations in strobi.avatar.json:
-// ['idle', 'listening', 'working', 'excited', 'suspicious', 'laughing']
-// Available expressions in strobi.avatar.json:
-// ['neutral', 'sleepy-squint', 'drowsy-closed', 'surprised-left', 'joyful-wide', 'curious-left', 'suspicious-right', 'skeptical-left', 'skeptical-right', 'attentive-left', ...]
+// Available animations in cloudee.avatar.json:
+// ['sleeping', 'waking', 'idle', 'listening', 'thinking', 'searching', 'working', 'excited', 'bored', 'suspicious', 'angry', 'drowsy', 'happy', 'curious', 'confused', 'surprised', 'proud', 'shy', 'sad', 'laughing', 'scared', 'playful', 'celebrate']
+// Available expressions in cloudee.avatar.json:
+// ['neutral', 'joyful-wide', 'attentive-left', 'curious-left', 'surprised-left', 'downward-gaze', 'wide-downward-gaze', 'playful-right', 'upward-side-glance', 'skeptical-left', 'skeptical-right', 'sleepy-squint', 'drowsy-closed', ...]
 
-const StrobiAvatar = createAvatar(avatarDefinition as any)
+const SobiAvatar = createAvatar(avatarDefinition as any)
 
 export interface CompanionGuideDetail {
   targetSelector?: string
   targetElementId?: string
   message: string
-  animation?: 'idle' | 'listening' | 'working' | 'excited' | 'suspicious' | 'laughing'
+  animation?: 'idle' | 'listening' | 'working' | 'excited' | 'suspicious' | 'laughing' | 'celebrate' | 'happy' | 'thinking' | 'curious' | string
   expression?: string
   mood?: 'normal' | 'suspicious' | 'warning' | 'celebrate' | 'thinking'
   autoDismissMs?: number
@@ -70,10 +70,10 @@ export function Mascot() {
   }, [])
 
   // 2. Play animation safely
-  const safePlay = useCallback((anim: 'idle' | 'listening' | 'working' | 'excited' | 'suspicious' | 'laughing') => {
+  const safePlay = useCallback((anim: string) => {
     if (prefersReducedMotion) return
     try {
-      avatarRef.current?.play(anim)
+      avatarRef.current?.play(anim as any)
     } catch (e) {
       console.warn('[Mascot] play error:', e)
     }
@@ -380,14 +380,14 @@ export function Mascot() {
             ? 'ring-4 ring-emerald-400/70 shadow-[0_0_30px_rgba(16,185,129,0.45)]'
             : 'filter drop-shadow-[0_10px_25px_rgba(23,24,23,0.1)]'
         }`}
-        title="Strobi - Interactive AI Companion"
+        title="Sobi - Interactive AI Companion"
       >
-        <StrobiAvatar
+        <SobiAvatar
           ref={avatarRef}
           size="100%"
           defaultAnimation={prefersReducedMotion ? undefined : 'idle'}
           defaultExpression={prefersReducedMotion ? 'neutral' : undefined}
-          ariaLabel="Strobi Animated Companion"
+          ariaLabel="Sobi Animated Companion"
           onAnimationEnd={(anim) => {
             if (anim === 'laughing' || anim === 'excited') {
               safePlay('idle')

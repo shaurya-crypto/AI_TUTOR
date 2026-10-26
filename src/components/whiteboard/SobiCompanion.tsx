@@ -83,10 +83,10 @@ export function SobiCompanion({
 
   // 2. Play animation safely
   const safePlay = useCallback(
-    (anim: 'idle' | 'listening' | 'working' | 'excited' | 'suspicious' | 'laughing') => {
+    (anim: string) => {
       if (prefersReducedMotion) return
       try {
-        avatarRef.current?.play(anim)
+        avatarRef.current?.play(anim as any)
       } catch (e) {
         console.warn('[SobiCompanion] play error:', e)
       }

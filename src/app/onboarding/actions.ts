@@ -11,6 +11,7 @@ const VALID_CLASSES = [
 ]
 const VALID_BOARDS = ['CBSE', 'ICSE', 'IB']
 const VALID_LANGUAGES = ['English', 'Hinglish', 'Hindi', 'Spanish', 'French', 'German']
+const VALID_STUDY_MEDIUMS = ['English', 'Hindi', 'Other']
 const VALID_PACING = ['fast_and_curious', 'steady_and_balanced', 'slow_deep_intuitive']
 const VALID_STYLES = ['socratic', 'visual', 'board_numerical', 'storytelling']
 const VALID_VOICES = ['Aoede', 'Charon', 'Kore', 'Fenrir', 'Puck']
@@ -18,6 +19,7 @@ const VALID_VOICES = ['Aoede', 'Charon', 'Kore', 'Fenrir', 'Puck']
 export interface Phase4OnboardingData {
   fullName: string
   preferredLanguage?: string
+  studyMedium?: string
   age: number | null
   classLevel: string
   targetBoard: string
@@ -51,6 +53,10 @@ export async function completeOnboardingAction(data: Phase4OnboardingData) {
     ? data.preferredLanguage
     : 'English'
 
+  const studyMedium = typeof data.studyMedium === 'string' && VALID_STUDY_MEDIUMS.includes(data.studyMedium)
+    ? data.studyMedium
+    : 'English'
+
   const age = typeof data.age === 'number' && Number.isInteger(data.age) && data.age >= 9 && data.age <= 22
     ? data.age
     : null
@@ -75,25 +81,44 @@ export async function completeOnboardingAction(data: Phase4OnboardingData) {
   const preferredVoice = VALID_VOICES.includes(data.preferredVoice) ? data.preferredVoice : 'Aoede'
 
   // 3. Persist to Supabase Profiles
-  const { error: updateError } = await supabase
+  const profilePayload: Record<string, any> = {
+    full_name: fullName,
+    preferred_language: preferredLanguage,
+    study_medium: studyMedium,
+    age: age,
+    class_level: classLevel,
+    target_board: targetBoard,
+    career_aspiration: careerAspiration,
+    learning_pace: learningPace,
+    favorite_subject: favoriteSubject,
+    strong_subjects: [favoriteSubject],
+    weak_subjects: [weakArea],
+    learning_style: learningStyle,
+    preferred_teacher_voice: preferredVoice,
+    onboarding_completed: true,
+    updated_at: new Date().toISOString(),
+  }
+
+  let { error: updateError } = await supabase
     .from('profiles')
-    .update({
-      full_name: fullName,
-      preferred_language: preferredLanguage,
-      age: age,
-      class_level: classLevel,
-      target_board: targetBoard,
-      career_aspiration: careerAspiration,
-      learning_pace: learningPace,
-      favorite_subject: favoriteSubject,
-      strong_subjects: [favoriteSubject],
-      weak_subjects: [weakArea],
-      learning_style: learningStyle,
-      preferred_teacher_voice: preferredVoice,
-      onboarding_completed: true,
-      updated_at: new Date().toISOString(),
-    })
+    .update(profilePayload)
     .eq('id', user.id)
+
+  // Resilient fallback: If study_medium column has not yet been applied to remote DB
+  if (
+    updateError &&
+    (updateError.message?.toLowerCase().includes('study_medium') ||
+      updateError.code === '42703' ||
+      updateError.code === 'PGRST204')
+  ) {
+    console.warn('[completeOnboardingAction] study_medium column not found in profiles, falling back without study_medium')
+    delete profilePayload.study_medium
+    const retry = await supabase
+      .from('profiles')
+      .update(profilePayload)
+      .eq('id', user.id)
+    updateError = retry.error
+  }
 
   if (updateError) {
     console.error('[completeOnboardingAction] Database error:', updateError)
