@@ -45,6 +45,20 @@ interface QuestionConfig {
 
 const QUESTIONS: QuestionConfig[] = [
   {
+    id: 'preferredLanguage',
+    title: 'Which language do you prefer for your AI tutor?',
+    type: 'select',
+    audioFile: '/audio/onboarding/q0_language.mp3',
+    options: [
+      { value: 'English', label: 'English (Standard Academic English)' },
+      { value: 'Hinglish', label: 'Hinglish (Conversational English + Hindi)' },
+      { value: 'Hindi', label: 'Hindi (हिंदी)' },
+      { value: 'Spanish', label: 'Spanish (Español)' },
+      { value: 'French', label: 'French (Français)' },
+      { value: 'German', label: 'German (Deutsch)' },
+    ],
+  },
+  {
     id: 'fullName',
     title: "What's your name?",
     type: 'text',
@@ -161,6 +175,7 @@ export default function OnboardingPage() {
   // Form State
   const [currentStep, setCurrentStep] = useState(0)
   const [answers, setAnswers] = useState<Record<string, any>>({
+    preferredLanguage: 'English',
     fullName: '',
     age: '',
     classLevel: 'Class 10',
@@ -241,6 +256,7 @@ export default function OnboardingPage() {
   const submitOnboarding = async (dataToSubmit: Record<string, any>) => {
     setIsSubmitting(true)
     const payload: Phase4OnboardingData = {
+      preferredLanguage: dataToSubmit.preferredLanguage || 'English',
       fullName: dataToSubmit.fullName || 'Student',
       age: typeof dataToSubmit.age === 'number' ? dataToSubmit.age : parseInt(dataToSubmit.age, 10) || null,
       classLevel: dataToSubmit.classLevel || 'Class 10',

@@ -82,6 +82,22 @@ async function run() {
     await page.goto(`${BASE_URL}/onboarding`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(1000)
 
+    // Q0: Preferred Language selection
+    const q0Text = await page.textContent('main')
+    console.log(`[Playwright Suite] Q0 Language content found: ${q0Text?.includes('language do you prefer')}`)
+    if (!q0Text?.includes('language do you prefer')) {
+      throw new Error('Question 0 ("Which language do you prefer for your AI tutor?") not displayed')
+    }
+
+    const hinglishBtn = page.locator('button:has-text("Hinglish")')
+    await hinglishBtn.waitFor({ state: 'visible' })
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, '02-onboarding-q0-language.png') })
+    console.log('[Playwright Suite] Saved screenshot: 02-onboarding-q0-language.png')
+
+    // Select Hinglish to auto-advance
+    await hinglishBtn.click()
+    await page.waitForTimeout(600)
+
     // Q1: What's your name?
     const q1Text = await page.textContent('main')
     console.log(`[Playwright Suite] Q1 content found: ${q1Text?.includes("What's your name?")}`)
@@ -91,8 +107,8 @@ async function run() {
 
     const q1Input = page.locator('input[placeholder="Type your name..."]')
     await q1Input.waitFor({ state: 'visible' })
-    await page.screenshot({ path: path.join(ARTIFACT_DIR, '02-onboarding-q1-name.png') })
-    console.log('[Playwright Suite] Saved screenshot: 02-onboarding-q1-name.png')
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, '03-onboarding-q1-name.png') })
+    console.log('[Playwright Suite] Saved screenshot: 03-onboarding-q1-name.png')
 
     // Fill Name and Advance
     await q1Input.fill('Aarav Sharma')
@@ -108,8 +124,8 @@ async function run() {
 
     const q2Input = page.locator('input[placeholder*="age"]')
     await q2Input.waitFor({ state: 'visible' })
-    await page.screenshot({ path: path.join(ARTIFACT_DIR, '03-onboarding-q2-age.png') })
-    console.log('[Playwright Suite] Saved screenshot: 03-onboarding-q2-age.png')
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, '04-onboarding-q2-age.png') })
+    console.log('[Playwright Suite] Saved screenshot: 04-onboarding-q2-age.png')
 
     // Fill Age and Advance
     await q2Input.fill('16')
@@ -125,8 +141,8 @@ async function run() {
 
     const grade10Btn = page.locator('button:has-text("10th grade")')
     await grade10Btn.waitFor({ state: 'visible' })
-    await page.screenshot({ path: path.join(ARTIFACT_DIR, '04-onboarding-q3-grade.png') })
-    console.log('[Playwright Suite] Saved screenshot: 04-onboarding-q3-grade.png')
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, '05-onboarding-q3-grade.png') })
+    console.log('[Playwright Suite] Saved screenshot: 05-onboarding-q3-grade.png')
 
     // Click Grade 10 to auto-advance
     await grade10Btn.click()
@@ -141,8 +157,8 @@ async function run() {
 
     const cbseBtn = page.locator('button:has-text("CBSE")')
     await cbseBtn.waitFor({ state: 'visible' })
-    await page.screenshot({ path: path.join(ARTIFACT_DIR, '05-onboarding-q4-board.png') })
-    console.log('[Playwright Suite] Saved screenshot: 05-onboarding-q4-board.png')
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, '06-onboarding-q4-board.png') })
+    console.log('[Playwright Suite] Saved screenshot: 06-onboarding-q4-board.png')
 
     // Click CBSE to auto-advance
     await cbseBtn.click()
@@ -157,8 +173,8 @@ async function run() {
 
     const q5Input = page.locator('input[placeholder*="Aerospace"]')
     await q5Input.waitFor({ state: 'visible' })
-    await page.screenshot({ path: path.join(ARTIFACT_DIR, '06-onboarding-q5-aspiration.png') })
-    console.log('[Playwright Suite] Saved screenshot: 06-onboarding-q5-aspiration.png')
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, '07-onboarding-q5-aspiration.png') })
+    console.log('[Playwright Suite] Saved screenshot: 07-onboarding-q5-aspiration.png')
 
     await browser.close()
     console.log('[Playwright Suite] ALL ASSERTIONS PASSED!')

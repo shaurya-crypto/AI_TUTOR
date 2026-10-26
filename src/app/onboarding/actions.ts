@@ -10,12 +10,14 @@ const VALID_CLASSES = [
   'Class 10', 'Class 11', 'Class 12'
 ]
 const VALID_BOARDS = ['CBSE', 'ICSE', 'IB']
+const VALID_LANGUAGES = ['English', 'Hinglish', 'Hindi', 'Spanish', 'French', 'German']
 const VALID_PACING = ['fast_and_curious', 'steady_and_balanced', 'slow_deep_intuitive']
 const VALID_STYLES = ['socratic', 'visual', 'board_numerical', 'storytelling']
 const VALID_VOICES = ['Aoede', 'Charon', 'Kore', 'Fenrir', 'Puck']
 
 export interface Phase4OnboardingData {
   fullName: string
+  preferredLanguage?: string
   age: number | null
   classLevel: string
   targetBoard: string
@@ -45,6 +47,10 @@ export async function completeOnboardingAction(data: Phase4OnboardingData) {
     ? data.fullName.trim().slice(0, 80)
     : user.user_metadata?.full_name || 'Student'
 
+  const preferredLanguage = typeof data.preferredLanguage === 'string' && VALID_LANGUAGES.includes(data.preferredLanguage)
+    ? data.preferredLanguage
+    : 'English'
+
   const age = typeof data.age === 'number' && Number.isInteger(data.age) && data.age >= 9 && data.age <= 22
     ? data.age
     : null
@@ -73,6 +79,7 @@ export async function completeOnboardingAction(data: Phase4OnboardingData) {
     .from('profiles')
     .update({
       full_name: fullName,
+      preferred_language: preferredLanguage,
       age: age,
       class_level: classLevel,
       target_board: targetBoard,

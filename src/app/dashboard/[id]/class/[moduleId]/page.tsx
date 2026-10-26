@@ -360,6 +360,14 @@ export default function ModuleClassroomPage() {
   const [isCompletedBefore, setIsCompletedBefore] = useState(false)
   const [studentProfileClassLevel, setStudentProfileClassLevel] = useState<string>('')
   const [studentName, setStudentName] = useState<string>('')
+  const [studentPreferredLanguage, setStudentPreferredLanguage] = useState<string>('English')
+  const [studentTargetBoard, setStudentTargetBoard] = useState<string>('CBSE')
+  const [studentLearningPace, setStudentLearningPace] = useState<string>('steady_and_balanced')
+  const [studentLearningStyle, setStudentLearningStyle] = useState<string>('socratic')
+  const [studentCareerAspiration, setStudentCareerAspiration] = useState<string>('')
+  const [studentFavoriteSubject, setStudentFavoriteSubject] = useState<string>('Physics')
+  const [studentWeakSubjects, setStudentWeakSubjects] = useState<string[]>([])
+  const [studentStrongSubjects, setStudentStrongSubjects] = useState<string[]>([])
   const [endChapterConfirmPrompt, setEndChapterConfirmPrompt] = useState<string | null>(null)
 
   // Interactive 3D Visualization Stage state
@@ -467,9 +475,18 @@ export default function ModuleClassroomPage() {
         // Fetch student profile class_level, voice preference, and name
         const { data: profile } = await supabase
           .from('profiles')
-          .select('class_level, preferred_teacher_voice, full_name')
+          .select('class_level, target_board, preferred_teacher_voice, full_name, preferred_language, learning_pace, learning_style, career_aspiration, favorite_subject, strong_subjects, weak_subjects')
           .eq('id', userId)
           .single()
+
+        if (profile?.target_board) setStudentTargetBoard(profile.target_board)
+        if (profile?.preferred_language) setStudentPreferredLanguage(profile.preferred_language)
+        if (profile?.learning_pace) setStudentLearningPace(profile.learning_pace)
+        if (profile?.learning_style) setStudentLearningStyle(profile.learning_style)
+        if (profile?.career_aspiration) setStudentCareerAspiration(profile.career_aspiration)
+        if (profile?.favorite_subject) setStudentFavoriteSubject(profile.favorite_subject)
+        if (Array.isArray(profile?.strong_subjects)) setStudentStrongSubjects(profile.strong_subjects)
+        if (Array.isArray(profile?.weak_subjects)) setStudentWeakSubjects(profile.weak_subjects)
 
         let foundName = ''
         if (profile?.full_name?.trim()) {
@@ -1460,16 +1477,77 @@ export default function ModuleClassroomPage() {
 
     const studentFirstName = studentName ? studentName.split(' ')[0].trim() : ''
 
+    // Language Directive: Strict spoken instruction
+    let languageDirective = ''
+    if (studentPreferredLanguage === 'Hindi') {
+      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: Hindi (हिंदी).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach primarily in conversational Hindi (हिंदी). Maintain standard scientific symbols, formulas, and English keywords on the chalkboard while explaining concepts, intuitions, and dialogue thoroughly in natural, warm Hindi.'
+    } else if (studentPreferredLanguage === 'Hinglish') {
+      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: Hinglish (Conversational English + Hindi).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in natural Hinglish — blending English academic terminology with warm, everyday conversational Hindi/English explanations, just like a top school tutor in India. Write English scientific terms and formulas on the chalkboard while conversing naturally in Hinglish.'
+    } else if (studentPreferredLanguage === 'Spanish') {
+      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: Spanish (Español).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in Spanish (Español). Maintain standard mathematical and scientific notation on the chalkboard while delivering all spoken intuitions, definitions, and explanations in fluent Spanish.'
+    } else if (studentPreferredLanguage === 'French') {
+      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: French (Français).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in French (Français). Maintain standard scientific notation on the chalkboard while delivering all spoken explanations in fluent French.'
+    } else if (studentPreferredLanguage === 'German') {
+      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: German (Deutsch).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in German (Deutsch). Maintain standard scientific notation on the chalkboard while delivering all spoken explanations in fluent German.'
+    } else {
+      languageDirective = 'PRIMARY SPOKEN & TEACHING LANGUAGE: English.\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach in clear, articulate, and encouraging academic English.'
+    }
+
+    // Pedagogical Dossier (strictly excluding age and non-teaching metadata)
+    const paceDirective = studentLearningPace === 'fast_and_curious'
+      ? 'Pacing: Fast & Curious (Move briskly, present high-level intuition, and challenge with rigorous problems quickly).'
+      : studentLearningPace === 'slow_deep_intuitive'
+      ? 'Pacing: Deep & Intuitive (Slow down, ground every concept with relatable daily analogies before symbols, and verify understanding thoroughly).'
+      : 'Pacing: Steady & Balanced (Maintain standard pace, balancing conceptual intuition with step-by-step worked examples).'
+
+    const styleDirective = studentLearningStyle === 'socratic'
+      ? 'Teaching Style: Socratic Guidance (Guide the student with thoughtful questions so they deduce conclusions themselves).'
+      : studentLearningStyle === 'visual'
+      ? 'Teaching Style: Visual & Intuitive (Prioritize dynamic chalkboard diagrams, coordinate plots, and physical schematic sketches).'
+      : studentLearningStyle === 'board_numerical'
+      ? 'Teaching Style: Step-by-Step Derivations (Meticulously lay out formulas, substitutions, and rough work on the chalkboard).'
+      : 'Teaching Style: Real-Life Analogies (Ground abstract equations in daily physical objects and memorable narratives).'
+
+    const careerHook = studentCareerAspiration
+      ? `Student Career Dream: Aspires to become ${studentCareerAspiration}. When appropriate, naturally reference real-world applications in ${studentCareerAspiration} to inspire and motivate!`
+      : ''
+
+    const weakAreaHook = studentWeakSubjects && studentWeakSubjects.length > 0
+      ? `Focus & Struggle Areas: ${studentWeakSubjects.join(', ')}. Pay special attention here! Break down steps with extra patience and clarity; do not rush through these topics.`
+      : ''
+
+    const pedagogicalDossier = `
+STUDENT PERSONALIZATION & PEDAGOGICAL DOSSIER:
+- Name: ${studentFirstName || 'Student'}
+- Grade / Class: ${resolvedClassLevel || 'Class 10'}
+- Board Curriculum: ${resolvedBoard || studentTargetBoard || 'CBSE'}
+- ${languageDirective}
+- ${paceDirective}
+- ${styleDirective}
+${careerHook ? `- ${careerHook}\n` : ''}${weakAreaHook ? `- ${weakAreaHook}\n` : ''}`
+
     const boardSummary = chalkboardRef.current?.getBoardSummary()?.notesText || chapterNotes || ''
     const boardContinuationNote = boardSummary.trim()
       ? `\nCURRENT CHALKBOARD NOTES (DO NOT RE-WRITE OR DUPLICATE):\n"""\n${boardSummary.trim().slice(-500)}\n"""\nCONTINUATION MANDATE: The chalkboard already contains the notes above. Continue directly from where you left off. DO NOT re-write, duplicate, or re-draw any note or diagram already present on the board.\n`
       : ''
 
+    const langGreeting = studentPreferredLanguage === 'Hindi'
+      ? `Namaste ${studentFirstName || 'विद्यार्थी'}! Aaj ki class mein aapka swagat hai.`
+      : studentPreferredLanguage === 'Hinglish'
+      ? `Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}.`
+      : studentPreferredLanguage === 'Spanish'
+      ? `¡Hola ${studentFirstName || 'allí'}! Bienvenido a la clase de hoy sobre ${resolvedTitle}.`
+      : studentPreferredLanguage === 'French'
+      ? `Bonjour ${studentFirstName || ''}! Bienvenue au cours d'aujourd'hui sur ${resolvedTitle}.`
+      : studentPreferredLanguage === 'German'
+      ? `Hallo ${studentFirstName || ''}! Willkommen zur heutigen Stunde über ${resolvedTitle}.`
+      : `Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}.`
+
     const kickoffPrompt = isCompletedModule
-      ? `[SESSION START]: Speak FIRST immediately! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}!"). State that I have completed this capsule, review the key takeaways on the chalkboard, and ask if I have any questions before the quiz.`
+      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that I have completed this capsule, review the key takeaways on the chalkboard, and ask if I have any questions before the quiz in ${studentPreferredLanguage}.`
       : isResumed
-      ? `[SESSION START]: Speak FIRST immediately without waiting for me to say anything! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}!"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Immediately teach the intuition, write the definition, explain examples, and solve the worked question step-by-step on the board while speaking aloud.`
-      : `[SESSION START]: Speak FIRST immediately without waiting for me to say anything! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}."). Introduce yourself and immediately begin Concept 1: "${firstConcept}". Follow the full teaching cadence: provide everyday intuition, dynamic visual, formal definition, concrete examples, and solve the first worked question step-by-step on the board while explaining each step aloud. Do NOT wait for me to speak first!`
+      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage} without waiting for me to say anything! Warmly greet me by my name ("${langGreeting}"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Immediately teach the intuition, write the definition, explain examples, and solve the worked question step-by-step on the board while speaking aloud in ${studentPreferredLanguage}.`
+      : `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage} without waiting for me to say anything! Warmly greet me by my name ("${langGreeting}"). Introduce yourself and immediately begin Concept 1: "${firstConcept}" in ${studentPreferredLanguage}. Follow the full teaching cadence: provide everyday intuition, dynamic visual, formal definition, concrete examples, and solve the first worked question step-by-step on the board while explaining each step aloud in ${studentPreferredLanguage}. Do NOT wait for me to speak first!`
 
     const conceptDossiersText = buildConceptMicroDossiers(
       keyConcepts,
@@ -1483,6 +1561,7 @@ export default function ModuleClassroomPage() {
     )
 
     const lessonPrompt = `ROLE: Senior Academic Topper Tutor (1-on-1 spoken class with live chalkboard notes).
+${pedagogicalDossier}
 STUDENT: ${studentFirstName ? studentFirstName + ' | ' : ''}${resolvedClassLevel || 'Class 10'} (${resolvedBoard || 'CBSE'}) | Subject: ${resolvedSubject} (${subjectDirective}) | Capsule: "${resolvedTitle}"${
   isLastCapsuleOfChapter && nextChapterInfo
     ? ` | Final Capsule (Next: #${nextChapterInfo.orderIndex} "${nextChapterInfo.chapterTitle}")`
