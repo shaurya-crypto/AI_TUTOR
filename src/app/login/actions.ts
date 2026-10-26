@@ -20,30 +20,109 @@ function formatAuthError(error: any): string {
   const lower = msg.toLowerCase()
 
   if (lower.includes('invalid login credentials') || lower.includes('invalid_grant')) {
-    return 'Authentication failed: The email address or password provided does not match our records. Please verify your credentials or use "Forgot Password".'
+    return 'The credentials provided do not match our records. Please verify or request a sign-in code.'
   }
   if (lower.includes('email not confirmed')) {
-    return 'Verification pending: Your email address has not been confirmed yet. Please inspect your inbox and spam folder for the activation link dispatched via Brevo.'
+    return 'Your email address has not been confirmed yet. Please inspect your inbox for the activation link or code.'
   }
   if (lower.includes('user already registered') || lower.includes('already exists')) {
-    return 'Account exists: An academic profile with this email address already exists. Please switch to Sign In.'
+    return 'An account with this email address already exists. Please continue to sign in.'
   }
   if (lower.includes('password should be at least') || lower.includes('password is too short')) {
-    return 'Security requirement: Passwords must be at least 6 characters in length.'
+    return 'Password must be at least 6 characters in length.'
   }
   if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('over_email_send_rate_limit')) {
-    return 'Security threshold: Multiple requests detected. To protect your account and deliver messages reliably via Brevo, please wait 60 seconds before retrying.'
+    return 'Too many attempts detected. Please wait 60 seconds before requesting another sign-in code.'
   }
-  if (lower.includes('signup requires a valid password')) {
-    return 'Security requirement: Please enter a valid password containing at least 6 characters.'
+  if (lower.includes('token has expired') || lower.includes('otp expired') || lower.includes('invalid token')) {
+    return 'The sign-in code is invalid or has expired. Please request a fresh code.'
   }
   if (lower.includes('invalid email') || lower.includes('unable to validate email')) {
-    return 'Invalid email format: Please enter a valid institutional or personal email address.'
+    return 'Please enter a valid school or personal email address.'
   }
   return msg || 'An unexpected authentication error occurred. Please try again.'
 }
 
-export async function login(formData: FormData) {
+/**
+ * 1. Send OTP / Sign-in Code to Email (Unified Sign-in & Sign-up)
+ */
+export async function sendEmailCode(email: string) {
+  const trimmed = email?.trim().toLowerCase()
+  if (!trimmed || !trimmed.includes('@')) {
+    return { error: 'Please enter a valid email address.' }
+  }
+
+  if (isDisposableEmail(trimmed)) {
+    return { error: 'Temporary or disposable email addresses are not permitted.' }
+  }
+
+  const supabase = await createClient()
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email: trimmed,
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: `${siteUrl}/auth/callback`,
+    },
+  })
+
+  if (error) {
+    return { error: formatAuthError(error) }
+  }
+
+  return { success: true, email: trimmed }
+}
+
+/**
+ * 2. Verify 6-digit OTP Code
+ */
+export async function verifyEmailCode(email: string, code: string) {
+  const trimmedEmail = email?.trim().toLowerCase()
+  const trimmedCode = code?.trim()
+
+  if (!trimmedEmail || !trimmedCode) {
+    return { error: 'Please provide both your email and the 6-digit code.' }
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: trimmedEmail,
+    token: trimmedCode,
+    type: 'email',
+  })
+
+  if (error || !data.user) {
+    return { error: formatAuthError(error || new Error('Invalid verification code')) }
+  }
+
+  // Ensure student profile row exists
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, onboarding_completed')
+    .eq('id', data.user.id)
+    .single()
+
+  if (!profile) {
+    await supabase.from('profiles').upsert({
+      id: data.user.id,
+      email: data.user.email!,
+      onboarding_completed: false,
+    })
+  }
+
+  revalidatePath('/', 'layout')
+  return {
+    success: true,
+    userId: data.user.id,
+    onboardingCompleted: profile ? profile.onboarding_completed : false,
+  }
+}
+
+/**
+ * 3. Direct Password Login (Backward compatibility for existing credentials)
+ */
+export async function loginWithPassword(formData: FormData) {
   const supabase = await createClient()
 
   const email = (formData.get('email') as string)?.trim()
@@ -66,7 +145,6 @@ export async function login(formData: FormData) {
     return { error: 'Unable to authenticate. Please verify your account.' }
   }
 
-  // Ensure profile row exists in public.profiles (self-healing)
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, onboarding_completed')
@@ -77,8 +155,6 @@ export async function login(formData: FormData) {
     await supabase.from('profiles').upsert({
       id: authData.user.id,
       email: authData.user.email!,
-      full_name: (authData.user.user_metadata?.full_name as string) || null,
-      class_level: (authData.user.user_metadata?.class_level as string) || null,
       onboarding_completed: false,
     })
   }
@@ -91,76 +167,42 @@ export async function login(formData: FormData) {
   }
 }
 
-export async function signup(formData: FormData) {
+/**
+ * 4. Password Reset Request
+ */
+export async function requestPasswordReset(formData: FormData) {
   const supabase = await createClient()
-  
   const email = (formData.get('email') as string)?.trim()
-  const password = formData.get('password') as string
-  const fullName = (formData.get('fullName') as string)?.trim()
-  const classLevel = (formData.get('class_level') as string) || 'Class 10'
-  
-  if (!email || !password || !fullName) {
-    return { error: 'Please complete all required fields.' }
-  }
 
-  if (password.length < 6) {
-    return { error: 'Security requirement: Password must be at least 6 characters long.' }
-  }
-
-  if (isDisposableEmail(email)) {
-    return { error: 'Institutional policy: Temporary or disposable email addresses are not permitted. Please use your standard school or personal email.' }
+  if (!email || !email.includes('@')) {
+    return { error: 'Please enter a valid email address.' }
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
-  const { data: authData, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${siteUrl}/auth/callback`,
-      data: {
-        full_name: fullName,
-        class_level: classLevel,
-      },
-    },
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${siteUrl}/auth/callback?next=/onboarding`,
   })
 
   if (error) {
     return { error: formatAuthError(error) }
   }
 
-  // If session created automatically (e.g. email confirmation disabled in Supabase development mode)
-  if (authData?.session && authData.user) {
-    await supabase.from('profiles').upsert({
-      id: authData.user.id,
-      email: authData.user.email!,
-      full_name: fullName,
-      class_level: classLevel,
-      onboarding_completed: false,
-    })
-
-    revalidatePath('/', 'layout')
-    return {
-      success: 'Account created and verified.',
-      autoConfirmed: true,
-      userId: authData.user.id,
-      email,
-    }
-  }
-
-  return { 
-    success: 'Verification email dispatched.',
-    autoConfirmed: false,
+  return {
+    success: `Password reset instructions have been dispatched to ${email}.`,
     email,
   }
 }
 
+/**
+ * 5. Resend Verification Email (Backward compatibility for MailSentCard)
+ */
 export async function resendVerificationEmail(formData: FormData) {
   const supabase = await createClient()
   const email = (formData.get('email') as string)?.trim()
 
   if (!email || !email.includes('@')) {
-    return { error: 'Please enter a valid email address to resend verification.' }
+    return { error: 'Please enter a valid email address.' }
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
@@ -177,31 +219,8 @@ export async function resendVerificationEmail(formData: FormData) {
     return { error: formatAuthError(error) }
   }
 
-  return { 
-    success: `A fresh verification link has been dispatched to ${email} via Brevo mailer.` 
-  }
-}
-
-export async function requestPasswordReset(formData: FormData) {
-  const supabase = await createClient()
-  const email = (formData.get('email') as string)?.trim()
-
-  if (!email || !email.includes('@')) {
-    return { error: 'Please enter a valid email address to receive password reset instructions.' }
-  }
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteUrl}/auth/callback?next=/onboarding`,
-  })
-
-  if (error) {
-    return { error: formatAuthError(error) }
-  }
-
   return {
-    success: `Password reset instructions have been dispatched to ${email}. Please check your inbox.`,
-    email,
+    success: `A fresh verification link has been dispatched to ${email}.`,
   }
 }
+

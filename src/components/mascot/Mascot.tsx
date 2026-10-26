@@ -291,8 +291,13 @@ export function Mascot() {
   const isSuspicious = currentMood === 'suspicious' || currentMood === 'warning'
   const isCelebrate = currentMood === 'celebrate'
 
-  // Never render on landing page or in active classroom sessions
-  if (pathname?.includes('/class/') || pathname === '/') {
+  // Never render on landing page, login, onboarding, or in active classroom sessions
+  if (
+    pathname?.includes('/class/') ||
+    pathname === '/' ||
+    pathname?.startsWith('/login') ||
+    pathname?.startsWith('/onboarding')
+  ) {
     return null
   }
 
