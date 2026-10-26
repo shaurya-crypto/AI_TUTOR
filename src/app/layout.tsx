@@ -6,6 +6,13 @@ import { Mascot } from "@/components/mascot/Mascot";
 export const metadata: Metadata = {
   title: "AI Tutor - Personalized Learning",
   description: "Real-time, low-latency live AI tutor",
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/icon.svg',
+  },
 };
 
 export const viewport: Viewport = {

@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useGeminiLive } from '@/hooks/useGeminiLive'
 import { ClassroomAvatar } from '@/components/classroom/ClassroomAvatar'
+import { LiveAvatarConfig } from '@/services/geminiWebSocket'
+import type { SimliAvatarController } from '@/services/simliAvatarService'
 import dynamicImport from 'next/dynamic'
 import type { GreenChalkboardRef } from '@/components/whiteboard/GreenChalkboard'
 
@@ -115,48 +117,19 @@ function buildConceptMicroDossiers(
 ): string {
   if (!keyConcepts || keyConcepts.length === 0) return ''
 
-  let subtopics: string[] = []
-  if (Array.isArray(activeModule?.subtopics)) {
-    subtopics = activeModule.subtopics
-  } else if (typeof activeModule?.subtopics === 'string') {
-    try {
-      const p = JSON.parse(activeModule.subtopics)
-      if (Array.isArray(p)) subtopics = p
-    } catch {}
-  }
-
   return keyConcepts
     .map((rawConcept, idx) => {
       const conceptName = rawConcept.replace(/^[\s\(\[\{]+|[\s\)\]\}]+$/g, '').trim()
-      const subtopic = subtopics[idx] || subtopics[0] || conceptName
       const ex1 = workedExamples[idx] || workedExamples[0]
-      const ex2 = workedExamples[idx + 1] || workedExamples[1]
       const misc = misconceptions[idx] || misconceptions[0]
 
       const q1 = ex1?.problem
-        ? `Q: ${ex1.problem} | Ans: Given: ${ex1.given || ''}, Formula: ${ex1.formula || ''}, Calc: ${ex1.calculation || ''}, Final: ${ex1.finalAnswer || ''} ${ex1.unit || ''}`
-        : `Q: State the fundamental law governing ${conceptName} and define its SI unit. | Ans: State exact ${resolvedBoard} standard definition with SI units and dimensional formula.`
+        ? `Q: ${ex1.problem} | Ans: ${ex1.finalAnswer || ''} ${ex1.unit || ''}`
+        : `Q: State the law/definition for ${conceptName}. | Ans: Standard ${resolvedBoard} formulation.`
 
-      const q2 = ex2?.problem
-        ? `Q: ${ex2.problem} | Ans: ${ex2.finalAnswer || ''} ${ex2.unit || ''}`
-        : `Q: Calculate the value when standard conditions apply for ${conceptName}. | Ans: Step-by-step numerical solution with boxed final answer and SI units.`
-
-      const q3 = misc
-        ? `Q: Why is it incorrect to assume ${misc}? | Ans: Clarify the physical principle and correct scientific reasoning.`
-        : `Q: State one real-world application and common examination pitfall for ${conceptName}. | Ans: Provide verified textbook application with error prevention rule.`
-
-      return `---
-CONCEPT #${idx + 1}: "${conceptName}"
-- Textbook Alignment: ${resolvedBoard} ${resolvedClassLevel} ${resolvedSubject} Chapter "${chapterName}" | Section: "${subtopic}"
-- Core Law / Formula: Exact textbook definition with mathematical relationship & SI units.
-- Intuitive Analogy: Everyday tangible physical phenomenon.
-- 2-3 Exam-Ready Board Questions & Topper Answers:
-  1. ${q1}
-  2. ${q2}
-  3. ${q3}
-- Examination Pitfall to Check: ${misc || 'Ensure correct SI units and explicit formula declaration before substitution.'}`
+      return `Concept ${idx + 1} "${conceptName}": ${q1}${misc ? ` [Caution: ${misc}]` : ''}`
     })
-    .join('\n\n')
+    .join('\n')
 }
 
 /**
@@ -246,13 +219,72 @@ export default function ModuleClassroomPage() {
     userVolume,
     selectedVoice,
     setSelectedVoice,
+    latestVideoFrame,
+    videoMimeType,
     startClass,
     toggleMute,
+    setTeacherAudioMuted,
     endCall,
     resetToIdle,
     sendBoardContext,
     sendTextMessage,
   } = useGeminiLive()
+
+  // Google Gemini 3.8 Live Avatar configuration state
+  const [avatarConfig, setAvatarConfig] = useState<LiveAvatarConfig | null>(null)
+  const simliControllerRef = useRef<SimliAvatarController | null>(null)
+  const saveNotesToSupabaseRef = useRef<((notes: string) => Promise<void>) | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('ai_tutor_avatar_config')
+        if (saved) {
+          setAvatarConfig(JSON.parse(saved))
+        }
+      } catch {}
+    }
+  }, [])
+
+  const handleCustomAvatarChange = useCallback((cfg: LiveAvatarConfig | null) => {
+    setAvatarConfig((prev) => {
+      if (prev === cfg) return prev
+      if (!prev && !cfg) return prev
+      if (
+        prev &&
+        cfg &&
+        prev.avatarName === cfg.avatarName &&
+        prev.customizedAvatar?.imageData === cfg.customizedAvatar?.imageData
+      ) {
+        return prev
+      }
+      return cfg
+    })
+  }, [])
+
+  const handleSimliControllerReady = useCallback((ctrl: SimliAvatarController | null) => {
+    simliControllerRef.current = ctrl
+  }, [])
+
+  const handleSimliActiveChange = useCallback(
+    (active: boolean) => {
+      setTeacherAudioMuted(active)
+    },
+    [setTeacherAudioMuted]
+  )
+
+  const handleBoardContentChange = useCallback(
+    (summary: { notesText: string; roughText: string; fullSummary: string }) => {
+      setLatestBoardSummary((prev) => (prev === summary.fullSummary ? prev : summary.fullSummary))
+      const notesContent = summary.notesText.trim()
+      if (notesContent && notesContent !== lastSentBoardNotesRef.current) {
+        lastSentBoardNotesRef.current = notesContent
+        setChapterNotes(notesContent)
+        saveNotesToSupabaseRef.current?.(notesContent)
+      }
+    },
+    []
+  )
 
   // Interactive page flip barrier: prevents premature page flips until student replies to checkpoint question
   const isAwaitingStudentAnswerRef = useRef<boolean>(false)
@@ -365,6 +397,8 @@ export default function ModuleClassroomPage() {
   const chalkboardRef = useRef<GreenChalkboardRef | null>(null)
   const executedSceneDirectivesRef = useRef<Set<string>>(new Set())
   const renderedVisualConceptsRef = useRef<Set<number>>(new Set())
+  const lastPageJumpTimeRef = useRef<number>(0)
+  const lastTargetIdxRef = useRef<number>(-1)
 
   // Exact database values (no hardcoded mocks)
   const resolvedClassLevel =
@@ -393,27 +427,52 @@ export default function ModuleClassroomPage() {
 
   const resolvedTitle = activeModule?.title || ''
 
+  // Guard to ensure loadModuleContext runs strictly once per module navigation
+  const hasLoadedModuleContextRef = useRef<string | null>(null)
+
   // 1. Fetch exact module context, student profile, concept tracking & existing notes
   useEffect(() => {
+    if (!userId || !moduleId) return
+    const contextKey = `${userId}_${moduleId}`
+    if (hasLoadedModuleContextRef.current === contextKey) return
+    hasLoadedModuleContextRef.current = contextKey
+
     const supabase = createClient()
 
     async function loadModuleContext() {
       setIsLoadingLesson(true)
       try {
-        // Fetch student profile class_level and voice preference
+        // Instant restore of completed concepts from localStorage cache
+        if (typeof window !== 'undefined' && moduleId) {
+          try {
+            const cached = localStorage.getItem(`completed_concepts_${moduleId}`)
+            if (cached) {
+              const parsed = JSON.parse(cached)
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                completedConceptsRef.current = parsed
+                setCompletedConcepts(parsed)
+              }
+            }
+          } catch {}
+        }
+
+        // Fetch student profile class_level, voice preference, and name
         const { data: profile } = await supabase
           .from('profiles')
           .select('class_level, preferred_teacher_voice, full_name')
           .eq('id', userId)
           .single()
 
-        if (profile?.full_name) {
-          setStudentName(profile.full_name.trim())
+        let foundName = ''
+        if (profile?.full_name?.trim()) {
+          foundName = profile.full_name.trim()
         } else {
           const { data: authData } = await supabase.auth.getUser()
-          if (authData?.user?.user_metadata?.full_name) {
-            setStudentName(authData.user.user_metadata.full_name.trim())
-          }
+          const meta = authData?.user?.user_metadata
+          foundName = (meta?.full_name || meta?.name || authData?.user?.email?.split('@')[0] || '').trim()
+        }
+        if (foundName) {
+          setStudentName(foundName)
         }
         if (profile?.class_level) {
           setStudentProfileClassLevel(profile.class_level)
@@ -544,26 +603,36 @@ export default function ModuleClassroomPage() {
 
         if (progress) {
           if (typeof progress.current_concept_index === 'number') {
-            currentConceptIndexRef.current = progress.current_concept_index
-            setCurrentConceptIndex(progress.current_concept_index)
+            if (currentConceptIndexRef.current !== progress.current_concept_index) {
+              currentConceptIndexRef.current = progress.current_concept_index
+              setCurrentConceptIndex(progress.current_concept_index)
+            }
           }
           if (Array.isArray(progress.completed_concepts)) {
             const loaded = parseKeyConcepts(progress.completed_concepts)
-            completedConceptsRef.current = loaded
-            setCompletedConcepts(loaded)
+            const merged = Array.from(new Set([...completedConceptsRef.current, ...loaded]))
+            if (merged.length !== completedConceptsRef.current.length || !merged.every((v, i) => v === completedConceptsRef.current[i])) {
+              completedConceptsRef.current = merged
+              setCompletedConcepts(merged)
+            }
+            if (typeof window !== 'undefined' && moduleId) {
+              try {
+                localStorage.setItem(`completed_concepts_${moduleId}`, JSON.stringify(merged))
+              } catch {}
+            }
           }
           if (progress.last_covered_concept) {
-            setLastCoveredConcept(progress.last_covered_concept)
+            setLastCoveredConcept((prev) => (prev === progress.last_covered_concept ? prev : progress.last_covered_concept))
           }
           if (progress.chapter_notes) {
-            setChapterNotes(progress.chapter_notes)
+            setChapterNotes((prev) => (prev === progress.chapter_notes ? prev : progress.chapter_notes))
           }
           if (progress.status === 'completed' || progress.completed_at) {
             setIsCompletedBefore(true)
             setModuleCompletedSuccess(true)
           }
           if (progress.visual_progress && typeof progress.visual_progress.currentStepIndex === 'number') {
-            setActiveVisualStepIndex(progress.visual_progress.currentStepIndex)
+            setActiveVisualStepIndex((prev) => (prev === progress.visual_progress.currentStepIndex ? prev : progress.visual_progress.currentStepIndex))
           }
         }
       } catch (err) {
@@ -576,7 +645,7 @@ export default function ModuleClassroomPage() {
     if (userId && moduleId) {
       loadModuleContext()
     }
-  }, [userId, moduleId, setSelectedVoice])
+  }, [userId, moduleId])
 
   // 2. Synchronize AI spoken directives to Green Chalkboard and 3D Simulation Viewport
   useEffect(() => {
@@ -866,6 +935,7 @@ export default function ModuleClassroomPage() {
 
   // 3. Auto-save notes to Supabase user_progress.chapter_notes
   const saveNotesToSupabase = async (notesToSave: string) => {
+    saveNotesToSupabaseRef.current = saveNotesToSupabase
     if (!userId || !moduleId || !notesToSave.trim()) return
     setNotesSaveStatus('saving')
     try {
@@ -1084,7 +1154,6 @@ export default function ModuleClassroomPage() {
       }
     }
 
-    const newCompleted = keyConcepts.slice(0, targetIdx)
     const targetConceptName = keyConcepts[targetIdx] || activeModule?.title || 'Concept'
 
     isAwaitingStudentAnswerRef.current = false
@@ -1094,8 +1163,6 @@ export default function ModuleClassroomPage() {
 
     currentConceptIndexRef.current = targetIdx
     setCurrentConceptIndex(targetIdx)
-    completedConceptsRef.current = newCompleted
-    setCompletedConcepts(newCompleted)
     setLastCoveredConcept(targetConceptName)
     setIsCompletedBefore(false)
     setModuleCompletedSuccess(false)
@@ -1103,6 +1170,7 @@ export default function ModuleClassroomPage() {
     // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page (or clean reset for Page 1)
     if (targetIdx === 0) {
       chalkboardRef.current?.resetBoard?.()
+      renderedVisualConceptsRef.current.clear()
     } else {
       chalkboardRef.current?.goToPage?.(targetIdx, targetConceptName)
     }
@@ -1116,7 +1184,7 @@ export default function ModuleClassroomPage() {
             user_id: userId,
             syllabus_module_id: moduleId,
             current_concept_index: targetIdx,
-            completed_concepts: newCompleted,
+            completed_concepts: completedConceptsRef.current,
             last_covered_concept: targetConceptName,
             status: 'in_progress',
             completed_at: null,
@@ -1125,7 +1193,7 @@ export default function ModuleClassroomPage() {
         )
 
       const newPercent =
-        keyConcepts.length > 0 ? Math.round((newCompleted.length / keyConcepts.length) * 100) : 0
+        keyConcepts.length > 0 ? Math.round((completedConceptsRef.current.length / keyConcepts.length) * 100) : 0
 
       triggerCompanionGuidance({
         animation: 'listening',
@@ -1146,44 +1214,62 @@ export default function ModuleClassroomPage() {
     const keyConcepts: string[] = parseKeyConcepts(activeModule?.key_concepts)
     if (keyConcepts.length === 0) return
 
+    let targetIdx = -1
+
     if (typeof conceptName === 'number') {
-      handleConceptGoto(conceptName)
+      targetIdx = Math.max(0, Math.min(conceptName - 1, keyConcepts.length - 1))
+    } else {
+      const raw = String(conceptName || '').trim()
+      const numMatch = raw.match(/(?:concept\s*#?\s*)?(\d+)/i)
+      if (numMatch && numMatch[1]) {
+        const parsedNum = parseInt(numMatch[1], 10)
+        if (parsedNum >= 1 && parsedNum <= keyConcepts.length) {
+          targetIdx = parsedNum - 1
+        }
+      }
+
+      if (targetIdx === -1) {
+        const norm = (s: string) =>
+          String(s || '')
+            .toLowerCase()
+            .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
+            .replace(/^concept\s*\d*[:\-\s]*/i, '')
+            .replace(/^\d+[\.\:\)\-]\s*/, '')
+            .replace(/[^a-z0-9]/g, '')
+
+        const targetNorm = norm(raw)
+        if (targetNorm) {
+          const matchedIdx = keyConcepts.findIndex((c) => {
+            const cNorm = norm(c)
+            return cNorm === targetNorm || cNorm.includes(targetNorm) || targetNorm.includes(cNorm)
+          })
+          if (matchedIdx >= 0) {
+            targetIdx = matchedIdx
+          }
+        }
+      }
+
+      if (targetIdx === -1) {
+        if (currentConceptIndexRef.current < keyConcepts.length - 1) {
+          targetIdx = currentConceptIndexRef.current + 1
+        } else {
+          return
+        }
+      }
+    }
+
+    // Debounce guard: do not jump to the same page or rapid-fire jump within 1500ms
+    const now = Date.now()
+    if (
+      targetIdx === currentConceptIndexRef.current ||
+      (targetIdx === lastTargetIdxRef.current && now - lastPageJumpTimeRef.current < 1500)
+    ) {
       return
     }
 
-    const raw = String(conceptName || '').trim()
-    const numMatch = raw.match(/(?:concept\s*#?\s*)?(\d+)/i)
-    if (numMatch && numMatch[1]) {
-      const parsedNum = parseInt(numMatch[1], 10)
-      if (parsedNum >= 1 && parsedNum <= keyConcepts.length) {
-        handleConceptGoto(parsedNum)
-        return
-      }
-    }
-
-    const norm = (s: string) =>
-      String(s || '')
-        .toLowerCase()
-        .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
-        .replace(/^concept\s*\d*[:\-\s]*/i, '')
-        .replace(/^\d+[\.\:\)\-]\s*/, '')
-        .replace(/[^a-z0-9]/g, '')
-
-    const targetNorm = norm(raw)
-    if (targetNorm) {
-      const matchedIdx = keyConcepts.findIndex((c) => {
-        const cNorm = norm(c)
-        return cNorm === targetNorm || cNorm.includes(targetNorm) || targetNorm.includes(cNorm)
-      })
-      if (matchedIdx >= 0) {
-        handleConceptGoto(matchedIdx + 1)
-        return
-      }
-    }
-
-    if (currentConceptIndexRef.current < keyConcepts.length - 1) {
-      handleConceptGoto(currentConceptIndexRef.current + 2)
-    }
+    lastPageJumpTimeRef.current = now
+    lastTargetIdxRef.current = targetIdx
+    handleConceptGoto(targetIdx + 1)
   }
 
   const handleConceptDone = (conceptName?: string) => {
@@ -1203,22 +1289,57 @@ export default function ModuleClassroomPage() {
         if (parsed >= 1 && parsed <= keyConcepts.length) {
           matchedIdx = parsed - 1
         }
+      } else {
+        const norm = (s: string) =>
+          String(s || '')
+            .toLowerCase()
+            .replace(/^[\s\(\[\{\"\']+|[\s\)\]\}\"\']+$/g, '')
+            .replace(/^concept\s*\d*[:\-\s]*/i, '')
+            .replace(/^\d+[\.\:\)\-]\s*/, '')
+            .replace(/[^a-z0-9]/g, '')
+
+        const targetNorm = norm(conceptName)
+        const found = keyConcepts.findIndex((c) => {
+          const cNorm = norm(c)
+          return cNorm === targetNorm || cNorm.includes(targetNorm) || targetNorm.includes(cNorm)
+        })
+        if (found >= 0) matchedIdx = found
       }
     }
 
-    const nextIdx = Math.min(matchedIdx + 1, keyConcepts.length - 1)
-    if (nextIdx > currentConceptIndexRef.current) {
-      handleConceptGoto(nextIdx + 1)
-    } else {
-      const canonicalConcept = keyConcepts[matchedIdx]
-      if (canonicalConcept && !completedConceptsRef.current.includes(canonicalConcept)) {
-        const updated = [...completedConceptsRef.current, canonicalConcept]
-        completedConceptsRef.current = updated
-        setCompletedConcepts(updated)
+    const canonicalConcept = keyConcepts[matchedIdx] || keyConcepts[currentConceptIndexRef.current]
+    if (canonicalConcept && !completedConceptsRef.current.includes(canonicalConcept)) {
+      const updated = [...completedConceptsRef.current, canonicalConcept]
+      completedConceptsRef.current = updated
+      setCompletedConcepts(updated)
+
+      if (typeof window !== 'undefined' && moduleId) {
+        try {
+          localStorage.setItem(`completed_concepts_${moduleId}`, JSON.stringify(updated))
+        } catch {}
       }
-      if (keyConcepts.length > 0 && completedConceptsRef.current.length >= keyConcepts.length) {
-        markModuleAsCompleted()
+
+      if (userId && moduleId) {
+        const supabase = createClient()
+        supabase
+          .from('user_progress')
+          .upsert(
+            {
+              user_id: userId,
+              syllabus_module_id: moduleId,
+              completed_concepts: updated,
+              current_concept_index: currentConceptIndexRef.current,
+              last_covered_concept: canonicalConcept,
+              status: updated.length >= keyConcepts.length ? 'completed' : 'in_progress',
+            },
+            { onConflict: 'user_id,syllabus_module_id' }
+          )
+          .then(() => {})
       }
+    }
+
+    if (keyConcepts.length > 0 && completedConceptsRef.current.length >= keyConcepts.length) {
+      markModuleAsCompleted()
     }
   }
 
@@ -1228,24 +1349,6 @@ export default function ModuleClassroomPage() {
     connectionState === 'TEACHER_SPEAKING' ||
     connectionState === 'MUTED' ||
     connectionState === 'CONNECTING'
-
-  // Keyboard shortcuts (M to mute, Esc to end)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isCallActive) return
-      if (e.key === 'm' || e.key === 'M') {
-        e.preventDefault()
-        toggleMute()
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        handleEndClass()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-
-  return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isCallActive, toggleMute])
 
   // Start Spoken Lesson: continuous teaching flow, explanation-first, worked-demonstrations second, strict chalkboard directives
   const handleStartClass = () => {
@@ -1345,19 +1448,21 @@ export default function ModuleClassroomPage() {
     const currentVisual = inferConceptVisualDirective(currentConcept, resolvedSubject, chapterName)
 
     const visualRoadmap = keyConcepts
-      .map((c: string, i: number) => {
-        const v = inferConceptVisualDirective(c, resolvedSubject, chapterName)
-        return `  * Concept #${i + 1} "${c}":\n    -> AUTO-TRIGGER VISUAL: ${v.toolCallExample}`
-      })
+      .map((c: string, i: number) => `  * Concept #${i + 1} "${c}": render_svg_diagram(title="${c}")`)
       .join('\n')
 
     const studentFirstName = studentName ? studentName.split(' ')[0].trim() : ''
 
+    const boardSummary = chalkboardRef.current?.getBoardSummary()?.notesText || chapterNotes || ''
+    const boardContinuationNote = boardSummary.trim()
+      ? `\nCURRENT CHALKBOARD NOTES (DO NOT RE-WRITE OR DUPLICATE):\n"""\n${boardSummary.trim().slice(-500)}\n"""\nCONTINUATION MANDATE: The chalkboard already contains the notes above. Continue directly from where you left off. DO NOT re-write, duplicate, or re-draw any note or diagram already present on the board.\n`
+      : ''
+
     const kickoffPrompt = isCompletedModule
-      ? `[SESSION START]: Hello Teacher! I am ${studentFirstName || 'your student'}. I have completed this capsule. Please review the key takeaways on the chalkboard, and ask if I have any questions before the quiz.`
+      ? `[SESSION START]: Speak FIRST immediately! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}!"). State that I have completed this capsule, review the key takeaways on the chalkboard, and ask if I have any questions before the quiz.`
       : isResumed
-      ? `[SESSION START]: Please speak first immediately! Greet ${studentFirstName || 'the student'} warmly by name, state that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Speak continuously throughout the step, explain the diagram and intuition, write on the chalkboard, and guide them step-by-step.`
-      : `[SESSION START]: Please speak first immediately! Introduce yourself and greet ${studentFirstName || 'the student'} warmly by name. Announce today's capsule ("${resolvedTitle}"). Immediately begin teaching Concept 1: "${firstConcept}" - render the diagram on the chalkboard, speak continuously to explain the intuition and definition, write notes, and only stop when the step is done to check understanding. Do NOT wait for ${studentFirstName || 'the student'} to speak first!`
+      ? `[SESSION START]: Speak FIRST immediately without waiting for me to say anything! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}!"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Immediately teach the intuition, write the definition, explain examples, and solve the worked question step-by-step on the board while speaking aloud.`
+      : `[SESSION START]: Speak FIRST immediately without waiting for me to say anything! Warmly greet me by my name ("Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}."). Introduce yourself and immediately begin Concept 1: "${firstConcept}". Follow the full teaching cadence: provide everyday intuition, dynamic visual, formal definition, concrete examples, and solve the first worked question step-by-step on the board while explaining each step aloud. Do NOT wait for me to speak first!`
 
     const conceptDossiersText = buildConceptMicroDossiers(
       keyConcepts,
@@ -1376,92 +1481,112 @@ STUDENT: ${studentFirstName ? studentFirstName + ' | ' : ''}${resolvedClassLevel
     ? ` | Final Capsule (Next: #${nextChapterInfo.orderIndex} "${nextChapterInfo.chapterTitle}")`
     : ''
 }
-
+${boardContinuationNote}
 CORE INVARIANTS:
 1. SESSION START (SPEAK FIRST):
    - You MUST speak FIRST immediately upon connection! Do NOT wait for ${studentFirstName || 'the student'} to speak.
    - Greet ${studentFirstName || 'the student'} warmly by name: "Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}."
-   - Immediately begin teaching Concept 1 with diagram, continuous spoken explanation, and chalkboard notes.
+   - Immediately begin teaching Concept 1 following the pedagogical cadence below.
 
-2. CONTINUOUS TEACHING THROUGH THE STEP (NEVER STOP PREMATURELY):
-   - Do NOT stop talking after just 2-3 sentences in the middle of teaching a concept!
-   - Continue teaching through the FULL STEP: explain the diagram thoroughly, describe its features, provide the everyday real-life intuition, and state the formal scientific definition with board notes.
-   - ONLY when the full step is finished, stop speaking and ask: "Did you understand this concept and diagram, or would you like me to explain anything differently?"
+2. CONTINUOUS TEACHING (NEVER STOP PREMATURELY):
+   - Do NOT stop talking after just 2-3 sentences in the middle of a concept!
+   - Teach the full sequence: everyday intuition, dynamic visual, formal definition, concrete examples, and solve the worked question step-by-step.
+   - Only when this full sequence is completed on the board, pause and ask the student the understanding check question.
 
-3. SPOKEN TEACHING WHILE WRITING (NEVER WRITE IN SILENCE):
-   - Whenever you write or draw on the chalkboard, you MUST simultaneously SPEAK ALOUD to explain what you are drawing or writing and WHY.
-   - Never write or draw in silence! Talk the student through the concept and diagram like an engaging teacher at the board.
+3. EXPLAIN FIRST, READ ALOUD VERBATIM, WRITE STEP-BY-STEP (NEVER DUMP AT ONCE):
+   - For every definition, example, flowchart, numerical, or note:
+     a) Explain the intuitive concept and mechanism FIRST in conversational spoken English.
+     b) READ the exact definition, example, formula, flowchart step, or numerical aloud word-for-word so the student hears it clearly.
+     c) WRITE it to the chalkboard step-by-step using separate, progressive tool calls. NEVER dump an entire multi-line block, derivation, question, or flowchart all at once!
+   - You MUST speak aloud what you are writing while you write it (examples, definitions, flowcharts, steps). Never write or draw in silence.
 
-4. RE-TEACHING, DOUBTS & EXPLANATION REQUESTS (HIGHEST PRIORITY):
-   - When a student asks to re-teach, re-explain, says "teach again", "explain again", "re-teach", "didn't understand", "can you explain why", "no", "repeat", "I have doubts", or expresses ANY confusion:
+4. RE-TEACHING & DOUBTS (HIGHEST PRIORITY):
+   - When a student asks to re-teach, re-explain, says "teach again", "explain again", "didn't understand", "why", "no", "repeat", or expresses ANY confusion:
      a) NEVER say "perfect let's move on", "excellent let's continue", or advance to the next concept!
      b) DO NOT call concept_done or concept_focus. STAY ON THE CURRENT WHITEBOARD PAGE.
      c) Respond with warm encouragement: "Of course! Let us break this down from a fresh angle."
      d) Explain WHY the concept works using a completely fresh, tangible real-life analogy.
-     e) Add supporting clarification notes or sketches on the current chalkboard: write_chalkboard(action="draw_note", content="Breakdown: <fresh simplified intuition>", color="amber")
+     e) Add a clarification note: write_chalkboard(action="draw_note", content="Breakdown: <fresh simplified intuition>", color="amber")
      f) Ask: "Does this way of looking at it make sense to you now?"
-     g) Only advance when the student explicitly states they have understood and are ready to move on.
+     g) Only advance when the student explicitly confirms understanding.
 
-PEDAGOGICAL CADENCE (STRICT 4-TURN INTERACTIVE SEQUENCE):
+DYNAMIC VISUAL & GRAPH ENGINE DIRECTIVES:
+1. Mathematical, Kinematic & Coordinate Graphs:
+   Call plot_mathematical_graph(formula="...", domain="[min,max]", range="[min,max]", title="...", callout="...")
+   (Powered by Mafs.dev pure vector React/SVG engine. Fully customizable for every curve, line, or kinematic motion. NEVER render static images for graphs).
+2. Scientific Diagrams & Physical Models:
+   Call render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision'>...</svg>", caption="...")
+   (Generate authentic vector SVG markup tailored to the exact topic, with clear shapes, contrasting labels, and leader lines. Never use fixed templates).
 
-TURN 1 (FIRST TURN OF CONCEPT) - DIAGRAM + COMPLETE SPOKEN EXPLANATION + REAL-WORLD HOOK + DEFINITION:
-1. Render an accurate scientific diagram on the chalkboard:
-   render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision' text-rendering='geometricPrecision'>...</svg>", caption="...")
-   (Use high-contrast vector graphics with labels and leader lines. Never flat colored boxes.)
-2. SPOKEN EXPLANATION & REAL-WORLD HOOK (SPEAK CONTINUOUSLY):
-   Greet ${studentFirstName || 'the student'} by name, then walk through the diagram explaining what it shows and why it matters using an everyday physical hook. As you speak, write:
-   write_chalkboard(action="draw_note", content="Real-World Intuition: <everyday physical example connecting to the diagram>", color="botanical")
-3. PRECISE DEFINITION (SPEAK ALOUD):
-   Explain the definition or law aloud in plain spoken words, then write:
+PEDAGOGICAL CADENCE (STRICT STEP-BY-STEP SEQUENCE PER CONCEPT):
+
+PHASE 1 - INTUITION & GENERATIVE VISUAL:
+1. Provide an everyday physical scenario or relatable hook before equations:
+   write_chalkboard(action="draw_note", content="Intuition: <everyday real-world hook>", color="botanical")
+2. Generative Visual Representation (Always tailored, never canned):
+   - For mathematical, coordinate, or kinematics graphs: Call plot_mathematical_graph(formula="...", domain="[min,max]", range="[min,max]", title="...", callout="...")
+   - For diagrams, biological structures, or physics setups: Call render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision'>...</svg>", caption="...")
+   - Walk through the visual aloud as you draw, explaining what it represents.
+
+PHASE 2 - FORMAL DEFINITION (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP):
+3. First explain the scientific law or definition clearly aloud in simple intuitive terms. Next, read the exact definition verbatim aloud to the student ("Now let us read the formal definition together: [exact definition]"). Then write it in the highlight box:
    write_chalkboard(action="draw_highlight_box", content="Definition: <exact scientific formulation, law, or principle with SI units>", color="coral")
-4. ONLY NOW STOP & ASK UNDERSTANDING CHECK:
-   "Take a look at the diagram and definition on the board. Did you understand this concept, or would you like me to explain anything differently?"
-5. STRICT INVIOLABLE PROHIBITION IN TURN 1:
-   DO NOT write any exam question (action="draw_exam_question") and DO NOT write any checkpoint question (action="draw_question") in Turn 1!
-   Stop speaking and wait for the student to confirm understanding.
-   - If student says "no", "explain again", "teach again", or has doubts: Immediately RE-TEACH using a new analogy!
-   - If student confirms: Proceed to Turn 2.
 
-TURN 2 (AFTER STUDENT CONFIRMS) - CONCRETE EXAMPLES + STEP-BY-STEP WORKED QUESTION:
-1. Acknowledge confirmation.
-2. Explain 1-2 concrete practical examples aloud, writing:
+PHASE 3 - CONCRETE EXAMPLES (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP):
+4. Explain 1-2 concrete practical applications illustrating the definition and common pitfalls. Speak the explanation first, read the example statement aloud, then write:
    write_chalkboard(action="draw_note", content="Example: <concrete illustration addressing common pitfalls>", color="blue")
-3. SOLVE A QUESTION FIRST ON THE WHITEBOARD: Model authentic exam problem-solving:
-   write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Given: <values> | Formula: <formula> | Solution: <step-by-step working> | Answer: <boxed answer with SI units>", color="coral")
-4. Explain each solution step aloud in detail.
-5. "Now let me check if you have got this. Here is a question for you to solve."
+   When drawing flowcharts: explain each step first, read it aloud, write it to board, then proceed to the next step. Never dump the entire flowchart in one go.
 
-TURN 3 (CHECKPOINT QUESTIONS) - CONFIRM MASTERY:
-1. POSE CHECKPOINT QUESTION:
-   write_chalkboard(action="draw_question", content="Q1: <Targeted board exam question testing this concept>", color="amber")
-2. INVIOLABLE HARD STOP: Stop speaking at '?' and wait for student reply. DO NOT change page.
+PHASE 4 - TUTOR-SOLVED MODEL QUESTION (READ ALOUD & EXPLAIN STEP-BY-STEP):
+5. Solve a model question progressively step-by-step on the chalkboard.
+   CRITICAL CADENCE (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP, NEVER DUMP AT ONCE):
+   Speak what is being written on the board at each step:
+   a) Problem Context: Explain the physical setup first, read the question aloud verbatim, then write:
+      write_chalkboard(action="draw_note", content="Model Problem: <Question text>", color="coral")
+   b) Given Data: Explain each given quantity and unit, read aloud, then write:
+      write_chalkboard(action="draw_step", content="Given: <values with SI units>", color="amber")
+   c) Governing Formula: Explain why this formula applies, read formula aloud, then write:
+      write_chalkboard(action="draw_step", content="Formula: <governing formula>", color="coral")
+   d) Step-by-Step Calculation: Explain the calculation and algebraic substitution aloud, read aloud, then write:
+      write_chalkboard(action="draw_step", content="Calculation: <step-by-step calculation>", color="blue")
+   e) Final Boxed Answer: Explain the final numerical result, read boxed answer aloud with SI units, then write:
+      write_chalkboard(action="draw_highlight_box", content="Boxed Answer: <final result with SI units>", color="botanical")
+   (Alternatively, write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Given: <values> | Formula: <formula> | Solution: <step-by-step substitution & calculation> | Answer: <boxed answer with SI units>", color="coral") while narrating each step aloud).
 
-TURN 4 (AFTER STUDENT REPLIES) - EVALUATE, HANDLE DOUBTS OR TRANSITION:
-1. IF STUDENT HAS DOUBTS OR ASKS TO RE-TEACH: Trigger RE-TEACHING DIRECTIVE! Never say "perfect let's move on".
-2. IF STUDENT ATTEMPTED QUESTION:
-   - write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
-   - write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring & correction if any>", color="botanical")
-   - If incorrect: explain kindly, co-solve, and give 1 more practice question.
-   - If correct: "Excellent! Are you confident and ready to move to the next concept?"
-3. ONLY WHEN STUDENT EXPLICITLY CONFIRMS (e.g. "yes", "understood", "clear", "next"):
+PHASE 5 - UNDERSTANDING CHECK (HARD STOP):
+6. Stop speaking at '?' and ask:
+   "Take a look at the board notes, diagram, and worked solution. Did you understand this concept and how we solved this question, or would you like me to explain anything differently?"
+   - If student has doubts or asks to re-teach: RE-TEACH immediately!
+   - If student confirms understanding: Proceed to Phase 6.
+
+PHASE 6 - STUDENT CHECKPOINT QUESTION:
+7. Pose an authentic board-exam question for the student to solve:
+   write_chalkboard(action="draw_question", content="Q: <Targeted board exam question testing this concept>", color="amber")
+   Read the question aloud: "Now, give this question a try! What do you get for the answer?"
+   HARD STOP: Wait for student's voice response.
+
+PHASE 7 - EVALUATION & TRANSITION:
+8. Evaluate student reply:
+   write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
+   write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring & correction>", color="botanical")
+   If correct: "Outstanding! Are you ready to move to the next concept?"
+9. ONLY WHEN STUDENT CONFIRMS (e.g. "yes", "understood", "clear", "next"):
    a) write_chalkboard(action="concept_done", content="<Current Concept Name>")
    b) write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
-   c) Begin Turn 1 for next concept on the clean new page.
-   d) If all concepts completed, call: conclude_and_open_quiz(summary="...")
+   c) If all concepts completed, call: conclude_and_open_quiz(summary="...")
 
 QUIZ TIMING RULE:
 - NEVER mention the 10-MCQ quiz or call conclude_and_open_quiz until ALL concepts have been fully taught, solved, and marked done with concept_done!
 
 STUDENT IMAGE & DIAGRAM REQUEST DIRECTIVE:
-You have a real-time whiteboard graphics engine with render_svg_diagram(title, svg, caption).
-NEVER tell the student "I am unable to generate images", "I cannot generate separate images", or "I am an audio AI".
-When a student asks to see an image, picture, diagram, structure, visual, or sketch of ANY concept:
+You have a real-time whiteboard graphics engine. NEVER tell the student "I am unable to generate images" or "I am an audio AI".
+When a student asks to see an image, picture, diagram, structure, visual, or sketch:
 1. Reply enthusiastically: "Drawing that on the chalkboard for you right now!"
-2. IMMEDIATELY call render_svg_diagram(title="...", svg="<svg ...>...</svg>", caption="...")!
+2. IMMEDIATELY call render_svg_diagram(title="...", svg="<svg ...>...</svg>", caption="...") or plot_mathematical_graph(...).
 
 TEXTBOOK CONCEPT MICRO-DOSSIERS:
 ${conceptDossiersText}
-${visualRoadmap ? `\nVISUAL ROADMAP (SUMMON VISUAL TOOL IN TURN 1 FOR EACH CONCEPT):\n${visualRoadmap}\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
+${visualRoadmap ? `\nVISUAL ROADMAP:\n${visualRoadmap}\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
 RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, intellectually rigorous topper tone.`
 
     // Whiteboard 1-Concept-Per-Page: Ensure active concept page is active
@@ -1624,6 +1749,13 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
       (action, params) => {
         renderedVisualConceptsRef.current.add(currentConceptIndexRef.current)
         handleVisualAction(action, params)
+      },
+      avatarConfig || undefined,
+      (pcm16, sampleRate) => {
+        simliControllerRef.current?.sendAudioChunk(pcm16, sampleRate)
+      },
+      () => {
+        simliControllerRef.current?.clearBuffer()
       }
     )
   }
@@ -1685,13 +1817,18 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
       <div className="relative z-10 w-full flex-1 flex flex-col md:flex-row p-3 sm:p-4 gap-3 sm:gap-4 overflow-hidden min-h-0">
         {/* Left Column: Avatar Section & Voice Controls (Positioned on the LEFT) */}
         <div className="w-full md:w-[320px] lg:w-[360px] shrink-0 flex flex-col gap-3 h-full overflow-y-auto pr-1">
-          {/* Audio-Reactive Avatar with bottom movie-style captions */}
+          {/* Native Google Gemini 3.8 Live Avatar with bottom movie-style captions */}
           <ClassroomAvatar
             state={connectionState}
             teacherVolume={teacherVolume}
             userVolume={userVolume}
             isMuted={isMuted}
             latestTranscript={latestTranscript}
+            latestVideoFrame={latestVideoFrame}
+            videoMimeType={videoMimeType}
+            onCustomAvatarChange={handleCustomAvatarChange}
+            onSimliControllerReady={handleSimliControllerReady}
+            onSimliActiveChange={handleSimliActiveChange}
           />
 
           {/* Call Controls or Start Call Bar */}
@@ -1703,9 +1840,6 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                 onToggleMute={toggleMute}
                 onEndCall={handleEndClass}
               />
-              <span className="text-[11px] text-[#7A7C75] font-mono">
-                Press [M] to mute • [Esc] to end
-              </span>
             </div>
           ) : (
             <div className="p-4 rounded-2xl bg-white border border-[#E5E3DB] shadow-sm space-y-3">
@@ -2050,15 +2184,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             onConceptFocus={handleConceptFocus}
             onConceptDone={handleConceptDone}
             onConceptGoto={handleConceptGoto}
-            onBoardContentChange={(summary) => {
-              setLatestBoardSummary(summary.fullSummary)
-              const notesContent = summary.notesText.trim()
-              if (notesContent && notesContent !== lastSentBoardNotesRef.current) {
-                lastSentBoardNotesRef.current = notesContent
-                setChapterNotes(notesContent)
-                saveNotesToSupabase(notesContent)
-              }
-            }}
+            onBoardContentChange={handleBoardContentChange}
             onModuleComplete={(summary) => {
               markModuleAsCompleted(summary ? `#### Chapter Summary:\n${summary}` : undefined)
             }}

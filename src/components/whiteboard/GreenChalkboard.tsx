@@ -150,6 +150,33 @@ export { normalizeTitle, isRedundantConceptOrMasteredText }
 import { wrapText } from './textWrapper'
 export { wrapText }
 
+const EXCALIDRAW_INITIAL_DATA = {
+  appState: {
+    viewBackgroundColor: CANVAS_BG,
+    currentItemStrokeColor: INK_PRIMARY,
+    currentItemFontFamily: 1,
+    currentItemRoughness: 0,
+    zenModeEnabled: false,
+    viewModeEnabled: true,
+    zoom: { value: 0.7 as any },
+  },
+}
+
+const EXCALIDRAW_UI_OPTIONS = {
+  canvasActions: {
+    changeViewBackgroundColor: false,
+    clearCanvas: false,
+    loadScene: false,
+    saveToActiveFile: false,
+    toggleTheme: false,
+    saveAsImage: false,
+  },
+  tools: {
+    image: false,
+  },
+  welcomeScreen: false,
+}
+
 export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardProps>(
   (
     {
@@ -173,6 +200,15 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     ref
   ) => {
     const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null)
+    const excalidrawAPIRef = useRef<any>(null)
+
+    // Stable API assignment callback: prevents infinite render loops by setting state strictly once
+    const handleExcalidrawAPI = useCallback((api: any) => {
+      if (!api || excalidrawAPIRef.current) return
+      excalidrawAPIRef.current = api
+      setExcalidrawAPI(api)
+    }, [])
+
     const storageKey = moduleId ? `whiteboard_pages_${moduleId}` : `whiteboard_pages_${moduleTitle}`
 
     // Multi-page system state
@@ -199,23 +235,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const activeChalkColorRef = useRef<string>(INK_PRIMARY)
     const lastDrawnStudentAnswerRef = useRef<{ text: string; time: number } | null>(null)
     const lastExecutedActionTimeRef = useRef<Map<string, number>>(new Map())
-
-    const shouldSkipDuplicate = (action: string, content: string, windowMs = 3500): boolean => {
-      if (!content || !content.trim()) return false
-      const key = `${action}:${content.toLowerCase().trim()}`
-      const now = Date.now()
-      const prev = lastExecutedActionTimeRef.current.get(key)
-      if (prev && now - prev < windowMs) {
-        return true
-      }
-      lastExecutedActionTimeRef.current.set(key, now)
-      if (lastExecutedActionTimeRef.current.size > 200) {
-        for (const [k, t] of lastExecutedActionTimeRef.current.entries()) {
-          if (now - t > 60000) lastExecutedActionTimeRef.current.delete(k)
-        }
-      }
-      return false
-    }
 
     const notifyPositionChange = (lastAction?: string, lastText?: string) => {
       onWritingPositionChange?.({
@@ -258,6 +277,61 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         return boardElementsRef.current
       }
       return (excalidrawAPI?.getSceneElements() || []) as any[]
+    }
+
+    // Inspect board elements and history to guarantee zero duplicate writes
+    const isAlreadyOnBoard = (text: string): boolean => {
+      if (!text || !text.trim()) return false
+      const clean = text
+        .toLowerCase()
+        .replace(/^(note|step|breakdown|intuition|definition|q\d?|verdict|ans)[:\s\-]*/i, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim()
+      if (clean.length < 8) return false
+
+      if (executedTextHistoryRef.current.has(clean)) return true
+
+      const currentEls = getCurrentElements()
+      for (const el of currentEls) {
+        if (el.type === 'text' && el.text) {
+          const elClean = el.text
+            .toLowerCase()
+            .replace(/^(note|step|breakdown|intuition|definition|q\d?|verdict|ans)[:\s\-]*/i, '')
+            .replace(/[^a-z0-9]/g, '')
+            .trim()
+          if (
+            elClean === clean ||
+            (elClean.length > 20 && clean.length > 20 && (elClean.includes(clean) || clean.includes(elClean)))
+          ) {
+            return true
+          }
+        }
+      }
+      return false
+    }
+
+    const shouldSkipDuplicate = (action: string, content: string, windowMs = 15000): boolean => {
+      if (!content || !content.trim()) return false
+      const clean = content.toLowerCase().trim()
+      const cleanNorm = clean.replace(/[^a-z0-9]/g, '')
+
+      if (cleanNorm.length >= 8 && isAlreadyOnBoard(content)) {
+        return true
+      }
+
+      const key = `${action}:${cleanNorm.slice(0, 80)}`
+      const now = Date.now()
+      const prev = lastExecutedActionTimeRef.current.get(key)
+      if (prev && now - prev < windowMs) {
+        return true
+      }
+      lastExecutedActionTimeRef.current.set(key, now)
+      if (lastExecutedActionTimeRef.current.size > 200) {
+        for (const [k, t] of lastExecutedActionTimeRef.current.entries()) {
+          if (now - t > 120000) lastExecutedActionTimeRef.current.delete(k)
+        }
+      }
+      return false
     }
 
     const isInitializedRef = useRef(false)
@@ -575,6 +649,20 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         }
       }, 400)
     }
+
+    const persistSceneRef = useRef(persistScene)
+    persistSceneRef.current = persistScene
+
+    const lastElementCountRef = useRef<number>(0)
+    const handleExcalidrawChange = useCallback((elements: readonly any[]) => {
+      if (elements && elements.length > 0) {
+        boardElementsRef.current = elements as any[]
+        if (elements.length !== lastElementCountRef.current) {
+          lastElementCountRef.current = elements.length
+          persistSceneRef.current(elements)
+        }
+      }
+    }, [])
 
     // Helper to lock zoom to exactly 70% (0.7) and prevent zooming out/in
     const enforceLockedZoom = useCallback((api: any) => {
@@ -1191,6 +1279,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + totalH + 12)
+        executedTextHistoryRef.current.add(clean.toLowerCase().replace(/[^a-z0-9]/g, ''))
         notifyPositionChange('draw_step', clean)
         onNoteRecorded?.(`  -> ${clean}`)
       } catch (err) {
@@ -1247,6 +1336,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + boxHeight + 14)
+        executedTextHistoryRef.current.add(clean.toLowerCase().replace(/[^a-z0-9]/g, ''))
         notifyPositionChange('draw_highlight_box', clean)
         onNoteRecorded?.(`**[Key Principle]**: ${clean}`)
       } catch (err) {
@@ -1319,6 +1409,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + qHeight + 14)
+        executedTextHistoryRef.current.add(clean.toLowerCase().replace(/[^a-z0-9]/g, ''))
         notifyPositionChange('draw_question', clean)
         onNoteRecorded?.(`? **Question**: ${clean}`)
       } catch (err) {
@@ -1593,6 +1684,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const current = getCurrentElements()
         const merged = [...current, ...elements]
         updateCurrentPageElements(merged, startY + cardHeight + 16)
+        executedTextHistoryRef.current.add(qText.toLowerCase().replace(/[^a-z0-9]/g, ''))
         notifyPositionChange('draw_exam_question', qText)
         onNoteRecorded?.(`**Exam Question**: ${qText}\n**Model Answer**: ${aText}`)
       } catch (err) {
@@ -3536,42 +3628,12 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
           }}
         >
           <Excalidraw
-            excalidrawAPI={(api) => {
-              setExcalidrawAPI(api)
-            }}
-            onChange={(elements) => {
-              if (elements && elements.length > 0) {
-                boardElementsRef.current = elements as any[]
-                persistScene(elements)
-              }
-            }}
+            excalidrawAPI={handleExcalidrawAPI}
+            onChange={handleExcalidrawChange}
             theme="light"
             viewModeEnabled={true}
-            initialData={{
-              appState: {
-                viewBackgroundColor: CANVAS_BG,
-                currentItemStrokeColor: INK_PRIMARY,
-                currentItemFontFamily: 1,
-                currentItemRoughness: 0,
-                zenModeEnabled: false,
-                viewModeEnabled: true,
-                zoom: { value: 0.7 as any },
-              },
-            }}
-            UIOptions={{
-              canvasActions: {
-                changeViewBackgroundColor: false,
-                clearCanvas: false,
-                loadScene: false,
-                saveToActiveFile: false,
-                toggleTheme: false,
-                saveAsImage: false,
-              },
-              tools: {
-                image: false,
-              },
-              welcomeScreen: false,
-            }}
+            initialData={EXCALIDRAW_INITIAL_DATA}
+            UIOptions={EXCALIDRAW_UI_OPTIONS}
           />
         </div>
 

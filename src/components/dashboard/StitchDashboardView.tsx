@@ -538,20 +538,20 @@ export function StitchDashboardView({
           </div>
 
           <nav className="space-y-0.5">
-            <button
-              onClick={() => setPreferencesOpen(true)}
+            <Link
+              href={`/dashboard/${user.id}/settings?tab=account`}
               className="w-full flex items-center gap-3 text-ink-secondary font-label-md text-label-md pl-3 py-2 rounded-lg hover:text-ink-primary hover:bg-surface-container-low/40 transition-colors text-left cursor-pointer"
             >
               <span className="material-symbols-outlined text-lg">person</span>
               <span>Profile</span>
-            </button>
-            <button
-              onClick={() => setPreferencesOpen(true)}
+            </Link>
+            <Link
+              href={`/dashboard/${user.id}/settings?tab=avatars`}
               className="w-full flex items-center gap-3 text-ink-secondary font-label-md text-label-md pl-3 py-2 rounded-lg hover:text-ink-primary hover:bg-surface-container-low/40 transition-colors text-left cursor-pointer"
             >
               <span className="material-symbols-outlined text-lg">settings</span>
               <span>Settings</span>
-            </button>
+            </Link>
           </nav>
         </div>
       </aside>
@@ -2156,6 +2156,15 @@ export function StitchDashboardView({
               <span className="material-symbols-outlined">insights</span>
               <span>Progress</span>
             </button>
+
+            <Link
+              href={`/dashboard/${user.id}/settings?tab=avatars`}
+              onClick={() => setMobileMenuOpen(false)}
+              className="w-full flex items-center gap-3 text-ink-secondary font-label-md text-label-md pl-3 py-2.5 rounded-lg hover:text-ink-primary text-left cursor-pointer"
+            >
+              <span className="material-symbols-outlined">settings</span>
+              <span>Settings & Avatars</span>
+            </Link>
           </nav>
         </div>
 

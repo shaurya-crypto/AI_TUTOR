@@ -1,6 +1,6 @@
 'use client'
 
-import React, { forwardRef, useState, useEffect } from 'react'
+import React, { forwardRef, useState, useEffect, useCallback } from 'react'
 import { GreenChalkboard, GreenChalkboardRef, WritingPositionInfo } from './GreenChalkboard'
 import { SobiCompanion } from './SobiCompanion'
 import { VisualizationViewport } from './VisualizationViewport'
@@ -88,6 +88,21 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
 
     // Sobi Whiteboard Companion writing position tracking
     const [writingPosition, setWritingPosition] = useState<WritingPositionInfo | null>(null)
+
+    const handleWritingPositionChange = useCallback((pos: WritingPositionInfo) => {
+      setWritingPosition((prev) => {
+        if (
+          prev &&
+          prev.nextY === pos.nextY &&
+          prev.pageIndex === pos.pageIndex &&
+          prev.lastAction === pos.lastAction &&
+          prev.lastText === pos.lastText
+        ) {
+          return prev
+        }
+        return pos
+      })
+    }, [])
 
     // 3D Scene In-Whiteboard Display Mode:
     // 'box_in_board' (embedded container box right on the whiteboard) | 'minimized'
@@ -188,7 +203,7 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
               onModuleComplete={onModuleComplete}
               onConfirmEndChapter={onConfirmEndChapter}
               onStartQuiz={onStartQuiz}
-              onWritingPositionChange={setWritingPosition}
+              onWritingPositionChange={handleWritingPositionChange}
             />
 
             {/* Sobi Whiteboard Companion: Glides alongside writing and points to questions */}

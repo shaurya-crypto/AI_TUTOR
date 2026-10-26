@@ -16,37 +16,13 @@ function assert(description: string, condition: boolean) {
 
 console.log('=== UNIVERSAL SCIENTIFIC SVG & MULTI-TURN CADENCE VERIFICATION ===')
 
-// 1. Verify Cellulose SVG Generation (Hexagon chair rings, β-1,4-glycosidic bond, O bridges, H-bonds)
-const celluloseSvg = createUniversalScientificSvg('Structure of Cellulose')
-assert('Cellulose SVG has non-empty markup', celluloseSvg.svg.length > 500)
-assert('Cellulose SVG contains beta-1,4-glycosidic bond label', celluloseSvg.svg.includes('β-1,4-Glycosidic Bond') || celluloseSvg.svg.includes('β-1,4 Bond'))
-assert('Cellulose SVG contains chair/hexagon rings', celluloseSvg.svg.includes('<polygon') && celluloseSvg.svg.includes('points='))
-assert('Cellulose SVG contains oxygen bridge circles', celluloseSvg.svg.includes('>O<') || celluloseSvg.svg.includes('>O</text>'))
-assert('Cellulose SVG contains CH2OH groups', celluloseSvg.svg.includes('CH₂OH'))
-assert('Cellulose SVG contains hydrogen bond annotation', celluloseSvg.svg.includes('Hydrogen Bonds') || celluloseSvg.svg.includes('Microfibrils'))
-assert('Cellulose SVG does NOT have flat colored boxes', !celluloseSvg.svg.includes('Glucose -> Glucose'))
+// 1. Verify Clean Generative Vector Frame (Zero Hardcoded Static Topics)
+const testSvg = createUniversalScientificSvg('Structure of Plant Cell')
+assert('Generated SVG has non-empty markup', testSvg.svg.length > 200)
+assert('Generated SVG contains concept title', testSvg.svg.includes('STRUCTURE OF PLANT CELL'))
+assert('Generated SVG contains vector definitions', testSvg.svg.includes('<defs>') && testSvg.svg.includes('<svg'))
+assert('Generated SVG does NOT have canned static flowcharts', !testSvg.svg.includes('Key Concept -> Fundamental Principle'))
 
-// 2. Verify Optics SVG Generation
-const opticsSvg = createUniversalScientificSvg('Refraction of Light')
-assert('Optics SVG contains Snell law formulation', opticsSvg.svg.includes('sin(i)') || opticsSvg.svg.includes('sin(r)'))
-assert('Optics SVG contains incident and refracted rays', opticsSvg.svg.includes('Incident Ray') && opticsSvg.svg.includes('Refracted Ray'))
-assert('Optics SVG contains Normal line', opticsSvg.svg.includes('Normal'))
-
-// 3. Verify Circuits SVG Generation
-const circuitSvg = createUniversalScientificSvg('Electric Circuit and Resistance')
-assert('Circuits SVG contains Ohm law formula', circuitSvg.svg.includes('V = I · R') || circuitSvg.svg.includes('Ohm'))
-assert('Circuits SVG contains Resistor symbol', circuitSvg.svg.includes('Resistor'))
-assert('Circuits SVG contains Ammeter', circuitSvg.svg.includes('Ammeter'))
-
-// 4. Verify Free Body Diagram SVG Generation
-const forceSvg = createUniversalScientificSvg('Newton Second Law and Forces')
-assert('Forces SVG contains free body vectors', forceSvg.svg.includes('Normal Force') && forceSvg.svg.includes('Weight'))
-assert('Forces SVG contains net acceleration', forceSvg.svg.includes('a (Net Accel)') || forceSvg.svg.includes('ΣF = m · a'))
-
-// 5. Verify Bohr Model SVG Generation
-const bohrSvg = createUniversalScientificSvg('Bohr Model of Atom')
-assert('Bohr SVG contains K, L, M shells', bohrSvg.svg.includes('K-Shell') && bohrSvg.svg.includes('L-Shell'))
-assert('Bohr SVG contains nucleus (+Ze)', bohrSvg.svg.includes('+Ze'))
 
 // 6. Verify WhiteboardWorkspace.tsx no longer contains fixed fallback flowchart
 const wsSource = fs.readFileSync(path.join(__dirname, '../components/whiteboard/WhiteboardWorkspace.tsx'), 'utf-8')
@@ -73,14 +49,14 @@ assert(
   !pageSource.includes('Key Concept -> Fundamental Principle -> Board Application')
 )
 
-// 9. Verify Socratic Cadence in page.tsx: Turn 1 (No questions), Turn 2 (Solve question first), Turn 3 (Verdict)
+// 9. Verify Socratic Cadence in page.tsx: Intuition & visual, tutor-solved question, understanding check
 assert(
-  'page.tsx enforces TURN 1 intuition & visual without questions',
-  pageSource.includes('DO NOT write any exam question') && pageSource.includes('DO NOT write any checkpoint question')
+  'page.tsx enforces intuition & generative visual in Phase 1',
+  pageSource.includes('PHASE 1 - INTUITION & GENERATIVE VISUAL')
 )
 assert(
-  'page.tsx enforces TURN 2 solving a question first on the whiteboard',
-  pageSource.includes('SOLVE A QUESTION FIRST ON THE WHITEBOARD')
+  'page.tsx enforces tutor-solved model question read aloud and explained step-by-step',
+  pageSource.includes('TUTOR-SOLVED MODEL QUESTION (READ ALOUD & EXPLAIN STEP-BY-STEP)')
 )
 assert(
   'page.tsx bars saying unable to generate images',
@@ -94,8 +70,8 @@ assert(
   wsServiceSource.includes('lastExecutedToolCalls')
 )
 assert(
-  'geminiWebSocket.ts bars refusing image generation',
-  wsServiceSource.includes('NEVER refuse or say you cannot generate images')
+  'geminiWebSocket.ts declares render_svg_diagram tool',
+  wsServiceSource.includes('render_svg_diagram')
 )
 
 // 11. Zero emoji invariant check across modified files

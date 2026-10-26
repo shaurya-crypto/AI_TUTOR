@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { ConnectionState, TranscriptItem, GeminiVoice } from "@/types/liveSession";
 import { AudioPlayer } from "@/services/audioPlayer";
 import { AudioStreamer } from "@/services/audioStreamer";
-import { GeminiLiveClient } from "@/services/geminiWebSocket";
+import { GeminiLiveClient, LiveAvatarConfig } from "@/services/geminiWebSocket";
 
 export function useGeminiLive() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("IDLE");
@@ -14,6 +14,8 @@ export function useGeminiLive() {
   const [teacherVolume, setTeacherVolume] = useState(0);
   const [userVolume, setUserVolume] = useState(0);
   const [selectedVoice, setSelectedVoice] = useState<GeminiVoice>("Aoede");
+  const [latestVideoFrame, setLatestVideoFrame] = useState<string | null>(null);
+  const [videoMimeType, setVideoMimeType] = useState<string>("image/jpeg");
 
   const audioPlayerRef = useRef<AudioPlayer | null>(null);
   const audioStreamerRef = useRef<AudioStreamer | null>(null);
@@ -73,7 +75,10 @@ export function useGeminiLive() {
     systemInstructionOverride?: string,
     kickoffPrompt?: string,
     onChalkboardToolCall?: (action: string, content: any, color?: string) => void,
-    onVisualAction?: (action: string, params: Record<string, any>) => void
+    onVisualAction?: (action: string, params: Record<string, any>) => void,
+    avatarConfig?: LiveAvatarConfig,
+    onAudioOutputChunk?: (pcm16: Int16Array, sampleRate: number) => void,
+    onSpeechInterrupted?: () => void
   ) => {
     setErrorMessage(null);
     setConnectionState("CONNECTING");
@@ -117,6 +122,7 @@ export function useGeminiLive() {
           if (audioPlayerRef.current) {
             audioPlayerRef.current.stopAndClear();
           }
+          onSpeechInterrupted?.();
           setConnectionState((prev) => (prev !== "MUTED" ? "LISTENING" : "MUTED"));
         },
         () => {
@@ -157,12 +163,20 @@ export function useGeminiLive() {
             if (audioPlayerRef.current) {
               audioPlayerRef.current.playChunk(pcm16, sampleRate);
             }
+            onAudioOutputChunk?.(pcm16, sampleRate);
+          },
+          onVideoData: (data, mimeType) => {
+            setLatestVideoFrame(data);
+            if (mimeType) {
+              setVideoMimeType(mimeType);
+            }
           },
           onUserSpeechStart: () => {
             console.log("[useGeminiLive] onUserSpeechStart: Server detected human voice activity, cutting off teacher playback");
             if (audioPlayerRef.current) {
               audioPlayerRef.current.stopAndClear();
             }
+            onSpeechInterrupted?.();
             audioStreamerRef.current?.setTeacherSpeaking(false);
             setConnectionState((prev) => (prev !== "MUTED" ? "LISTENING" : "MUTED"));
           },
@@ -171,6 +185,7 @@ export function useGeminiLive() {
             if (audioPlayerRef.current) {
               audioPlayerRef.current.stopAndClear();
             }
+            onSpeechInterrupted?.();
             audioStreamerRef.current?.setTeacherSpeaking(false);
             setConnectionState((prev) => (prev !== "MUTED" ? "LISTENING" : "MUTED"));
           },
@@ -206,6 +221,7 @@ export function useGeminiLive() {
           voiceName: activeVoice,
           systemInstruction: systemInstructionOverride,
           enableFunctionCalling: true,
+          avatarConfig,
         }
       );
 
@@ -269,6 +285,7 @@ export function useGeminiLive() {
       geminiClientRef.current = null;
     }
 
+    setLatestVideoFrame(null);
     setIsMuted(false);
     setConnectionState((prev) => (prev === "ERROR" ? "ERROR" : "DISCONNECTED"));
   }, [stopVolumeLoop]);
@@ -279,7 +296,14 @@ export function useGeminiLive() {
     setErrorMessage(null);
     setConnectionState("IDLE");
     setTranscripts([]);
+    setLatestVideoFrame(null);
   }, [endCall]);
+
+  const setTeacherAudioMuted = useCallback((muted: boolean) => {
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.setOutputMuted(muted);
+    }
+  }, []);
 
   const sendBoardContext = useCallback((summary: string) => {
     if (geminiClientRef.current) {
@@ -309,8 +333,11 @@ export function useGeminiLive() {
     userVolume,
     selectedVoice,
     setSelectedVoice,
+    latestVideoFrame,
+    videoMimeType,
     startClass,
     toggleMute,
+    setTeacherAudioMuted,
     endCall,
     resetToIdle,
     sendBoardContext,

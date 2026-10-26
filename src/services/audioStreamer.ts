@@ -18,6 +18,8 @@ export class AudioStreamer {
   private lastSpeechTime: number = 0;
   private consecutiveBargeInFrames: number = 0;
   private wasSpeechActive: boolean = false;
+  private noiseFloor: number = 0.015;
+  private consecutiveSpeechFrames: number = 0;
   private onAudioChunk?: (base64Chunk: string) => void;
   private onBargeIn?: () => void;
   private onSpeechStart?: () => void;
@@ -162,21 +164,20 @@ export class AudioStreamer {
         return;
       }
 
-      // Robust voice detection threshold: calibrated above ambient room noise, keyboard clicks, breathing, and speaker bleed
-      const BARGE_IN_THRESHOLD = 0.055;
-      const requiredFrames = this.workletNode ? 6 : 3;
+      // Calibrated voice detection threshold for normal conversational speaking voice
+      const BARGE_IN_THRESHOLD = Math.max(0.026, this.noiseFloor * 2.0);
+      const requiredFrames = this.workletNode ? 3 : 2;
 
       if (rms >= BARGE_IN_THRESHOLD) {
         this.consecutiveBargeInFrames++;
         if (this.consecutiveBargeInFrames >= requiredFrames) {
-          console.log(`[AudioStreamer] Deliberate student voice detected during teacher speech (RMS: ${rms.toFixed(4)}, frames: ${this.consecutiveBargeInFrames}). Triggering barge-in.`);
+          console.log(`[AudioStreamer] Student voice detected during teacher speech (RMS: ${rms.toFixed(4)}). Triggering barge-in.`);
           this.isTeacherSpeaking = false;
           this.consecutiveBargeInFrames = 0;
           this.lastSpeechTime = now;
           this.wasSpeechActive = true;
           this.onBargeIn?.();
           this.onSpeechStart?.();
-          // Fall through to resample & stream this initial spoken chunk immediately
         } else {
           return;
         }
@@ -190,10 +191,17 @@ export class AudioStreamer {
 
     // 2. ADAPTIVE NOISE GATING & SPEECH HANGOVER:
     const now = Date.now();
-    const NOISE_GATE_THRESHOLD = 0.025;
-    const SPEECH_HANGOVER_MS = 650;
 
-    if (rms >= NOISE_GATE_THRESHOLD) {
+    // Dynamically track ambient room noise (fans, AC, room acoustics) when not speaking
+    if (!this.wasSpeechActive) {
+      this.noiseFloor = Math.min(0.02, Math.max(0.003, this.noiseFloor * 0.96 + rms * 0.04));
+    }
+
+    // Dynamic speech threshold: sensitive to conversational speech (RMS 0.016-0.035), no shouting required
+    const dynamicSpeechThreshold = Math.max(0.016, this.noiseFloor * 1.5);
+    const SPEECH_HANGOVER_MS = 300;
+
+    if (rms >= dynamicSpeechThreshold) {
       this.lastSpeechTime = now;
       if (!this.wasSpeechActive) {
         this.wasSpeechActive = true;
