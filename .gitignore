@@ -8,8 +8,19 @@
 /.pnp
 .pnp.js
 
-# Testing
+# Testing & verification suites
 /coverage
+/src/tests/
+/tests/
+__tests__/
+
+# Agent skills, workflows & IDE tooling
+/.agents/
+skills-lock.json
+
+# Scratch & temporary dumps
+/scratch/
+*.tmp
 
 # Next.js
 /.next/

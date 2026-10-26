@@ -32,6 +32,7 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
   latestTranscript,
   latestVideoFrame,
   videoMimeType = 'image/jpeg',
+  onCustomAvatarChange,
   onSimliControllerReady,
   onSimliActiveChange,
   preferredProvider = 'simli',
@@ -58,6 +59,9 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
   const isUserTalking = !isSpeaking && !isMuted && userVolume > 0.04
   const hasLiveGoogleVideo = Boolean(latestVideoFrame)
   const isSimliActive = activeProvider === 'simli' && simliStatus === 'connected'
+
+  const onCustomAvatarChangeRef = useRef(onCustomAvatarChange)
+  onCustomAvatarChangeRef.current = onCustomAvatarChange
 
   const onSimliActiveChangeRef = useRef(onSimliActiveChange)
   onSimliActiveChangeRef.current = onSimliActiveChange
