@@ -104,7 +104,7 @@ export class SimliAvatarController {
         options.videoElement,
         options.audioElement,
         data.iceServers || null,
-        LogLevel.ERROR,
+        LogLevel.CRITICAL,
         'livekit',
         'websockets'
       )
@@ -234,12 +234,15 @@ export class SimliAvatarController {
     this.accumulatedByteLength = 0
 
     if (this.client) {
-      try {
-        await this.client.stop()
-      } catch (e) {
-        console.warn('[SimliAvatar] Error stopping client:', e)
-      }
+      const clientToStop = this.client
       this.client = null
+      try {
+        await clientToStop.stop()
+      } catch (e: any) {
+        if (!String(e?.message || e).includes('Client initiated disconnect')) {
+          console.debug('[SimliAvatar] Graceful disconnect:', e)
+        }
+      }
     }
     if (this.videoEl) {
       try {

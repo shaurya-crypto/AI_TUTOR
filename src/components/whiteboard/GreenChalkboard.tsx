@@ -11,6 +11,8 @@ import {
   ChevronRight,
   RotateCcw,
   BookOpen,
+  Trash2,
+  Eraser,
 } from 'lucide-react'
 import { evaluateMathExpression } from '@/lib/mathEvaluator'
 import { createUniversalScientificSvg } from '@/services/universalScientificSvg'
@@ -3624,11 +3626,6 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         <div
           ref={containerRef}
           className="relative flex-1 w-full h-full bg-[#FFFFFF]"
-          onWheel={(e) => {
-            if (e.ctrlKey || e.metaKey) {
-              e.preventDefault()
-            }
-          }}
         >
           <Excalidraw
             excalidrawAPI={handleExcalidrawAPI}
@@ -3638,6 +3635,24 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             initialData={EXCALIDRAW_INITIAL_DATA}
             UIOptions={EXCALIDRAW_UI_OPTIONS}
           />
+        </div>
+
+        {/* Floating Top-Right Whiteboard Controls: Clear Board Action */}
+        <div className="absolute top-3 right-3 z-30 flex items-center gap-2 pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.confirm('Clear all notes and drawings from the whiteboard?')) {
+                clearBoard()
+              }
+            }}
+            className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-[#E5E3DB] bg-white/95 backdrop-blur-md text-[#555852] hover:text-[#DC2626] hover:border-[#DC2626]/40 hover:bg-[#FEF2F2] transition-all shadow-xs hover:shadow-sm cursor-pointer active:scale-95 text-xs font-mono select-none"
+            title="Clear all board notes & drawings"
+            aria-label="Clear all board"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-[#7A7C75] group-hover:text-[#DC2626] transition-colors" />
+            <span className="hidden sm:inline font-medium">Clear Board</span>
+          </button>
         </div>
 
         {/* Minimalist Bottom Bar: Multi-Page Navigation, Chalk Swatches, and Page Counter */}
@@ -3698,8 +3713,22 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             ))}
           </div>
 
-          {/* Page Counter & Status */}
-          <div className="flex items-center gap-3">
+          {/* Page Counter, Clear Button & Status */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.confirm('Clear all notes and drawings from the whiteboard?')) {
+                  clearBoard()
+                }
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md border border-[#E5E3DB] bg-white text-[#7A7C75] hover:text-[#DC2626] hover:border-[#DC2626]/40 hover:bg-[#FEF2F2] transition-colors cursor-pointer text-[10px] font-mono shadow-2xs active:scale-95"
+              title="Clear all board notes & drawings"
+              aria-label="Clear all board"
+            >
+              <Eraser className="w-3 h-3 text-[#DC2626]" />
+              <span>Clear</span>
+            </button>
             <span className="hidden sm:inline text-[10px] text-[#7A7C75]">Notes • Zoom Locked 70%</span>
             <span className="text-[#52715D] font-bold text-[11px]">Page {currentPageIndex + 1} of {pages.length}</span>
           </div>

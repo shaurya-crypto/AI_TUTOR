@@ -123,7 +123,25 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
     simliControllerRef.current = controller
     onSimliControllerReadyRef.current?.(controller)
 
+    // Intercept benign LiveKit disconnect cancellations and Simli transport shutdown noise
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason
+      const isConnectionCancellation =
+        (reason?.name === 'ConnectionError' ||
+          reason?.constructor?.name === 'ConnectionError' ||
+          String(reason).includes('ConnectionError')) &&
+        (String(reason?.message || reason).includes('Client initiated disconnect') ||
+          String(reason?.message || reason).includes('cancelled'))
+
+      if (isConnectionCancellation) {
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
     return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
       controller.stop()
       simliControllerRef.current = null
       onSimliControllerReadyRef.current?.(null)
