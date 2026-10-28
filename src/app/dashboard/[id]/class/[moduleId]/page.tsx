@@ -1010,6 +1010,19 @@ export default function ModuleClassroomPage() {
         return
       }
 
+      // During active live Socratic voice sessions, let Gemini Live dynamically authoritatively
+      // render lesson diagrams via tool calls. Do not pre-inject a fallback diagram that duplicates.
+      const isLiveActive =
+        connectionState === 'CONNECTED' ||
+        connectionState === 'LISTENING' ||
+        connectionState === 'TEACHER_SPEAKING' ||
+        connectionState === 'MUTED' ||
+        connectionState === 'CONNECTING'
+
+      if (isLiveActive) {
+        return
+      }
+
       // 2. Otherwise use universal dynamic scientific visual directive engine
       const directive = inferConceptVisualDirective(
         targetConcept,

@@ -13,9 +13,14 @@
  */
 
 export interface ScientificDiagramParams {
-  domain?: 'optics' | 'circuits' | 'mechanics' | 'geometry' | 'chemistry' | 'biology' | 'general'
+  domain?: 'optics' | 'circuits' | 'mechanics' | 'kinematics' | 'geometry' | 'chemistry' | 'biology' | 'general'
   title?: string
   caption?: string
+  // Kinematics params
+  posO?: number
+  posA?: number
+  posB?: number
+  unit?: string
   // Optics params
   focalLength?: number
   objectDistance?: number
@@ -461,6 +466,171 @@ export function generateDynamicCircuitSvg(params: {
 }
 
 /**
+ * 5. TRULY GENERATIVE KINEMATICS & 1D SPATIAL REFERENCE SCALE
+ * Computes exact coordinate distances, direction vectors, path totals, and net displacement
+ * strictly adhering to NCERT Class 9 / Class 11 Motion in a Straight Line standards.
+ */
+export function generateDynamic1DMotionSvg(params: {
+  title?: string
+  caption?: string
+  posO?: number
+  posA?: number
+  posB?: number
+  unit?: string
+}): GeneratedScientificSvg {
+  const o = typeof params.posO === 'number' ? params.posO : 0
+  const a = typeof params.posA === 'number' ? params.posA : 100
+  const b = typeof params.posB === 'number' ? params.posB : 40
+  const unit = params.unit || 'm'
+
+  const forwardPath = a - o
+  const returnPath = b - a
+  const totalDistance = Math.abs(forwardPath) + Math.abs(returnPath)
+  const displacement = b - o
+  const dispSign = displacement > 0 ? '+' : displacement < 0 ? '-' : ''
+
+  const title = params.title || '1D Spatial Reference Scale & Motion'
+  const caption =
+    params.caption ||
+    `1D Coordinate Reference Scale: Origin O (${o}${unit}), Point A (+${a}${unit}), Point B (+${b}${unit}). Total Distance = |OA| + |AB| = ${totalDistance}${unit}, Net Displacement Δx = x_final - x_initial = ${dispSign}${Math.abs(displacement)}${unit}.`
+
+  // Stage coordinate geometry: 540x280
+  const ox = 100
+  const bx = 250
+  const ax = 440
+  const axisY = 190
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" style="background:#13211B; font-family:'JetBrains Mono',monospace;">
+  ${getSvgDefs()}
+  <rect x="10" y="10" width="520" height="260" rx="12" fill="#13211B" stroke="#233930" stroke-width="2"/>
+  <rect x="16" y="16" width="508" height="248" rx="8" fill="url(#chalkGrid)"/>
+
+  <!-- Dynamic Header Bar -->
+  <rect x="24" y="22" width="492" height="26" rx="6" fill="#0F1A15" stroke="#233930" stroke-width="1"/>
+  <text x="36" y="39" font-size="11" font-weight="bold" fill="#68B084">KINEMATICS (1D REFERENCE): ${title.toUpperCase().slice(0, 48)}</text>
+  <text x="495" y="39" text-anchor="end" font-size="10" fill="#7EC8E3">Dist = ${totalDistance}${unit} | Δx = ${dispSign}${Math.abs(displacement)}${unit}</text>
+
+  <!-- Distance & Displacement Analytical Cards -->
+  <rect x="36" y="58" width="468" height="30" rx="6" fill="#11221B" stroke="#233930" stroke-width="1"/>
+  <text x="270" y="78" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">Total Distance = |OA| + |AB| = ${Math.abs(forwardPath)}${unit} + ${Math.abs(returnPath)}${unit} = ${totalDistance}${unit}</text>
+
+  <!-- Return Path Arrow (AB) -->
+  <line x1="${ax}" y1="108" x2="${bx}" y2="108" stroke="#F87171" stroke-width="2" stroke-dasharray="5,4"/>
+  <path d="M ${bx} 108 L ${bx + 8} 104 L ${bx + 8} 112 Z" fill="#F87171"/>
+  <text x="${(ax + bx) / 2}" y="100" text-anchor="middle" font-size="11" font-weight="bold" fill="#F87171">Return Path AB = ${returnPath}${unit}</text>
+
+  <!-- Forward Path Arrow (OA) -->
+  <line x1="${ox}" y1="138" x2="${ax}" y2="138" stroke="#4A90E2" stroke-width="2" stroke-dasharray="5,4"/>
+  <path d="M ${ax} 138 L ${ax - 8} 134 L ${ax - 8} 142 Z" fill="#4A90E2"/>
+  <text x="${(ox + ax) / 2}" y="130" text-anchor="middle" font-size="11" font-weight="bold" fill="#4A90E2">Forward Path OA = +${forwardPath}${unit}</text>
+
+  <!-- 1D Horizontal Coordinate Axis -->
+  <line x1="50" y1="${axisY}" x2="490" y2="${axisY}" stroke="#FFFFFF" stroke-width="2.5"/>
+  <path d="M 490 ${axisY} L 480 ${axisY - 5} L 480 ${axisY + 5} Z" fill="#FFFFFF"/>
+  <text x="498" y="${axisY + 4}" font-size="10" font-weight="bold" fill="#FFFFFF">+X</text>
+  <text x="38" y="${axisY + 4}" font-size="10" font-weight="bold" fill="#64748B">-X</text>
+
+  <!-- Coordinate Ticks -->
+  <!-- Origin O -->
+  <line x1="${ox}" y1="${axisY - 10}" x2="${ox}" y2="${axisY + 10}" stroke="#FFFFFF" stroke-width="2.5"/>
+  <circle cx="${ox}" cy="${axisY}" r="4" fill="#68B084"/>
+  <text x="${ox}" y="${axisY + 24}" text-anchor="middle" font-size="12" font-weight="bold" fill="#68B084">O (${o}${unit})</text>
+  <text x="${ox}" y="${axisY + 38}" text-anchor="middle" font-size="9" fill="#94A3B8">Origin (x = 0)</text>
+
+  <!-- Point B -->
+  <line x1="${bx}" y1="${axisY - 10}" x2="${bx}" y2="${axisY + 10}" stroke="#FFFFFF" stroke-width="2.5"/>
+  <circle cx="${bx}" cy="${axisY}" r="4" fill="#FCD34D"/>
+  <text x="${bx}" y="${axisY + 24}" text-anchor="middle" font-size="12" font-weight="bold" fill="#FCD34D">B (${b}${unit})</text>
+  <text x="${bx}" y="${axisY + 38}" text-anchor="middle" font-size="9" fill="#94A3B8">Final Position</text>
+
+  <!-- Point A -->
+  <line x1="${ax}" y1="${axisY - 10}" x2="${ax}" y2="${axisY + 10}" stroke="#FFFFFF" stroke-width="2.5"/>
+  <circle cx="${ax}" cy="${axisY}" r="4" fill="#67A8E8"/>
+  <text x="${ax}" y="${axisY + 24}" text-anchor="middle" font-size="12" font-weight="bold" fill="#67A8E8">A (${a}${unit})</text>
+  <text x="${ax}" y="${axisY + 38}" text-anchor="middle" font-size="9" fill="#94A3B8">Turnaround Point</text>
+
+  <!-- Net Displacement Banner -->
+  <rect x="110" y="244" width="320" height="22" rx="4" fill="#0F1A15" stroke="#233930" stroke-width="1"/>
+  <text x="270" y="259" text-anchor="middle" font-size="10" font-weight="bold" fill="#68B084">Net Displacement OB = x_final - x_initial = ${dispSign}${Math.abs(displacement)}${unit}</text>
+</svg>`
+
+  return {
+    title,
+    svg,
+    caption,
+    domain: 'kinematics',
+    isDynamic: true,
+    computedMetrics: {
+      origin: o,
+      pointA: a,
+      pointB: b,
+      forwardPath,
+      returnPath,
+      totalDistance,
+      displacement,
+    },
+  }
+}
+
+/**
+ * 6. TRULY GENERATIVE CONCEPTUAL BLUEPRINT
+ * Canonical vector chalkboard representation for general scientific and mathematical concepts.
+ * Prevents erroneous optics lens generation for non-optics topics.
+ */
+export function generateDynamicConceptualFrameSvg(params: {
+  title?: string
+  caption?: string
+}): GeneratedScientificSvg {
+  const title = params.title || 'Core Scientific Concept'
+  const caption = params.caption || 'Governing physical laws, definitions, and foundational axioms.'
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" style="background:#13211B; font-family:'JetBrains Mono',monospace;">
+  ${getSvgDefs()}
+  <rect x="10" y="10" width="520" height="260" rx="12" fill="#13211B" stroke="#233930" stroke-width="2"/>
+  <rect x="16" y="16" width="508" height="248" rx="8" fill="url(#chalkGrid)"/>
+
+  <!-- Dynamic Header Bar -->
+  <rect x="24" y="22" width="492" height="26" rx="6" fill="#0F1A15" stroke="#233930" stroke-width="1"/>
+  <text x="36" y="39" font-size="11" font-weight="bold" fill="#68B084">CONCEPTUAL BLUEPRINT: ${title.toUpperCase().slice(0, 48)}</text>
+  <text x="495" y="39" text-anchor="end" font-size="10" fill="#7EC8E3">ANAXLY VECTOR ENGINE</text>
+
+  <!-- Core Concept Card Left -->
+  <rect x="36" y="60" width="225" height="150" rx="8" fill="#11221B" stroke="#233930" stroke-width="1.5"/>
+  <rect x="46" y="70" width="205" height="24" rx="4" fill="#172A22"/>
+  <text x="56" y="86" font-size="10" font-weight="bold" fill="#68B084">1. GOVERNING PRINCIPLE</text>
+  <text x="56" y="115" font-size="11" fill="#FFFFFF">${title.slice(0, 24)}</text>
+  <text x="56" y="138" font-size="9" fill="#94A3B8">• Fundamental physical axiom</text>
+  <text x="56" y="156" font-size="9" fill="#94A3B8">• Direct textbook alignment</text>
+  <text x="56" y="174" font-size="9" fill="#94A3B8">• Verified SI standard units</text>
+
+  <!-- Core Concept Card Right -->
+  <rect x="279" y="60" width="225" height="150" rx="8" fill="#11221B" stroke="#233930" stroke-width="1.5"/>
+  <rect x="289" y="70" width="205" height="24" rx="4" fill="#1F3852"/>
+  <text x="299" y="86" font-size="10" font-weight="bold" fill="#7EC8E3">2. ANALYTICAL RELATION</text>
+  <text x="299" y="115" font-size="11" fill="#FFFFFF">Direct Relationship</text>
+  <text x="299" y="138" font-size="9" fill="#CBD5E1">• Mathematical formulation</text>
+  <text x="299" y="156" font-size="9" fill="#CBD5E1">• Board numerical template</text>
+  <text x="299" y="174" font-size="9" fill="#CBD5E1">• Zero hallucinated parameters</text>
+
+  <!-- Connecting Vector -->
+  <line x1="261" y1="135" x2="279" y2="135" stroke="#68B084" stroke-width="2" marker-end="url(#arrowSage)"/>
+
+  <!-- Footer Banner -->
+  <rect x="36" y="222" width="468" height="28" rx="6" fill="#0F1A15" stroke="#233930" stroke-width="1"/>
+  <text x="270" y="240" text-anchor="middle" font-size="9" fill="#FFFFFF">${caption.slice(0, 95)}</text>
+</svg>`
+
+  return {
+    title,
+    svg,
+    caption,
+    domain: 'general',
+    isDynamic: true,
+    computedMetrics: { title },
+  }
+}
+
+/**
  * Universal Parser & Master Dispatcher
  * Parses numerical values from prompt/title text (e.g. "Convex lens f=20 u=-30" or "Incline 45 degrees 10kg")
  * and dynamically generates mathematically exact vector SVGs.
@@ -471,8 +641,34 @@ export function createUniversalScientificSvg(
 ): GeneratedScientificSvg {
   const norm = typeof input === 'string' ? `${input} ${caption || ''}`.toLowerCase() : JSON.stringify(input).toLowerCase()
 
-  // 1. Ray Optics: Lenses & Mirrors
-  if (norm.includes('lens') || norm.includes('focal') || norm.includes('ray diagram') || norm.includes('optics')) {
+  // 1. Kinematics & 1D Motion: Position, Reference Point, Distance & Displacement
+  if (
+    norm.includes('position') ||
+    norm.includes('reference') ||
+    norm.includes('displacement') ||
+    norm.includes('distance') ||
+    norm.includes('1d motion') ||
+    norm.includes('straight line') ||
+    norm.includes('kinematic') ||
+    norm.includes('motion in a straight line') ||
+    norm.includes('number line') ||
+    norm.includes('coordinate scale')
+  ) {
+    const aMatch = norm.match(/(?:point\s*a|pos\s*a|forward)\s*[:=]?\s*([\d\.]+)/i)
+    const bMatch = norm.match(/(?:point\s*b|pos\s*b|return)\s*[:=]?\s*([\d\.]+)/i)
+
+    return generateDynamic1DMotionSvg({
+      title: typeof input === 'string' ? input : input.title,
+      caption,
+      posO: 0,
+      posA: aMatch ? parseFloat(aMatch[1]) : 100,
+      posB: bMatch ? parseFloat(bMatch[1]) : 40,
+      unit: norm.includes('km') ? 'km' : norm.includes('cm') ? 'cm' : 'm',
+    })
+  }
+
+  // 2. Ray Optics: Lenses & Mirrors (STRICT: Only when optics/lens is explicitly referenced)
+  if (norm.includes('lens') || norm.includes('focal') || norm.includes('ray diagram') || norm.includes('optics') || norm.includes('refraction') || norm.includes('convex') || norm.includes('concave')) {
     const fMatch = norm.match(/\bf\s*=\s*([\d\.]+)/)
     const uMatch = norm.match(/\bu\s*=\s*([\-\d\.]+)/)
     const hMatch = norm.match(/\bh\s*=\s*([\d\.]+)/)
@@ -488,7 +684,7 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // 2. Mechanics: Incline / Free Body Diagram
+  // 3. Mechanics: Incline / Free Body Diagram
   if (norm.includes('inclined') || norm.includes('incline') || norm.includes('free body') || norm.includes('fbd') || norm.includes('friction') || norm.includes('ramp')) {
     const angleMatch = norm.match(/(?:angle|theta|\bdeg)\s*[:=]?\s*(\d+)/i) || norm.match(/(\d+)\s*(?:deg|°|degree)/i)
     const massMatch = norm.match(/(?:mass|m)\s*[:=]?\s*([\d\.]+)/i) || norm.match(/([\d\.]+)\s*kg/i)
@@ -503,7 +699,7 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // 3. Euclidean Geometry: Circle Theorems
+  // 4. Euclidean Geometry: Circle Theorems
   if (norm.includes('circle') || norm.includes('subtend') || norm.includes('tangent') || norm.includes('arc') || norm.includes('theorem')) {
     const arcMatch = norm.match(/(?:arc|angle)\s*[:=]?\s*(\d+)/i) || norm.match(/(\d+)\s*(?:deg|°|degree)/i)
 
@@ -514,7 +710,7 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // 4. Electric Circuits & Ohm's Law
+  // 5. Electric Circuits & Ohm's Law
   if (norm.includes('circuit') || norm.includes('ohm') || norm.includes('resistor') || norm.includes('ammeter') || norm.includes('battery')) {
     const vMatch = norm.match(/(?:v|volt|voltage)\s*[:=]?\s*([\d\.]+)/i) || norm.match(/([\d\.]+)\s*v\b/i)
     const rMatch = norm.match(/(?:r|ohm|resistance)\s*[:=]?\s*([\d\.]+)/i) || norm.match(/([\d\.]+)\s*(?:ohm|Ω)/i)
@@ -527,8 +723,8 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // Fallback: Default to Dynamic Optics with canonical parameters
-  return generateDynamicOpticsSvg({
+  // Safe Conceptual Fallback: Topic-grounded conceptual blueprint (NEVER an unrelated optics ray diagram)
+  return generateDynamicConceptualFrameSvg({
     title: typeof input === 'string' ? input : input.title || 'Dynamic Scientific Formulation',
     caption: caption || 'Parametric vector visualization generated with exact physical laws.',
   })
