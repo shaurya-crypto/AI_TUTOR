@@ -82,6 +82,19 @@ interface WhiteboardPage {
   roughY: number
 }
 
+
+export interface ActiveTypingItem {
+  id: string
+  actionLabel: string
+  words: string[]
+  visibleWordCount: number
+  screenX: number
+  screenY: number
+  color: string
+  bulletType?: 'dot' | 'step' | 'title' | 'box' | 'question' | 'none'
+  isFadingOut: boolean
+}
+
 export interface WritingPositionInfo {
   nextY: number
   pageIndex: number
@@ -239,6 +252,59 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     const activeChalkColorRef = useRef<string>(INK_PRIMARY)
     const lastDrawnStudentAnswerRef = useRef<{ text: string; time: number } | null>(null)
     const lastExecutedActionTimeRef = useRef<Map<string, number>>(new Map())
+
+    const [activeTyping, setActiveTyping] = useState<ActiveTypingItem | null>(null)
+
+    const playTypingEffect = async (
+      actionLabel: string,
+      text: string,
+      color: string,
+      canvasX: number,
+      canvasY: number,
+      bulletType: 'dot' | 'step' | 'title' | 'box' | 'question' | 'none' = 'none'
+    ): Promise<void> => {
+      if (typeof window === 'undefined') return
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return
+
+      const cleanText = text.trim()
+      const words = cleanText.split(/\s+/).filter(Boolean)
+      if (words.length === 0) return
+
+      const zoomFactor = 0.7
+      const scrollY = excalidrawAPIRef.current?.getAppState?.()?.scrollY || 0
+      const screenX = Math.max(24, canvasX * zoomFactor)
+      const screenY = Math.max(20, (canvasY + scrollY) * zoomFactor + 40)
+
+      const id = Math.random().toString(36).substring(7)
+      setActiveTyping({
+        id,
+        actionLabel,
+        words,
+        visibleWordCount: 1,
+        screenX,
+        screenY,
+        color,
+        bulletType,
+        isFadingOut: false,
+      })
+
+      // Fast, smooth word-by-word progression
+      const wordDelay = Math.max(20, Math.min(48, 550 / words.length))
+      for (let i = 2; i <= words.length; i++) {
+        await new Promise((r) => setTimeout(r, wordDelay))
+        setActiveTyping((prev) => (prev && prev.id === id ? { ...prev, visibleWordCount: i } : prev))
+      }
+
+      // Momentary pause to read completed thought
+      await new Promise((r) => setTimeout(r, 160))
+
+      // Smooth fade-out effect
+      setActiveTyping((prev) => (prev && prev.id === id ? { ...prev, isFadingOut: true } : prev))
+      await new Promise((r) => setTimeout(r, 360))
+
+      setActiveTyping((prev) => (prev && prev.id === id ? null : prev))
+    }
+
 
     const notifyPositionChange = (lastAction?: string, lastText?: string) => {
       const scrollY = excalidrawAPIRef.current?.getAppState?.()?.scrollY || 0
@@ -1162,6 +1228,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const titleColor = resolveChalkColor(color, INK_PRIMARY)
         const underlineColor = color ? titleColor : INK_BOTANICAL
 
+        await playTypingEffect('Topic', titleText, titleColor, startX, startY, 'title')
+
         const elements = convertFn([
           {
             type: 'text',
@@ -1213,6 +1281,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const startY = getDynamicNextY(12)
         const noteColor = resolveChalkColor(color, activeChalkColorRef.current)
         const bulletColor = color ? noteColor : INK_BOTANICAL
+
+        await playTypingEffect('Note', clean, noteColor, startX, startY, 'dot')
 
         const elements = convertToExcalidrawElements([
           {
@@ -1266,6 +1336,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const startX = 60
         const startY = getDynamicNextY(12)
         const stepColor = resolveChalkColor(color, INK_SECONDARY)
+
+        await playTypingEffect('Step', clean, stepColor, startX, startY, 'step')
 
         const elements = convertToExcalidrawElements([
           {
@@ -3868,6 +3940,70 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             initialData={EXCALIDRAW_INITIAL_DATA}
             UIOptions={EXCALIDRAW_UI_OPTIONS}
           />
+
+          {/* Active Word-by-Word Typing & Smooth Fade-Out Effect Overlay */}
+          {activeTyping && (
+            <div
+              key={activeTyping.id}
+              style={{
+                position: 'absolute',
+                left: `${activeTyping.screenX}px`,
+                top: `${activeTyping.screenY}px`,
+                zIndex: 25,
+                maxWidth: 'min(640px, 85vw)',
+                pointerEvents: 'none',
+                transform: activeTyping.isFadingOut ? 'translateY(-4px) scale(0.98)' : 'translateY(0) scale(1)',
+                opacity: activeTyping.isFadingOut ? 0 : 1,
+                filter: activeTyping.isFadingOut ? 'blur(3px)' : 'none',
+                transition: 'opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1), transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), filter 0.38s ease-out',
+              }}
+              className="select-none py-1.5 px-3.5 rounded-xl bg-white/95 backdrop-blur-md border border-[#E5E3DB] shadow-[0_10px_24px_rgba(23,24,23,0.08)] flex items-start gap-2.5"
+            >
+              {/* Action Indicator / Bullet */}
+              <div className="mt-1 shrink-0 flex items-center justify-center">
+                {activeTyping.bulletType === 'dot' && (
+                  <span
+                    className="w-2 h-2 rounded-full animate-ping"
+                    style={{ backgroundColor: activeTyping.color }}
+                  />
+                )}
+                {activeTyping.bulletType === 'step' && (
+                  <span className="text-xs font-bold font-mono text-[#255D88] animate-pulse">
+                    -&gt;
+                  </span>
+                )}
+                {activeTyping.bulletType === 'title' && (
+                  <span className="w-2.5 h-2.5 rounded-sm bg-[#52715D] animate-pulse" />
+                )}
+                {activeTyping.bulletType === 'box' && (
+                  <span className="w-2 h-2 rounded-full bg-[#BD4C36] animate-pulse" />
+                )}
+                {activeTyping.bulletType === 'question' && (
+                  <span className="w-2 h-2 rounded-full bg-[#255D88] animate-ping" />
+                )}
+              </div>
+
+              {/* Words typed word-by-word with smooth fade-in */}
+              <div className="flex-1 text-sm font-medium text-[#1F1C18] leading-relaxed flex flex-wrap items-center">
+                {activeTyping.words.slice(0, activeTyping.visibleWordCount).map((word, wIdx) => (
+                  <span
+                    key={`${activeTyping.id}-${wIdx}`}
+                    className="inline-block mr-1.5 text-[#1F1C18] animate-chalk-word"
+                  >
+                    {word}
+                  </span>
+                ))}
+
+                {/* Chalk typing cursor / blinking caret */}
+                {!activeTyping.isFadingOut && (
+                  <span
+                    className="inline-block w-1.5 h-4 ml-0.5 rounded-full animate-pulse align-middle"
+                    style={{ backgroundColor: activeTyping.color }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Floating Top-Right Whiteboard Controls: Clear Board Action */}

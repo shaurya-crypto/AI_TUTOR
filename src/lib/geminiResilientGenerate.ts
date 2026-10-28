@@ -15,7 +15,6 @@ export interface ResilientGenerateOptions {
   preferredModels?: string[]
   maxRounds?: number
   label?: string
-  timeoutMs?: number
 }
 
 /**
@@ -36,9 +35,10 @@ const DEFAULT_MODEL_CASCADE = [
 ]
 
 /**
- * Instant-Failover Multi-Model Generator with resilient per-model timeout and thinking reasoning.
- * Automatically tries primary gemini-3.8-flash (with thinking), cascading to gemini-3.1-pro-preview,
- * gemini-3.5-flash, and gemini-2.5-flash if upstream demand spikes (503/429) occur.
+ * Instant-Failover Multi-Model Generator without artificial client timeouts.
+ * Lets Gemini complete full thinking, analysis, and comprehensive synthesis naturally.
+ * If a model returns an API error (503 High Demand, 429 Rate Limit, etc.),
+ * it IMMEDIATELY cascades to the next available model in 0 milliseconds.
  */
 export async function resilientGenerateContent(
   ai: GoogleGenAI,
@@ -51,7 +51,6 @@ export async function resilientGenerateContent(
   const maxRounds = options.maxRounds || 2
   const label = options.label || 'Gemini API'
   const errorsCollected: string[] = []
-  const perModelTimeout = options.timeoutMs || 45000
 
   // Ensure thinking budget is active by default for high-level reasoning across all models
   const baseConfig = {
@@ -67,21 +66,11 @@ export async function resilientGenerateContent(
       try {
         console.log(`[${label}] Requesting generation via ${model} (Round ${round}/${maxRounds})...`)
 
-        let timer: NodeJS.Timeout | null = null
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(new Error(`Timeout: ${model} exceeded ${perModelTimeout / 1000}s response limit`))
-          }, perModelTimeout)
-        })
-
-        const generatePromise = ai.models.generateContent({
+        // Allow natural execution to complete without artificial client timeout
+        const response = await ai.models.generateContent({
           model,
           contents: options.contents,
           config: baseConfig,
-        })
-
-        const response: any = await Promise.race([generatePromise, timeoutPromise]).finally(() => {
-          if (timer) clearTimeout(timer)
         })
 
         const rawText = response?.text?.trim() || ''

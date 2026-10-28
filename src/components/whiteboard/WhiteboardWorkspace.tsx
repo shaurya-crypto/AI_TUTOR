@@ -3,6 +3,7 @@
 import React, { forwardRef, useState, useEffect, useCallback, useRef } from 'react'
 import { GreenChalkboard, GreenChalkboardRef, WritingPositionInfo } from './GreenChalkboard'
 import { SobiCompanion } from './SobiCompanion'
+import { LiveChalkSubtitleStreamer } from './LiveChalkSubtitleStreamer'
 import { VisualizationViewport } from './VisualizationViewport'
 import { MafsGraphCanvas, MafsGraphCanvasProps, GraphDisplayMode } from './MafsGraphCanvas'
 import { VisualizationSceneType } from './scenes/sceneTypes'
@@ -192,6 +193,12 @@ export const WhiteboardWorkspace = forwardRef<GreenChalkboardRef, WhiteboardWork
                 ref.current.drawStudentAnswer?.(ans)
               }
             }}
+          />
+
+          {/* Live Word-by-Word Chalk Subtitle Streamer with Smooth Fade-out */}
+          <LiveChalkSubtitleStreamer
+            latestTranscript={latestTranscript}
+            isTeacherSpeaking={isTeacherSpeaking}
           />
 
           {/* In-Whiteboard 3D Simulation Box (Rendered directly inside whiteboard area) */}
