@@ -106,11 +106,8 @@ export function generateOtpEmailHtml({
               <table role="presentation" border="0" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 14px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: #3B654C;">
+                    <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 18px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: #1F1C18;">
                       Anaxly
-                    </span>
-                    <span style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #7A7C75; margin-left: 6px;">
-                      &bull; AI Tutor
                     </span>
                   </td>
                 </tr>
@@ -134,7 +131,7 @@ export function generateOtpEmailHtml({
                 <tr>
                   <td align="center" style="padding-bottom: 28px;">
                     <p style="margin: 0; font-size: 14px; line-height: 22px; color: #555852; max-width: 420px; text-align: center;">
-                      Use the six-digit single-use code below to sign in to your study workspace.
+                      Use the six-digit single-use code below to sign in.
                     </p>
                   </td>
                 </tr>
@@ -172,8 +169,8 @@ export function generateOtpEmailHtml({
                     ? `
                 <tr>
                   <td align="center" style="padding-bottom: 24px;">
-                    <a href="${confirmationUrl}" target="_blank" style="display: inline-block; background-color: #2C241E; color: #FFFFFF; font-size: 13px; font-weight: 500; text-decoration: none; padding: 12px 24px; border-radius: 10px; letter-spacing: 0.01em;">
-                      Sign in directly with magic link
+                    <a href="${confirmationUrl}" target="_blank" style="display: inline-block; background-color: #1F3852; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 26px; border-radius: 10px; letter-spacing: 0.02em;">
+                      Sign in directly
                     </a>
                   </td>
                 </tr>
@@ -188,7 +185,7 @@ export function generateOtpEmailHtml({
                       <tr>
                         <td style="padding-left: 0;">
                           <p style="margin: 0; font-size: 12px; line-height: 19px; color: #7A7C75;">
-                            <strong style="color: #555852; font-weight: 600;">Security notice:</strong> If you did not request this verification code, please ignore this email. No access can be granted without this code, and your account remains completely safe. Never forward or share this code with anyone.
+                            <strong style="color: #555852; font-weight: 600;">Security notice:</strong> If you did not request this verification code, please ignore this email. Never share this code with anyone.
                           </p>
                         </td>
                       </tr>
@@ -200,25 +197,12 @@ export function generateOtpEmailHtml({
             </td>
           </tr>
 
-          <!-- Footer Information -->
+          <!-- Minimal Clean Footer -->
           <tr>
             <td align="center" style="padding-top: 28px;">
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td align="center" style="padding-bottom: 8px;">
-                    <p style="margin: 0; font-size: 11px; line-height: 17px; color: #9A9C96; text-align: center;">
-                      Anaxly &bull; Classes 6 to 12 &bull; CBSE, ICSE, IB
-                    </p>
-                  </td>
-                </tr>
-                <tr>
-                  <td align="center">
-                    <p style="margin: 0; font-size: 11px; line-height: 17px; color: #B5B7B1; text-align: center;">
-                      Real-time socratic dialogue with step-by-step digital chalkboard derivations.
-                    </p>
-                  </td>
-                </tr>
-              </table>
+              <p style="margin: 0; font-size: 11px; line-height: 17px; color: #9A9C96; text-align: center;">
+                &copy; Anaxly. All rights reserved.
+              </p>
             </td>
           </tr>
 
