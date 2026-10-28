@@ -23,10 +23,11 @@ export interface ResilientGenerateOptions {
  * 4. gemini-3.5-flash-lite: next-gen lightweight fallback
  */
 const DEFAULT_MODEL_CASCADE = [
-  'gemini-2.5-flash',
+  'gemini-3.1-pro-preview',
   'gemini-3.5-flash',
-  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
   'gemini-3.5-flash-lite',
+  'gemini-2.5-flash-lite',
 ]
 
 /**

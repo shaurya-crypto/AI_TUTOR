@@ -999,14 +999,29 @@ export default function ModuleClassroomPage() {
       // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page before rendering visual
       chalkboardRef.current.goToPage?.(conceptIdx)
 
-      // 1. Check if module has custom diagram SVG or idea from Admin AI generator
+      // 1. Check if module has a concept-specific custom visual from the Admin AI generator
       const customPlan = activeModule?.visual_lesson_plan
-      const customSvg = customPlan?.diagram_svg || customPlan?.steps?.[conceptIdx]?.content?.diagram?.svg
-      const customTitle = customPlan?.diagram_idea || customPlan?.steps?.[conceptIdx]?.title || targetConcept
-      const customCaption = customPlan?.what_to_make || customPlan?.steps?.[conceptIdx]?.content?.diagram?.caption || targetConcept
+      const conceptVisuals = Array.isArray(customPlan?.concept_visuals) ? customPlan.concept_visuals : []
+      const matchedConceptVisual =
+        conceptVisuals[conceptIdx] ||
+        conceptVisuals.find((cv: any) =>
+          cv.concept_title?.toLowerCase().includes(targetConcept.toLowerCase()) ||
+          targetConcept.toLowerCase().includes(cv.concept_title?.toLowerCase())
+        )
 
-      if (customSvg && typeof customSvg === 'string' && customSvg.includes('<svg')) {
-        chalkboardRef.current.drawSvgDiagram?.(customTitle, customSvg, customCaption)
+      const conceptSvg = matchedConceptVisual?.svg || customPlan?.steps?.[conceptIdx]?.content?.diagram?.svg
+      const conceptTitle = matchedConceptVisual?.diagram_title || matchedConceptVisual?.concept_title || customPlan?.steps?.[conceptIdx]?.title || targetConcept
+      const conceptCaption = matchedConceptVisual?.what_to_make || customPlan?.steps?.[conceptIdx]?.content?.diagram?.caption || targetConcept
+      const customCaption = conceptCaption
+
+      if (conceptSvg && typeof conceptSvg === 'string' && conceptSvg.includes('<svg')) {
+        chalkboardRef.current.drawSvgDiagram?.(conceptTitle, conceptSvg, conceptCaption)
+        return
+      }
+
+      // If no concept-specific visual exists, but a top-level capsule SVG was provided, ONLY use it for Concept 0 (the first concept), NEVER duplicate it on subsequent concepts!
+      if (conceptIdx === 0 && customPlan?.diagram_svg && typeof customPlan.diagram_svg === 'string' && customPlan.diagram_svg.includes('<svg')) {
+        chalkboardRef.current.drawSvgDiagram?.(customPlan.diagram_idea || targetConcept, customPlan.diagram_svg, customPlan.what_to_make || targetConcept)
         return
       }
 
@@ -1619,8 +1634,22 @@ export default function ModuleClassroomPage() {
     const firstVisual = inferConceptVisualDirective(firstConcept, resolvedSubject, chapterName)
     const currentVisual = inferConceptVisualDirective(currentConcept, resolvedSubject, chapterName)
 
+    const customPlan = activeModule?.visual_lesson_plan
+    const conceptVisuals = Array.isArray(customPlan?.concept_visuals) ? customPlan.concept_visuals : []
+
     const visualRoadmap = keyConcepts
-      .map((c: string, i: number) => `  * Concept #${i + 1} "${c}": render_svg_diagram(title="${c}")`)
+      .map((c: string, i: number) => {
+        const cv =
+          conceptVisuals[i] ||
+          conceptVisuals.find((v: any) =>
+            v.concept_title?.toLowerCase().includes(c.toLowerCase()) ||
+            c.toLowerCase().includes(v.concept_title?.toLowerCase())
+          )
+        if (cv?.svg) {
+          return `  * Concept #${i + 1} "${c}": render_svg_diagram(title="${cv.diagram_title || c}", svg="${cv.svg.replace(/"/g, "'")}", caption="${cv.what_to_make || ''}") [Timing: ${cv.timing_and_cue || 'Step 2'}]`
+        }
+        return `  * Concept #${i + 1} "${c}": render_svg_diagram(title="${c}")`
+      })
       .join('\n')
 
     const studentFirstName = studentName ? studentName.split(' ')[0].trim() : ''
@@ -1864,7 +1893,7 @@ When a student asks to see an image, picture, diagram, structure, visual, or ske
 
 TEXTBOOK CONCEPT MICRO-DOSSIERS:
 ${conceptDossiersText}
-${visualRoadmap ? `\nVISUAL ROADMAP:\n${visualRoadmap}\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
+${visualRoadmap ? `\nVISUAL ROADMAP (MANDATORY UNIQUE CONCEPT VISUALS):\n${visualRoadmap}\n- UNIQUE WHITEBOARD INVARIANT: Every concept MUST have its own distinct visual diagram from the roadmap above! NEVER duplicate or re-draw the same diagram for multiple concepts!\n` : ''}${mathProgressionText ? `- ${mathProgressionText}\n` : ''}${aiContextText ? `PEDAGOGICAL CUES: ${aiContextText}\n` : ''}
 RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, intellectually rigorous topper tone.`
 
     // Whiteboard 1-Concept-Per-Page: Ensure active concept page is active

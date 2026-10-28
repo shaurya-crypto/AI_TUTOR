@@ -33,6 +33,14 @@ interface GeneratedModule {
   what_to_make?: string
   diagram_svg?: string
   chapter_flowchart?: string
+  concept_visuals?: Array<{
+    concept_title: string
+    diagram_title: string
+    diagram_type: string
+    what_to_make: string
+    svg: string
+    timing_and_cue?: string
+  }>
   textbook_definitions?: Array<{ concept: string; definition: string; si_units?: string }>
   textbook_examples?: Array<{ title: string; scenario: string }>
   visual_lesson_plan?: any
@@ -67,6 +75,8 @@ function cleanJsonString(raw: string): string {
 }
 
 function buildEnhancedVisualPlanAndDirective(cap: any, visualPlan: any) {
+  const conceptVisualsList = Array.isArray(cap.concept_visuals) ? cap.concept_visuals : []
+
   const enhancedVisualPlan = {
     ...visualPlan,
     diagram_idea: cap.visual_ideas || cap.diagram_idea || '',
@@ -76,6 +86,7 @@ function buildEnhancedVisualPlanAndDirective(cap: any, visualPlan: any) {
     chapter_flowchart: cap.chapter_flowchart || '',
     textbook_definitions: cap.textbook_definitions || [],
     textbook_examples: cap.textbook_examples || [],
+    concept_visuals: conceptVisualsList,
   }
 
   const defsList = Array.isArray(cap.textbook_definitions) ? cap.textbook_definitions : []
@@ -90,15 +101,24 @@ function buildEnhancedVisualPlanAndDirective(cap: any, visualPlan: any) {
     .filter(Boolean)
     .join('\n')
 
+  const visualPlaybook = conceptVisualsList
+    .map((cv: any, idx: number) => {
+      return `  * Concept #${idx + 1} "${cv.concept_title}":
+    - Visual Title: "${cv.diagram_title || cv.concept_title}" (${cv.diagram_type || 'vector_svg_diagram'})
+    - What to Draw: ${cv.what_to_make || ''}
+    - Timing & Directive: ${cv.timing_and_cue || 'Call render_svg_diagram during Step 2.'}`
+    })
+    .join('\n')
+
   const diagramDirective = `
 TEXTBOOK GROUNDING & MANDATORY TEACHING DIRECTIVES:
-- Textbook Diagram / Figure: ${cap.what_to_make || cap.visual_ideas || 'Scientific Vector Diagram'}
+- Capsule Overview Diagram: ${cap.what_to_make || cap.visual_ideas || 'Scientific Vector Diagram'}
 - Diagram Type: ${cap.diagram_type || 'vector_svg_diagram'}
-- What to Draw: ${cap.what_to_make || ''}
 ${cap.chapter_flowchart ? `- Chapter Multi-Level Flowchart: ${cap.chapter_flowchart}\n- FLOWCHART DIRECTIVE: Call write_chalkboard(action="draw_flowchart", content="${cap.chapter_flowchart}") to visually organize the concepts on the board!\n` : ''}
 ${defsText ? `- Verbatim Textbook Definitions:\n${defsText}\n` : ''}
 ${examplesText ? `- Textbook Concrete Examples:\n${examplesText}\n` : ''}
-- MANDATORY VISUAL TIMING: On Step 1 (Intuition) or Step 2 (Definition), you MUST immediately dispatch write_chalkboard(action="render_svg_diagram", title="${cap.title}", svg=..., caption="${cap.visual_ideas || ''}") or draw_flowchart! Do NOT wait for student to ask!
+${visualPlaybook ? `- CONCEPT-BY-CONCEPT VISUAL PLAYBOOK (MANDATORY UNIQUE DRAWINGS):\n${visualPlaybook}\n` : ''}
+- MANDATORY WHITEBOARD INSTRUCTION: Each concept in this capsule has a DISTINCT, dedicated visual. You MUST call render_svg_diagram or draw_graph with that concept's UNIQUE diagram when teaching it! NEVER duplicate or reuse the same diagram across different concepts!
 - EXPLANATION MANDATE: When explaining definitions, formulas, and algebraic transitions, unpack the physical meaning and the "why" behind each line out loud. Never merely recite the text!
 `
 
@@ -523,6 +543,16 @@ REQUIREMENTS FOR ULTRA-DETAILED TOPIC CAPSULES (4 to 8 capsules total, covering 
 15. "diagram_type": The exact type of diagram to render on the chalkboard (e.g. "vector_svg_diagram", "mafs_kinematics_graph", "flowchart", "circuit_schematic", "ray_optics", "chemical_apparatus", "anatomical_structure").
 16. "what_to_make": Detailed blueprint of "what to make in this" diagram: list the exact textbook figure number, components, geometric shapes, coordinate axes, labeled arrows, numerical values, and pedagogical highlights to draw.
 17. "diagram_svg": Complete, production-ready, clean vector SVG markup (<svg viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" xmlns="http://www.w3.org/2000/svg">...</svg>) with contrasting stroke colors, dark background compatibility, and clear text labels.
+18. "concept_visuals": Array of UNIQUE, DISTINCT visual diagram blueprints—one specifically crafted for EACH key concept in "key_concepts". Each item MUST be:
+    {
+      "concept_title": "Exact title matching key_concepts[i]",
+      "diagram_title": "Short descriptive title for chalkboard header (e.g. 'Reference Frame Origin Scale', 'Displacement Vector OB = +40m')",
+      "diagram_type": "vector_svg_diagram" | "mafs_graph" | "flowchart" | "circuit_schematic" | "ray_optics" | "geometry_construction" | "molecular_structure",
+      "what_to_make": "Specific description of what to draw for this unique concept (axes, vectors, formula boxes, SI units)",
+      "svg": "Complete, production-ready, clean vector SVG markup (<svg viewBox=\"0 0 540 280\" shape-rendering=\"geometricPrecision\" text-rendering=\"geometricPrecision\" xmlns=\"http://www.w3.org/2000/svg\">...</svg>) with contrasting colors, dark background #13211B, and clean text labels",
+      "timing_and_cue": "Pedagogical instruction for the live tutor: When to draw this visual (Step 1 Intuition or Step 2 Definition) and what check question to ask while pointing to it"
+    }
+CRITICAL QUALITY INVARIANT: Every single concept in "concept_visuals" MUST have a different, unique, and tailored visual! NEVER duplicate the same diagram across multiple concepts!
 
 OUTPUT FORMAT:
 Respond with ONLY a valid JSON object matching this schema (do NOT include conversational prose outside JSON):
@@ -567,7 +597,17 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
       "visual_ideas": "string (visual and image generation idea)",
       "diagram_type": "string (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)",
       "what_to_make": "string (detailed breakdown of what to make and draw in this diagram)",
-      "diagram_svg": "string (<svg viewBox='0 0 540 280' ...>...</svg>)"
+      "diagram_svg": "string (<svg viewBox='0 0 540 280' ...>...</svg>)",
+      "concept_visuals": [
+        {
+          "concept_title": "string",
+          "diagram_title": "string",
+          "diagram_type": "string",
+          "what_to_make": "string",
+          "svg": "string (<svg viewBox='0 0 540 280' ...>...</svg>)",
+          "timing_and_cue": "string"
+        }
+      ]
     }
   ]
 }`
@@ -584,6 +624,7 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
         config: {
           responseMimeType: 'application/json',
           temperature: 0.2,
+          thinkingConfig: { thinkingBudget: 2048 },
           ...(geminiCacheName ? { cachedContent: geminiCacheName } : {}),
         },
         label: 'Chapter Notes Synthesis',
@@ -907,6 +948,7 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
       config: {
         responseMimeType: 'application/json',
         temperature: 0.2,
+        thinkingConfig: { thinkingBudget: 2048 },
       },
       label: 'Syllabus Decomposition',
     })
