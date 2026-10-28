@@ -20,17 +20,17 @@ function SparkleStar({ className = 'w-5 h-5' }: { className?: string }) {
     >
       <defs>
         <linearGradient id="sparkle-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#F59E0B" />
-          <stop offset="60%" stopColor="#FB923C" />
-          <stop offset="100%" stopColor="#EA580C" />
+          <stop offset="0%" stopColor="#3B82F6" />
+          <stop offset="60%" stopColor="#255D88" />
+          <stop offset="100%" stopColor="#1F3852" />
         </linearGradient>
       </defs>
       <path
         d="M12 2C12 7.5 16.5 12 22 12C16.5 12 12 16.5 12 22C12 16.5 7.5 12 2 12C7.5 12 12 7.5 12 2Z"
         fill="url(#sparkle-grad)"
       />
-      <circle cx="18" cy="6" r="1.5" fill="#FBBF24" />
-      <circle cx="6" cy="18" r="1.2" fill="#F97316" />
+      <circle cx="18" cy="6" r="1.5" fill="#60A5FA" />
+      <circle cx="6" cy="18" r="1.2" fill="#93C5FD" />
     </svg>
   )
 }
@@ -339,14 +339,14 @@ export default function OnboardingPage() {
     (textInputValue.trim().length > 0 ? 'downward-gaze' : currentQ.sobiExpression)
 
   return (
-    <div className="relative min-h-screen w-full bg-[#FAF8F5] text-[#2A231C] overflow-hidden flex flex-col font-sans select-none">
+    <div className="relative min-h-screen w-full bg-[var(--canvas-base)] text-[var(--ink-primary)] overflow-hidden flex flex-col font-sans select-none">
       {/* Aristotle Fine Paper Grid Canvas Background */}
       <div
         className="pointer-events-none absolute inset-0 z-0 opacity-40"
         style={{
           backgroundImage: `
-            linear-gradient(to right, #E7E5E0 1px, transparent 1px),
-            linear-gradient(to bottom, #E7E5E0 1px, transparent 1px)
+            linear-gradient(to right, var(--border-subtle) 1px, transparent 1px),
+            linear-gradient(to bottom, var(--border-subtle) 1px, transparent 1px)
           `,
           backgroundSize: '24px 24px',
         }}
@@ -372,7 +372,7 @@ export default function OnboardingPage() {
         <div className="w-48 sm:w-64">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200/80">
             <motion.div
-              className="h-full bg-[#8F847D] rounded-full"
+              className="h-full bg-[var(--accent-primary)] rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${progressPercent}%` }}
               transition={{ duration: 0.35, ease: 'easeOut' }}
@@ -492,7 +492,7 @@ export default function OnboardingPage() {
         <footer className="fixed bottom-10 left-1/2 z-30 w-full max-w-[480px] -translate-x-1/2 px-4">
           <form
             onSubmit={handleTextFormSubmit}
-            className="flex items-center rounded-2xl border-2 border-[#45382F] bg-white px-4 py-2.5 shadow-[0_6px_20px_rgba(0,0,0,0.08)] transition-all focus-within:ring-2 focus-within:ring-neutral-800"
+            className="flex items-center rounded-2xl border-2 border-[var(--accent-primary)] bg-white px-4 py-2.5 shadow-[0_6px_20px_rgba(0,0,0,0.08)] transition-all focus-within:ring-2 focus-within:ring-neutral-800"
           >
             <input
               ref={textInputRef}
@@ -507,7 +507,7 @@ export default function OnboardingPage() {
             <button
               type="submit"
               disabled={!textInputValue.trim() || isSubmitting}
-              className="ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#8F847D] text-white transition-all hover:bg-[#6E635C] active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+              className="ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-primary)] text-white transition-all hover:bg-[var(--accent-primary-hover)] active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
               aria-label="Submit answer"
             >
               {isSubmitting ? (

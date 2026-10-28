@@ -3,8 +3,8 @@
  * 
  * Invariants:
  * - Brand Name: Anaxly
- * - Palette: #F8F6F0 (canvas), #FFFFFF (card), #1F1C18 (ink primary), #555852 (ink secondary),
- *            #52715D (botanical green), #C85A43 (terracotta coral), #E5E3DB (paper border).
+ * - Palette: #FAF8F4 (canvas), #FFFFFF (card), #1F1C18 (ink primary), #555852 (ink secondary),
+ *            #2E6347 (Scholar sage), #255D88 (Academic cobalt), #E5E3DB (paper border).
  * - Bulletproof table layout compatible with Outlook, Gmail, Apple Mail, and iOS/Android.
  * - Zero emojis. Pure classical academic elegance.
  * - Supports both dynamic token rendering and Go template syntax ({{ .Token }}) for Supabase Dashboard.
@@ -80,7 +80,7 @@ export function generateOtpEmailHtml({
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
     img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
     table { border-collapse: collapse !important; }
-    body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #F8F6F0; }
+    body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #FAF8F4; }
     @media screen and (max-width: 600px) {
       .mobile-padding { padding-left: 20px !important; padding-right: 20px !important; }
       .mobile-card { border-radius: 12px !important; }
@@ -88,13 +88,13 @@ export function generateOtpEmailHtml({
     }
   </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #F8F6F0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1F1C18;">
+<body style="margin: 0; padding: 0; background-color: #FAF8F4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1F1C18;">
   <!-- Preheader text (preview snippet in inbox) -->
   <div style="display: none; font-size: 1px; color: #F8F6F0; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
     Your single-use 6-digit verification code for Anaxly. Valid for ${expiresMinutes} minutes.
   </div>
 
-  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F8F6F0; min-height: 100vh;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FAF8F4; min-height: 100vh;">
     <tr>
       <td align="center" style="padding: 40px 16px 48px 16px;">
         <!-- Container 560px -->
@@ -106,7 +106,7 @@ export function generateOtpEmailHtml({
               <table role="presentation" border="0" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 14px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: #52715D;">
+                    <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 14px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: #3B654C;">
                       Anaxly
                     </span>
                     <span style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: #7A7C75; margin-left: 6px;">

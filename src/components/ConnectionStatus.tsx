@@ -32,13 +32,13 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ state }) => 
       case "TEACHER_SPEAKING":
         return {
           text: "Teacher speaking",
-          dotClass: "bg-coral animate-ping",
-          bgClass: "bg-coral-soft border-coral/20 text-coral-dark",
+          dotClass: "bg-accent-warm animate-ping",
+          bgClass: "bg-accent-warm-soft border-accent-warm/20 text-accent-warm",
         };
       case "MUTED":
         return {
           text: "Microphone muted",
-          dotClass: "bg-amber-500",
+          dotClass: "bg-slate-400",
           bgClass: "bg-white border-border text-ink-secondary",
         };
       case "ERROR":

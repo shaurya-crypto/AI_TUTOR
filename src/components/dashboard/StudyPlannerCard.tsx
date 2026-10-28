@@ -268,7 +268,7 @@ export function StudyPlannerCard({
         className={`p-4 rounded-2xl border transition-all ${
           isOnTrack
             ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-950'
-            : 'bg-amber-500/5 border-amber-500/25 text-amber-950'
+            : 'bg-amber-500/10 border-amber-500/25 text-amber-950'
         }`}
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -298,7 +298,7 @@ export function StudyPlannerCard({
             {nextModuleId && (
               <Link
                 href={`/dashboard/${userId}/class/${nextModuleId}`}
-                className="inline-flex items-center gap-1.5 bg-primary hover:bg-accent-hover text-on-primary font-label-md text-xs px-4 py-2 rounded-xl transition-all shadow-xs"
+                className="inline-flex items-center gap-1.5 bg-primary hover:bg-accent-hover text-white font-label-md text-xs px-4 py-2 rounded-xl transition-all shadow-xs"
               >
                 <span>Start Today's Capsule</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -310,7 +310,7 @@ export function StudyPlannerCard({
 
       {/* Customize Schedule Dialog */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-[480px] bg-surface border border-border-subtle rounded-2xl p-6">
+        <DialogContent className="sm:max-w-[480px] bg-surface border border-border-subtle rounded-2xl p-6 text-ink-primary shadow-xl">
           <DialogHeader>
             <DialogTitle className="font-headline-md text-headline-md text-ink-primary font-serif">
               Customize Study Schedule
@@ -376,7 +376,7 @@ export function StudyPlannerCard({
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-primary hover:bg-accent-hover text-on-primary text-xs rounded-xl px-5"
+                className="bg-primary hover:bg-accent-hover text-white text-xs rounded-xl px-5"
               >
                 {isSubmitting ? 'Saving...' : 'Save & Rebalance'}
               </Button>

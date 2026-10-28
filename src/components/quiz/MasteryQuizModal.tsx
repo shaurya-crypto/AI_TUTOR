@@ -150,21 +150,21 @@ export function MasteryQuizModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl w-[95vw] bg-[#FDFCF7] border border-[#E5E3DB] rounded-[2rem] p-6 sm:p-8 max-h-[90vh] overflow-y-auto shadow-2xl">
-        <DialogHeader className="border-b border-[#E5E3DB] pb-4">
+      <DialogContent className="max-w-3xl w-[95vw] bg-surface border border-border-subtle rounded-[2rem] p-6 sm:p-8 max-h-[90vh] overflow-y-auto shadow-2xl text-ink-primary">
+        <DialogHeader className="border-b border-[var(--border-subtle)] pb-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Badge className="bg-[#52715D]/15 text-[#52715D] border-0 text-xs px-3 py-1 font-semibold uppercase tracking-wider">
+              <Badge className="bg-[var(--accent-sage)]/15 text-[var(--accent-sage)] border-0 text-xs px-3 py-1 font-semibold uppercase tracking-wider">
                 <Award className="w-3.5 h-3.5 mr-1.5 inline" />
                 10-Question Mastery Evaluation
               </Badge>
               {isCached && !refreshing && (
-                <span className="text-[11px] font-mono text-[#52715D] bg-[#E8F0EA] px-2 py-0.5 rounded-md border border-[#C8EBD2]">
+                <span className="text-[11px] font-mono text-[var(--accent-sage)] bg-[var(--accent-sage-soft)] px-2 py-0.5 rounded-md border border-[var(--accent-sage-border)]">
                   Instant Load
                 </span>
               )}
               {freshSetCount > 1 && (
-                <span className="text-[11px] font-mono text-[#C85A43] bg-[#FFF8F6] px-2 py-0.5 rounded-md border border-[#F5C2B8]">
+                <span className="text-[11px] font-mono text-[var(--accent-warm)] bg-accent-warm-soft px-2 py-0.5 rounded-md border border-accent-warm/20 text-accent-warm">
                   Set #{freshSetCount}
                 </span>
               )}
@@ -176,46 +176,46 @@ export function MasteryQuizModal({
                 size="sm"
                 onClick={() => fetchQuiz(true)}
                 disabled={refreshing || loading || submitting}
-                className="h-8 px-3 rounded-xl border-[#E5E3DB] hover:bg-[#F0F6F2] hover:border-[#C8EBD2] text-xs font-medium text-[#52715D] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className="h-8 px-3 rounded-xl border-[var(--border-subtle)] hover:bg-[#F0F6F2] hover:border-[var(--accent-sage-border)] text-xs font-medium text-[var(--accent-sage)] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                 title="Ask Gemini Examiner to craft 10 completely fresh questions based on the textbook syllabus"
               >
                 {refreshing ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#52715D]" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-sage)]" />
                     <span>Crafting Questions...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-[#52715D]" />
+                    <Sparkles className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
                     <span>Generate More Questions</span>
                   </>
                 )}
               </Button>
 
               {questions.length > 0 && (
-                <span className="text-xs font-semibold text-[#7A7C75]">
+                <span className="text-xs font-semibold text-[var(--ink-muted)]">
                   Answered: {answeredCount} / {questions.length}
                 </span>
               )}
             </div>
           </div>
-          <DialogTitle className="font-serif text-2xl text-[#171817] mt-2">
+          <DialogTitle className="font-serif text-2xl text-[var(--ink-primary)] mt-2">
             {moduleTitle || 'Topic Capsule Evaluation'}
           </DialogTitle>
-          <DialogDescription className="text-xs text-[#7A7C75]">
+          <DialogDescription className="text-xs text-[var(--ink-muted)]">
             Answer all 10 questions to test deep intuition, formulas, and verify syllabus completion.
           </DialogDescription>
         </DialogHeader>
 
         {loading || refreshing ? (
           <div className="py-20 flex flex-col items-center justify-center space-y-4">
-            <Loader2 className="w-10 h-10 text-[#52715D] animate-spin" />
-            <p className="font-serif text-base text-[#171817]">
+            <Loader2 className="w-10 h-10 text-[var(--accent-sage)] animate-spin" />
+            <p className="font-serif text-base text-[var(--ink-primary)]">
               {refreshing
                 ? 'Gemini Examiner is crafting 10 fresh syllabus questions...'
                 : 'Gemini is loading tailored mastery questions...'}
             </p>
-            <p className="text-xs text-[#7A7C75] max-w-sm text-center">
+            <p className="text-xs text-[var(--ink-muted)] max-w-sm text-center">
               Calibrating questions against official textbook principles, formulas, and syllabus depth.
             </p>
           </div>
@@ -227,7 +227,7 @@ export function MasteryQuizModal({
                 setError(null)
                 setLoading(true)
               }}
-              className="bg-[#C85A43] text-white rounded-xl"
+              className="bg-[var(--accent-warm)] text-white rounded-xl"
             >
               Retry
             </Button>
@@ -237,20 +237,20 @@ export function MasteryQuizModal({
           /* SCORE & RESULTS SUMMARY VIEW                                             */
           /* ========================================================================= */
           <div className="py-6 space-y-6 animate-in fade-in duration-300">
-            <div className="p-6 rounded-2xl bg-white border border-[#E5E3DB] text-center space-y-3 shadow-xs">
+            <div className="p-6 rounded-2xl bg-canvas border border-border-subtle text-center space-y-3 shadow-xs">
               <div
                 className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center ${
                   scoreResult.percent >= 70
-                    ? 'bg-[#52715D]/15 text-[#52715D]'
-                    : 'bg-[#C85A43]/15 text-[#C85A43]'
+                    ? 'bg-[var(--accent-sage)]/15 text-[var(--accent-sage)]'
+                    : 'bg-[var(--accent-warm)]/15 text-[var(--accent-warm)]'
                 }`}
               >
                 <Award className="w-8 h-8" />
               </div>
-              <h3 className="font-serif text-3xl font-bold text-[#171817]">
+              <h3 className="font-serif text-3xl font-bold text-[var(--ink-primary)]">
                 {scoreResult.percent}% Score
               </h3>
-              <p className="text-sm text-[#7A7C75]">
+              <p className="text-sm text-[var(--ink-muted)]">
                 You answered {scoreResult.correct} of {scoreResult.total} questions correctly.
                 {scoreResult.percent >= 70
                   ? ' Topic Capsule Mastered! Syllabus progress updated.'
@@ -260,7 +260,7 @@ export function MasteryQuizModal({
 
             {/* Questions Review Breakdown */}
             <div className="space-y-4">
-              <h4 className="font-serif text-lg font-semibold text-[#171817]">
+              <h4 className="font-serif text-lg font-semibold text-[var(--ink-primary)]">
                 Answer Review &amp; Explanations
               </h4>
               <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
@@ -277,7 +277,7 @@ export function MasteryQuizModal({
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="font-semibold text-[#171817]">
+                        <span className="font-semibold text-[var(--ink-primary)]">
                           Q{idx + 1}. {q.question}
                         </span>
                         {isCorrect ? (
@@ -290,11 +290,11 @@ export function MasteryQuizModal({
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-[#7A7C75]">
-                        <strong className="text-[#171817]">Correct Answer:</strong>{' '}
+                      <p className="text-xs text-[var(--ink-muted)]">
+                        <strong className="text-[var(--ink-primary)]">Correct Answer:</strong>{' '}
                         {q.options[q.correctIndex]}
                       </p>
-                      <p className="text-xs text-[#52715D] bg-white/70 p-2.5 rounded-lg border border-black/5 flex items-start gap-1.5">
+                      <p className="text-xs text-[var(--accent-sage)] bg-white/70 p-2.5 rounded-lg border border-black/5 flex items-start gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                         <span><strong>Concept &amp; Explanation:</strong> {q.explanation}</span>
                       </p>
@@ -304,21 +304,21 @@ export function MasteryQuizModal({
               </div>
             </div>
 
-            <div className="pt-4 border-t border-[#E5E3DB] flex items-center justify-between gap-3 flex-wrap">
+            <div className="pt-4 border-t border-[var(--border-subtle)] flex items-center justify-between gap-3 flex-wrap">
               <Button
                 variant="outline"
                 onClick={() => fetchQuiz(true)}
                 disabled={refreshing}
-                className="border-[#52715D]/40 text-[#52715D] hover:bg-[#F0F6F2] hover:border-[#52715D] px-5 py-2.5 rounded-xl font-medium shadow-xs flex items-center gap-2 cursor-pointer text-xs transition-all"
+                className="border-[#52715D]/40 text-[var(--accent-sage)] hover:bg-[#F0F6F2] hover:border-[#52715D] px-5 py-2.5 rounded-xl font-medium shadow-xs flex items-center gap-2 cursor-pointer text-xs transition-all"
               >
                 {refreshing ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#52715D]" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-sage)]" />
                     <span>Crafting Questions...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-[#52715D]" />
+                    <Sparkles className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
                     <span>Generate More Questions</span>
                   </>
                 )}
@@ -326,7 +326,7 @@ export function MasteryQuizModal({
 
               <Button
                 onClick={onClose}
-                className="bg-[#C85A43] hover:bg-[#a84530] text-white px-7 py-3 rounded-xl font-medium shadow-xs cursor-pointer"
+                className="bg-[var(--accent-warm)] hover:bg-[#a84530] text-white px-7 py-3 rounded-xl font-medium shadow-xs cursor-pointer"
               >
                 Back to Dashboard
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -350,10 +350,10 @@ export function MasteryQuizModal({
                       onClick={() => setCurrentIndex(idx)}
                       className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         isCurrent
-                          ? 'bg-[#C85A43] text-white shadow-xs scale-105'
+                          ? 'bg-[var(--accent-warm)] text-white shadow-xs scale-105'
                           : isAnswered
-                          ? 'bg-[#52715D] text-white'
-                          : 'bg-[#E5E3DB]/60 text-[#7A7C75] hover:bg-[#E5E3DB]'
+                          ? 'bg-[var(--accent-sage)] text-white'
+                          : 'bg-[#E5E3DB]/60 text-[var(--ink-muted)] hover:bg-[#E5E3DB]'
                       }`}
                     >
                       {idx + 1}
@@ -363,15 +363,15 @@ export function MasteryQuizModal({
               </div>
 
               {/* Current Question Card */}
-              <div className="p-5 sm:p-6 rounded-2xl bg-white border border-[#E5E3DB] space-y-4 shadow-xs">
-                <div className="flex items-center justify-between text-xs text-[#7A7C75]">
-                  <span className="font-semibold uppercase tracking-wider text-[#C85A43]">
+              <div className="p-5 sm:p-6 rounded-2xl bg-white border border-[var(--border-subtle)] space-y-4 shadow-xs">
+                <div className="flex items-center justify-between text-xs text-[var(--ink-muted)]">
+                  <span className="font-semibold uppercase tracking-wider text-[var(--accent-warm)]">
                     Question {currentIndex + 1} of {questions.length}
                   </span>
                   <span className="italic">{currentQ.conceptTested}</span>
                 </div>
 
-                <h3 className="font-serif text-lg sm:text-xl font-semibold text-[#171817] leading-relaxed">
+                <h3 className="font-serif text-lg sm:text-xl font-semibold text-[var(--ink-primary)] leading-relaxed">
                   {currentQ.question}
                 </h3>
 
@@ -387,15 +387,15 @@ export function MasteryQuizModal({
                         onClick={() => handleSelectOption(currentIndex, optIdx)}
                         className={`w-full p-4 rounded-xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
                           isSelected
-                            ? 'border-[#C85A43] bg-[#F6E5DF]/40 text-[#171817] ring-2 ring-[#C85A43]/20 shadow-xs'
-                            : 'border-[#E5E3DB] bg-[#FDFCF7] text-[#171817] hover:border-[#C85A43]/40 hover:bg-white'
+                            ? 'border-[var(--accent-warm)] bg-[#EEF5FA]/40 text-[var(--ink-primary)] ring-2 ring-[var(--accent-warm)]/20 shadow-xs'
+                            : 'border-[var(--border-subtle)] bg-[#FDFCF7] text-[var(--ink-primary)] hover:border-[var(--accent-warm)]/40 hover:bg-white'
                         }`}
                       >
                         <span
                           className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                             isSelected
-                              ? 'bg-[#C85A43] text-white'
-                              : 'bg-[#E5E3DB] text-[#7A7C75]'
+                              ? 'bg-[var(--accent-warm)] text-white'
+                              : 'bg-[#E5E3DB] text-[var(--ink-muted)]'
                           }`}
                         >
                           {optionLetter}
@@ -413,7 +413,7 @@ export function MasteryQuizModal({
                   variant="outline"
                   disabled={currentIndex === 0}
                   onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                  className="rounded-xl border-[#E5E3DB] text-[#171817]"
+                  className="rounded-xl border-[var(--border-subtle)] text-[var(--ink-primary)]"
                 >
                   <ArrowLeft className="w-4 h-4 mr-1.5" />
                   Previous
@@ -423,7 +423,7 @@ export function MasteryQuizModal({
                   {currentIndex < questions.length - 1 ? (
                     <Button
                       onClick={() => setCurrentIndex((prev) => prev + 1)}
-                      className="bg-[#52715D] hover:bg-[#435e4d] text-white rounded-xl px-5"
+                      className="bg-[var(--accent-sage)] hover:bg-[#435e4d] text-white rounded-xl px-5"
                     >
                       Next Question
                       <ArrowRight className="w-4 h-4 ml-1.5" />
@@ -432,7 +432,7 @@ export function MasteryQuizModal({
                     <Button
                       disabled={!allAnswered || submitting}
                       onClick={handleSubmitQuiz}
-                      className="bg-[#C85A43] hover:bg-[#a84530] text-white rounded-xl px-6 font-medium shadow-xs"
+                      className="bg-[var(--accent-warm)] hover:bg-[#a84530] text-white rounded-xl px-6 font-medium shadow-xs"
                     >
                       {submitting ? (
                         <>

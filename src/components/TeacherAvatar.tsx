@@ -77,18 +77,18 @@ export const TeacherAvatar: React.FC<TeacherAvatarProps> = ({
             <div
               className={`w-20 h-20 md:w-24 md:h-24 rounded-full border flex items-center justify-center shadow-sm transition-all duration-200 ${
                 isSpeaking
-                  ? "bg-coral-soft/50 border-coral/30"
+                  ? "bg-accent-warm-soft/50 border-accent-warm/30"
                   : isUserTalking
                   ? "bg-botanical-soft/60 border-botanical/30"
                   : "bg-canvas border-border"
               }`}
             >
               {isSpeaking ? (
-                <Volume2 className="w-10 h-10 md:w-12 md:h-12 text-coral animate-pulse" strokeWidth={1.5} />
+                <Volume2 className="w-10 h-10 md:w-12 md:h-12 text-accent-warm animate-pulse" strokeWidth={1.5} />
               ) : isUserTalking ? (
                 <Mic className="w-10 h-10 md:w-12 md:h-12 text-botanical animate-pulse" strokeWidth={1.5} />
               ) : isConnecting ? (
-                <Sparkles className="w-10 h-10 md:w-12 md:h-12 text-amber-500 animate-spin" strokeWidth={1.5} />
+                <Sparkles className="w-10 h-10 md:w-12 md:h-12 text-accent-ochre animate-spin" strokeWidth={1.5} />
               ) : (
                 <Sparkles className="w-10 h-10 md:w-12 md:h-12 text-ink-primary" strokeWidth={1.5} />
               )}

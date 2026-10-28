@@ -32,6 +32,9 @@ interface GeneratedModule {
   diagram_type?: string
   what_to_make?: string
   diagram_svg?: string
+  chapter_flowchart?: string
+  textbook_definitions?: Array<{ concept: string; definition: string; si_units?: string }>
+  textbook_examples?: Array<{ title: string; scenario: string }>
   visual_lesson_plan?: any
 }
 
@@ -61,6 +64,45 @@ function cleanJsonString(raw: string): string {
     }
   }
   return s
+}
+
+function buildEnhancedVisualPlanAndDirective(cap: any, visualPlan: any) {
+  const enhancedVisualPlan = {
+    ...visualPlan,
+    diagram_idea: cap.visual_ideas || cap.diagram_idea || '',
+    diagram_type: cap.diagram_type || 'vector_svg_diagram',
+    what_to_make: cap.what_to_make || cap.diagram_description || '',
+    diagram_svg: cap.diagram_svg || '',
+    chapter_flowchart: cap.chapter_flowchart || '',
+    textbook_definitions: cap.textbook_definitions || [],
+    textbook_examples: cap.textbook_examples || [],
+  }
+
+  const defsList = Array.isArray(cap.textbook_definitions) ? cap.textbook_definitions : []
+  const defsText = defsList
+    .map((d: any) => `- ${d.concept || ''}: "${d.definition || ''}" ${d.si_units ? `[SI Unit: ${d.si_units}]` : ''}`)
+    .filter(Boolean)
+    .join('\n')
+
+  const examplesList = Array.isArray(cap.textbook_examples) ? cap.textbook_examples : []
+  const examplesText = examplesList
+    .map((e: any) => `- ${e.title || ''}: ${e.scenario || ''}`)
+    .filter(Boolean)
+    .join('\n')
+
+  const diagramDirective = `
+TEXTBOOK GROUNDING & MANDATORY TEACHING DIRECTIVES:
+- Textbook Diagram / Figure: ${cap.what_to_make || cap.visual_ideas || 'Scientific Vector Diagram'}
+- Diagram Type: ${cap.diagram_type || 'vector_svg_diagram'}
+- What to Draw: ${cap.what_to_make || ''}
+${cap.chapter_flowchart ? `- Chapter Multi-Level Flowchart: ${cap.chapter_flowchart}\n- FLOWCHART DIRECTIVE: Call write_chalkboard(action="draw_flowchart", content="${cap.chapter_flowchart}") to visually organize the concepts on the board!\n` : ''}
+${defsText ? `- Verbatim Textbook Definitions:\n${defsText}\n` : ''}
+${examplesText ? `- Textbook Concrete Examples:\n${examplesText}\n` : ''}
+- MANDATORY VISUAL TIMING: On Step 1 (Intuition) or Step 2 (Definition), you MUST immediately dispatch write_chalkboard(action="render_svg_diagram", title="${cap.title}", svg=..., caption="${cap.visual_ideas || ''}") or draw_flowchart! Do NOT wait for student to ask!
+- EXPLANATION MANDATE: When explaining definitions, formulas, and algebraic transitions, unpack the physical meaning and the "why" behind each line out loud. Never merely recite the text!
+`
+
+  return { enhancedVisualPlan, diagramDirective }
 }
 
 // ---------------------------------------------------------------------------
@@ -443,24 +485,44 @@ REQUIREMENTS FOR ULTRA-DETAILED TOPIC CAPSULES (4 to 8 capsules total, covering 
    - Precise scientific definitions and verbatim laws with SI units
    - Complete step-by-step mathematical derivations or proofs with all algebraic transitions
    - Key caveats, real-life intuitive analogies, and physical intuition
-8. "worked_examples": Array of 2 to 4 fully solved board numerical exemplars formatted as:
+8. "textbook_definitions": Array of exact textbook definitions with formal laws, SI units, and key clauses:
    [
      {
-       "problem": "Authentic board exam numerical problem",
+       "concept": "Name of concept",
+       "definition": "Verbatim textbook definition/law",
+       "si_units": "SI unit or formula dimension"
+     }
+   ]
+9. "textbook_examples": Array of 2 to 3 concrete real-life examples and illustrations straight from the textbook syllabus:
+   [
+     {
+       "title": "Example name",
+       "scenario": "Concrete physical or mathematical scenario described in the textbook"
+     }
+   ]
+10. "chapter_flowchart": Multi-level hierarchical flowchart or branch tree representing the concept and its place in the chapter. Format with branch syntax:
+    "Root Concept -> Branch A | Branch B; Branch A -> Subtopic 1 | Subtopic 2" (or "cycle: Step 1 -> Step 2 -> Step 3" for cycles).
+11. "worked_examples": Array of 2 to 4 fully solved textbook & board numerical exemplars (especially for Maths/Physics/Chemistry) formatted as:
+   [
+     {
+       "problem": "Authentic textbook exercise or board exam numerical problem",
        "given": "Extracted given values with SI units",
        "formula": "Governing scientific formula or theorem",
        "substitution": "Exact values substituted into the formula",
-       "calculation": "Step-by-step mathematical calculation steps",
+       "calculation": "Step-by-step mathematical calculation steps (for scratchpad/rough work)",
        "finalAnswer": "Final boxed solution",
        "unit": "SI unit or mathematical conclusion"
      }
    ]
-9. "common_misconceptions": Array of 3-5 specific mistakes students frequently make in board exams on this topic.
-10. "ai_system_prompt_context": Socratic teaching cadence cues, real-life intuitive hook, guided questions, and chalkboard formatting directives.
-11. "visual_ideas": Comprehensive visual and image generation ideas explaining what visual schematics, apparatus setups, or interactive diagrams best reinforce this specific capsule.
-12. "diagram_type": The exact type of diagram to render on the chalkboard (e.g. "vector_svg_diagram", "mafs_kinematics_graph", "flowchart", "circuit_schematic", "ray_optics", "chemical_apparatus", "anatomical_structure").
-13. "what_to_make": Detailed blueprint of "what to make in this" diagram: list the exact components, geometric shapes, coordinate axes, labeled arrows, numerical values, and pedagogical highlights to draw.
-14. "diagram_svg": Complete, production-ready, clean vector SVG markup (<svg viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" xmlns="http://www.w3.org/2000/svg">...</svg>) with contrasting stroke colors, dark background compatibility, and clear text labels.
+12. "common_misconceptions": Array of 3-5 specific mistakes students frequently make in board exams on this topic.
+13. "ai_system_prompt_context": Step-by-step Socratic teaching directives for the live tutor:
+    - Exactly when to draw the diagram on the board: "Call render_svg_diagram during Step 1/Step 2."
+    - Exact check question to ask the student.
+    - Deep explanation cues: Why each formula/step works, underlying physical mechanisms, and mathematical proofs.
+14. "visual_ideas": Comprehensive visual and image generation ideas explaining what visual schematics, apparatus setups, or interactive diagrams best reinforce this specific capsule.
+15. "diagram_type": The exact type of diagram to render on the chalkboard (e.g. "vector_svg_diagram", "mafs_kinematics_graph", "flowchart", "circuit_schematic", "ray_optics", "chemical_apparatus", "anatomical_structure").
+16. "what_to_make": Detailed blueprint of "what to make in this" diagram: list the exact textbook figure number, components, geometric shapes, coordinate axes, labeled arrows, numerical values, and pedagogical highlights to draw.
+17. "diagram_svg": Complete, production-ready, clean vector SVG markup (<svg viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" xmlns="http://www.w3.org/2000/svg">...</svg>) with contrasting stroke colors, dark background compatibility, and clear text labels.
 
 OUTPUT FORMAT:
 Respond with ONLY a valid JSON object matching this schema (do NOT include conversational prose outside JSON):
@@ -475,6 +537,20 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
       "key_concepts": ["string"],
       "success_criteria": "string",
       "chapter_notes": "string",
+      "textbook_definitions": [
+        {
+          "concept": "string",
+          "definition": "string",
+          "si_units": "string"
+        }
+      ],
+      "textbook_examples": [
+        {
+          "title": "string",
+          "scenario": "string"
+        }
+      ],
+      "chapter_flowchart": "string (Root -> Branch A | Branch B; Branch A -> Sub 1 | Sub 2)",
       "worked_examples": [
         {
           "problem": "string",
@@ -564,17 +640,7 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
               }
             )
 
-            const enhancedVisualPlan = {
-              ...visualPlan,
-              diagram_idea: cap.visual_ideas || (cap as any).diagram_idea || '',
-              diagram_type: cap.diagram_type || 'vector_svg_diagram',
-              what_to_make: cap.what_to_make || (cap as any).diagram_description || '',
-              diagram_svg: cap.diagram_svg || '',
-            }
-
-            const diagramDirective = cap.what_to_make || cap.visual_ideas
-              ? `\n\nBOARD DIAGRAM SPECIFICATION (WHAT TO MAKE ON BOARD):\n- Diagram Idea: ${cap.visual_ideas || (cap as any).diagram_idea || 'Scientific Vector Diagram'}\n- Diagram Type: ${cap.diagram_type || 'vector_svg_diagram'}\n- What to Make: ${cap.what_to_make || (cap as any).diagram_description || ''}\n`
-              : ''
+            const { enhancedVisualPlan, diagramDirective } = buildEnhancedVisualPlanAndDirective(cap, visualPlan)
 
             await adminSupabase.from('syllabus_modules').insert({
               curriculum_id: targetCurrId,
@@ -600,16 +666,10 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
           for (let idx = 0; idx < existingModules.length; idx++) {
             const exMod = existingModules[idx]
             const matchingCap = capsules[idx] || capsules[0]
-            const enhancedVisualPlan = {
-              ...(exMod.visual_lesson_plan || {}),
-              diagram_idea: matchingCap.visual_ideas || (matchingCap as any).diagram_idea || '',
-              diagram_type: matchingCap.diagram_type || 'vector_svg_diagram',
-              what_to_make: matchingCap.what_to_make || (matchingCap as any).diagram_description || '',
-              diagram_svg: matchingCap.diagram_svg || '',
-            }
-            const diagramDirective = matchingCap.what_to_make || matchingCap.visual_ideas
-              ? `\n\nBOARD DIAGRAM SPECIFICATION (WHAT TO MAKE ON BOARD):\n- Diagram Idea: ${matchingCap.visual_ideas || (matchingCap as any).diagram_idea || 'Scientific Vector Diagram'}\n- Diagram Type: ${matchingCap.diagram_type || 'vector_svg_diagram'}\n- What to Make: ${matchingCap.what_to_make || (matchingCap as any).diagram_description || ''}\n`
-              : ''
+            const { enhancedVisualPlan, diagramDirective } = buildEnhancedVisualPlanAndDirective(
+              matchingCap,
+              exMod.visual_lesson_plan || {}
+            )
             await adminSupabase
               .from('syllabus_modules')
               .update({
@@ -669,17 +729,7 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
             }
           )
 
-          const enhancedVisualPlan = {
-            ...visualPlan,
-            diagram_idea: cap.visual_ideas || (cap as any).diagram_idea || '',
-            diagram_type: cap.diagram_type || 'vector_svg_diagram',
-            what_to_make: cap.what_to_make || (cap as any).diagram_description || '',
-            diagram_svg: cap.diagram_svg || '',
-          }
-
-          const diagramDirective = cap.what_to_make || cap.visual_ideas
-            ? `\n\nBOARD DIAGRAM SPECIFICATION (WHAT TO MAKE ON BOARD):\n- Diagram Idea: ${cap.visual_ideas || (cap as any).diagram_idea || 'Scientific Vector Diagram'}\n- Diagram Type: ${cap.diagram_type || 'vector_svg_diagram'}\n- What to Make: ${cap.what_to_make || (cap as any).diagram_description || ''}\n`
-            : ''
+          const { enhancedVisualPlan, diagramDirective } = buildEnhancedVisualPlanAndDirective(cap, visualPlan)
 
           await adminSupabase.from('syllabus_modules').insert({
             curriculum_id: targetCurrId,
@@ -780,6 +830,10 @@ REQUIREMENTS FOR ULTRA-DETAILED CURRICULUM DECOMPOSITION:
    - key_concepts: Array of 4-6 core mathematical formulas, principles, definitions with SI units, or scientific laws
    - success_criteria: A verifiable test problem or numerical the student must solve to demonstrate board mastery
    - chapter_notes: Structured, comprehensive notes (800-1400 words) with definitions, formulas, and step-by-step proofs
+   - chapter_flowchart: Multi-level hierarchical flowchart or branch tree representing the concept and chapter hierarchy ("Root -> Branch A | Branch B; Branch A -> Sub 1 | Sub 2")
+   - textbook_definitions: Array of verbatim textbook definitions with formal laws and SI units
+   - textbook_examples: Array of concrete illustrative real-life examples from the syllabus
+   - worked_examples: Array of 2 to 4 fully solved textbook & board numerical exemplars (especially for Maths) with Given, Formula, Substitution, Scratchpad calculations, and Boxed answer
    - ai_system_prompt_context: Detailed pedagogical context, everyday physical analogies, step-by-step whiteboard layout, common student pitfalls, and Socratic voice-teaching cues for the AI tutor.
    - visual_ideas: Comprehensive visual and image generation ideas explaining what visual schematics, apparatus setups, or interactive diagrams best reinforce this capsule.
    - diagram_type: The exact diagram type (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)
@@ -806,6 +860,31 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
           "key_concepts": ["string"],
           "success_criteria": "string",
           "chapter_notes": "string",
+          "chapter_flowchart": "string (Root -> Branch A | Branch B)",
+          "textbook_definitions": [
+            {
+              "concept": "string",
+              "definition": "string",
+              "si_units": "string"
+            }
+          ],
+          "textbook_examples": [
+            {
+              "title": "string",
+              "scenario": "string"
+            }
+          ],
+          "worked_examples": [
+            {
+              "problem": "string",
+              "given": "string",
+              "formula": "string",
+              "substitution": "string",
+              "calculation": "string",
+              "finalAnswer": "string",
+              "unit": "string"
+            }
+          ],
           "ai_system_prompt_context": "string",
           "visual_ideas": "string (visual and image generation idea)",
           "diagram_type": "string (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)",
@@ -982,17 +1061,7 @@ async function commitCurriculumsToDatabase({
         }
       )
 
-      const enhancedVisualPlan = {
-        ...visualPlan,
-        diagram_idea: mod.visual_ideas || (mod as any).diagram_idea || '',
-        diagram_type: mod.diagram_type || 'vector_svg_diagram',
-        what_to_make: mod.what_to_make || (mod as any).diagram_description || '',
-        diagram_svg: mod.diagram_svg || '',
-      }
-
-      const diagramDirective = mod.what_to_make || mod.visual_ideas
-        ? `\n\nBOARD DIAGRAM SPECIFICATION (WHAT TO MAKE ON BOARD):\n- Diagram Idea: ${mod.visual_ideas || (mod as any).diagram_idea || 'Scientific Vector Diagram'}\n- Diagram Type: ${mod.diagram_type || 'vector_svg_diagram'}\n- What to Make: ${mod.what_to_make || (mod as any).diagram_description || ''}\n`
-        : ''
+      const { enhancedVisualPlan, diagramDirective } = buildEnhancedVisualPlanAndDirective(mod, visualPlan)
 
       const { error: modErr } = await adminSupabase.from('syllabus_modules').insert({
         curriculum_id: insertedCurr.id,

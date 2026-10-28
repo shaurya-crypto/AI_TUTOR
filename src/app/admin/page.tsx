@@ -176,8 +176,8 @@ export default function AdminPortalPage() {
   const [gateError, setGateError] = useState<string | null>(null)
   const [gateLoading, setGateLoading] = useState(false)
 
-  // Active Studio Mode: 'notes' | 'syllabus'
-  const [activeStudioTab, setActiveStudioTab] = useState<'notes' | 'syllabus'>('notes')
+  // Active Studio Mode: 'notes' | 'syllabus' | 'pyq'
+  const [activeStudioTab, setActiveStudioTab] = useState<'notes' | 'syllabus' | 'pyq'>('notes')
 
   // Ingestion Form State (Syllabus Mode)
   const [selectedBoard, setSelectedBoard] = useState<EducationalBoard>('CBSE')
@@ -190,6 +190,19 @@ export default function AdminPortalPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [rawText, setRawText] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Past Year Questions (PYQ) Studio State
+  const [pyqBoard, setPyqBoard] = useState<EducationalBoard>('CBSE')
+  const [pyqClass, setPyqClass] = useState<string>('Class 10')
+  const [pyqSubject, setPyqSubject] = useState<string>('Science')
+  const [pyqTargetChapterId, setPyqTargetChapterId] = useState<string>('')
+  const [pyqFiles, setPyqFiles] = useState<File[]>([])
+  const [pyqRawText, setPyqRawText] = useState<string>('')
+  const [isProcessingPyq, setIsProcessingPyq] = useState<boolean>(false)
+  const [pyqProcessingStep, setPyqProcessingStep] = useState<string>('')
+  const [chapterPyqs, setChapterPyqs] = useState<any | null>(null)
+  const [isLoadingPyqs, setIsLoadingPyqs] = useState<boolean>(false)
+  const pyqFileInputRef = useRef<HTMLInputElement | null>(null)
 
   // Chapter Notes Studio State
   const [notesBoard, setNotesBoard] = useState<EducationalBoard>('CBSE')
@@ -713,6 +726,140 @@ export default function AdminPortalPage() {
       c.category.toLowerCase() === notesSubject.toLowerCase()
   )
 
+  // Matching chapters for PYQ Studio
+  const matchingChaptersForPyq = publishedCurriculums.filter(
+    (c) =>
+      c.board === pyqBoard &&
+      c.class_level === pyqClass &&
+      c.category.toLowerCase() === pyqSubject.toLowerCase()
+  )
+
+  // Fetch PYQ Practice Set for selected chapter
+  const fetchChapterPyqs = async (curriculumId: string) => {
+    if (!curriculumId) {
+      setChapterPyqs(null)
+      return
+    }
+    setIsLoadingPyqs(true)
+    try {
+      const res = await fetch(`/api/curriculum/pyq?curriculumId=${curriculumId}`)
+      const json = await res.json()
+      if (json.success && Array.isArray(json.pyqs) && json.pyqs.length > 0) {
+        setChapterPyqs(json.pyqs[0])
+      } else {
+        setChapterPyqs(null)
+      }
+    } catch (err) {
+      console.error('Failed to fetch PYQs:', err)
+      setChapterPyqs(null)
+    } finally {
+      setIsLoadingPyqs(false)
+    }
+  }
+
+  // Handle PYQ File Selection
+  const handlePyqFilesChange = (files: FileList | null) => {
+    if (!files) return
+    const newFiles = Array.from(files)
+    setPyqFiles((prev) => [...prev, ...newFiles])
+  }
+
+  const handleRemovePyqFile = (index: number) => {
+    setPyqFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handlePyqDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const newFiles = Array.from(e.dataTransfer.files)
+      setPyqFiles((prev) => [...prev, ...newFiles])
+    }
+  }
+
+  // Process & Synthesize PYQs
+  const handleSynthesizePyqs = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pyqTargetChapterId) {
+      setErrorMsg('Please select a target chapter to associate past year questions with.')
+      return
+    }
+    if (pyqFiles.length === 0 && (!pyqRawText || pyqRawText.trim().length < 10)) {
+      setErrorMsg('Please upload at least one past year question paper or paste the questions.')
+      return
+    }
+
+    const targetChapter = publishedCurriculums.find((c) => c.id === pyqTargetChapterId)
+    if (!targetChapter) {
+      setErrorMsg('Selected chapter not found in library.')
+      return
+    }
+
+    setIsProcessingPyq(true)
+    setErrorMsg(null)
+    setSuccessMsg(null)
+    setPyqProcessingStep('Reading and parsing past year exam papers...')
+
+    const ticker = setInterval(() => {
+      setPyqProcessingStep((prev) => {
+        if (prev.includes('Reading')) return 'Classifying board questions by chapter...'
+        if (prev.includes('Classifying')) return 'Synthesizing authentic step-by-step marking schemes...'
+        if (prev.includes('Synthesizing')) return 'Compiling high-yield Chapter PYQ Practice Set...'
+        return 'Finalizing and indexing into database...'
+      })
+    }, 3200)
+
+    try {
+      const formData = new FormData()
+      formData.append('curriculumId', pyqTargetChapterId)
+      formData.append('board', pyqBoard)
+      formData.append('classLevel', pyqClass)
+      formData.append('category', pyqSubject)
+      formData.append('chapterTitle', targetChapter.title)
+      formData.append('rawText', pyqRawText)
+
+      for (const file of pyqFiles) {
+        formData.append('files', file)
+      }
+
+      const res = await fetch('/api/curriculum/pyq', {
+        method: 'POST',
+        body: formData,
+      })
+      const json = await res.json()
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to synthesize PYQ practice set.')
+      }
+
+      setSuccessMsg(`Successfully compiled ${json.practiceSetCount} past year questions for "${targetChapter.title}"!`)
+      setPyqFiles([])
+      setPyqRawText('')
+      await fetchChapterPyqs(pyqTargetChapterId)
+    } catch (err: any) {
+      console.error('PYQ synthesis error:', err)
+      setErrorMsg(err?.message || 'An error occurred while compiling the PYQ practice set.')
+    } finally {
+      clearInterval(ticker)
+      setIsProcessingPyq(false)
+      setPyqProcessingStep('')
+    }
+  }
+
+  // Delete PYQ Practice Set
+  const handleDeletePyqSet = async (pyqId: string) => {
+    if (!window.confirm('Are you sure you want to delete this Chapter PYQ Practice Set?')) return
+    try {
+      const res = await fetch(`/api/curriculum/pyq?id=${pyqId}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (json.success) {
+        setChapterPyqs(null)
+        setSuccessMsg('PYQ Practice Set deleted.')
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to delete PYQ set.')
+    }
+  }
+
   // Filter Published Curriculums for Library
   const filteredLibrary = publishedCurriculums.filter((c) => {
     if (libraryBoardFilter !== 'all' && c.board !== libraryBoardFilter) return false
@@ -935,6 +1082,19 @@ export default function AdminPortalPage() {
               <BookOpen className="w-4 h-4" />
               <span>Full Syllabus Outline Ingestion</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveStudioTab('pyq')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-semibold font-mono uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                activeStudioTab === 'pyq'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'bg-[#0c1610] text-emerald-400 hover:bg-emerald-950/80 border border-emerald-900/60'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Past Year Papers (PYQ) Studio</span>
+            </button>
           </div>
 
           <span className="text-[11px] font-mono text-emerald-400/80 bg-emerald-950 px-3 py-1 rounded-full border border-emerald-800/60 hidden sm:inline-block">
@@ -993,7 +1153,7 @@ export default function AdminPortalPage() {
                             {board.name}
                           </span>
                           {isQueued ? (
-                            <span className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <span className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40">
                               In Ingestion Queue (Coming Soon)
                             </span>
                           ) : (
@@ -1097,8 +1257,8 @@ export default function AdminPortalPage() {
                             <span>Book Attached {selectedCurr.notesSourceFilename ? `(${selectedCurr.notesSourceFilename})` : ''}</span>
                           </span>
                         ) : (
-                          <span className="text-[10px] font-mono font-semibold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                          <span className="text-[10px] font-mono font-semibold px-2.5 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-sky-400" />
                             <span>Needs Book Ingestion (Upload PDF below)</span>
                           </span>
                         )}
@@ -1376,7 +1536,7 @@ export default function AdminPortalPage() {
                             {board.name}
                           </span>
                           {board.status === 'queued' ? (
-                            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40">
                               In Ingestion Queue (Coming Soon)
                             </span>
                           ) : (
@@ -1701,8 +1861,8 @@ export default function AdminPortalPage() {
                               {(mod.visual_ideas || mod.what_to_make || mod.diagram_type) && (
                                 <div className="p-3 rounded-xl bg-[#09150d] border border-emerald-700/60 space-y-2">
                                   <div className="flex items-center justify-between gap-1.5">
-                                    <span className="text-[10.5px] font-mono font-bold text-amber-300 flex items-center gap-1.5">
-                                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                    <span className="text-[10.5px] font-mono font-bold text-sky-300 flex items-center gap-1.5">
+                                      <Sparkles className="w-3.5 h-3.5 text-sky-400" />
                                       <span>Diagram & Visual Blueprint</span>
                                     </span>
                                     {mod.diagram_type && (
@@ -1743,6 +1903,314 @@ export default function AdminPortalPage() {
                 )
               })}
             </div>
+          </section>
+        )}
+
+        {/* ------------------------------------------------------------------- */}
+        {/* WORKFLOW 3: PAST YEAR QUESTIONS (PYQ) BOARD STUDIO */}
+        {/* ------------------------------------------------------------------- */}
+        {activeStudioTab === 'pyq' && (
+          <section className="p-6 md:p-8 rounded-3xl bg-[#112017] border border-emerald-900/80 shadow-xl space-y-6">
+            <div className="flex items-center justify-between border-b border-emerald-900/60 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-800/80 border border-emerald-600/40 flex items-center justify-center text-white shadow-xs">
+                  <Sparkles className="w-5 h-5 text-emerald-200" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white tracking-tight">
+                    Past Year Questions (PYQ) Board Studio
+                  </h2>
+                  <p className="text-xs text-emerald-300/70 font-mono">
+                    Upload multiple past papers (.pdf) or paste questions. AI analyzes, classifies by chapter, and compiles authentic practice sets with marks and marking schemes.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSynthesizePyqs} className="space-y-6">
+              {/* Selectors Grid: Board, Class, Subject, Chapter */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Board */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-emerald-300 uppercase tracking-wider font-mono">
+                    Board Curriculum
+                  </label>
+                  <select
+                    value={pyqBoard}
+                    onChange={(e) => {
+                      setPyqBoard(e.target.value as EducationalBoard)
+                      setPyqTargetChapterId('')
+                      setChapterPyqs(null)
+                    }}
+                    className="w-full h-11 px-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-sm text-emerald-100 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer"
+                  >
+                    <option value="CBSE">CBSE (NCERT Standard)</option>
+                    <option value="ICSE">ICSE / ISC (Selina Standard)</option>
+                    <option value="IB">IB (MYP / DP Standards)</option>
+                  </select>
+                </div>
+
+                {/* Class */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-emerald-300 uppercase tracking-wider font-mono">
+                    Class Level (6 to 12)
+                  </label>
+                  <select
+                    value={pyqClass}
+                    onChange={(e) => {
+                      setPyqClass(e.target.value)
+                      setPyqTargetChapterId('')
+                      setChapterPyqs(null)
+                    }}
+                    className="w-full h-11 px-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-sm text-emerald-100 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer"
+                  >
+                    {['Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12'].map((cls) => (
+                      <option key={cls} value={cls}>
+                        {cls}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Subject */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-emerald-300 uppercase tracking-wider font-mono">
+                    Subject / Discipline
+                  </label>
+                  <select
+                    value={pyqSubject}
+                    onChange={(e) => {
+                      setPyqSubject(e.target.value)
+                      setPyqTargetChapterId('')
+                      setChapterPyqs(null)
+                    }}
+                    className="w-full h-11 px-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-sm text-emerald-100 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer"
+                  >
+                    {PRESET_SUBJECTS.map((sub) => (
+                      <option key={sub} value={sub}>
+                        {sub}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Target Chapter */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-emerald-300 uppercase tracking-wider font-mono">
+                    Target Chapter ({matchingChaptersForPyq.length} available)
+                  </label>
+                  <select
+                    value={pyqTargetChapterId}
+                    onChange={(e) => {
+                      const id = e.target.value
+                      setPyqTargetChapterId(id)
+                      fetchChapterPyqs(id)
+                    }}
+                    className="w-full h-11 px-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-sm text-emerald-100 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer"
+                  >
+                    <option value="">-- Select Chapter --</option>
+                    {matchingChaptersForPyq.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {formatChapterTitleDisplay(c)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Multi-File Upload Dropzone */}
+              <div className="space-y-3">
+                <label className="text-xs font-semibold text-emerald-300 uppercase tracking-wider font-mono flex items-center justify-between">
+                  <span>Upload Past Year Papers (.pdf, .txt, .docx) - Multiples Allowed</span>
+                  <span className="text-[11px] text-emerald-400/80 font-normal">
+                    {pyqFiles.length} file(s) selected
+                  </span>
+                </label>
+
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handlePyqDrop}
+                  onClick={() => pyqFileInputRef.current?.click()}
+                  className="border-2 border-dashed border-emerald-800/80 hover:border-emerald-500/80 bg-[#0c1610]/80 rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 group"
+                >
+                  <UploadCloud className="w-8 h-8 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <p className="text-sm font-medium text-emerald-200">
+                    Click or drag & drop past exam papers here (select multiple files)
+                  </p>
+                  <p className="text-xs text-emerald-400/70 font-mono">
+                    CBSE 2024, 2023, 2022 Question Papers, Marking Schemes, or Topic Question Sets (.pdf)
+                  </p>
+                  <input
+                    ref={pyqFileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.txt,.md"
+                    className="hidden"
+                    onChange={(e) => handlePyqFilesChange(e.target.files)}
+                  />
+                </div>
+
+                {/* Selected Files List */}
+                {pyqFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {pyqFiles.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-950/80 border border-emerald-700/60 text-xs text-emerald-200 flex items-center gap-2"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="font-mono truncate max-w-[220px]">{file.name}</span>
+                        <span className="text-[10px] text-emerald-400/70 font-mono">
+                          ({(file.size / 1024).toFixed(0)} KB)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemovePyqFile(idx)
+                          }}
+                          className="text-emerald-400 hover:text-rose-400 transition-colors p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Alternative: Raw Question Text */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-emerald-300 uppercase tracking-wider font-mono">
+                  Or Paste Question Paper Content (Optional)
+                </label>
+                <textarea
+                  value={pyqRawText}
+                  onChange={(e) => setPyqRawText(e.target.value)}
+                  placeholder="Paste past board exam questions with years and marks here..."
+                  rows={4}
+                  className="w-full p-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-xs text-emerald-100 placeholder-emerald-800 focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                disabled={isProcessingPyq || !pyqTargetChapterId}
+                className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isProcessingPyq ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>{pyqProcessingStep || 'Synthesizing PYQ Board Practice Set...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Synthesize Chapter PYQ Practice Set & Save to Database</span>
+                  </>
+                )}
+              </Button>
+            </form>
+
+            {/* Existing PYQ Practice Set Inspection Panel */}
+            {pyqTargetChapterId && (
+              <div className="mt-8 pt-6 border-t border-emerald-900/60 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <h3 className="text-sm font-semibold text-white tracking-tight">
+                      Current Chapter PYQ Set:{' '}
+                      <span className="text-emerald-300">
+                        {matchingChaptersForPyq.find((c) => c.id === pyqTargetChapterId)?.title}
+                      </span>
+                    </h3>
+                  </div>
+
+                  {chapterPyqs && (
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-emerald-900/80 text-emerald-200 border-emerald-700/60 font-mono text-xs">
+                        {chapterPyqs.practice_set?.length || 0} Questions
+                      </Badge>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDeletePyqSet(chapterPyqs.id)}
+                        className="text-rose-400 hover:text-white hover:bg-rose-950/60 h-8 px-2 text-xs"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1" />
+                        Delete Set
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {isLoadingPyqs ? (
+                  <div className="p-6 text-center text-xs font-mono text-emerald-400/70">
+                    Loading chapter PYQs from database...
+                  </div>
+                ) : chapterPyqs && chapterPyqs.practice_set?.length > 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-xs text-emerald-300/80 font-mono">
+                      Source: {chapterPyqs.source_filename || 'Uploaded papers'} | Indexed on:{' '}
+                      {new Date(chapterPyqs.created_at).toLocaleDateString()}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
+                      {chapterPyqs.practice_set.map((q: any, i: number) => (
+                        <div
+                          key={q.id || i}
+                          className="p-4 rounded-xl bg-[#0c1610] border border-emerald-900/70 space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] font-mono border border-emerald-800/80 font-bold">
+                              {q.year || 'Board Exam'}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 text-[10px] font-mono">
+                                {q.marks || 1} Mark{(q.marks || 1) > 1 ? 's' : ''}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 text-[10px] font-mono border border-blue-800/60">
+                                {q.type || 'SA'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-white font-medium leading-relaxed">
+                            {q.question}
+                          </p>
+
+                          {q.formula && (
+                            <p className="text-[11px] font-mono text-emerald-400/90 bg-[#112017] p-1.5 rounded">
+                              Formula: {q.formula}
+                            </p>
+                          )}
+
+                          <div className="pt-2 border-t border-emerald-950 text-[11px] text-emerald-300/80 space-y-1 font-sans">
+                            <strong className="text-[10px] font-mono text-emerald-400 uppercase">
+                              Marking Scheme:
+                            </strong>
+                            <p className="text-xs text-emerald-200/90 whitespace-pre-line">
+                              {q.solution}
+                            </p>
+                            {q.final_answer && (
+                              <p className="text-xs font-semibold text-emerald-300 pt-1">
+                                Boxed Answer: {q.final_answer}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center rounded-xl bg-[#0c1610] border border-emerald-900/60 text-xs font-mono text-emerald-400/70">
+                    No past year questions synthesized for this chapter yet. Upload past year papers above to generate the Practice Set!
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -1865,8 +2333,8 @@ export default function AdminPortalPage() {
                             <span>Book Attached {curr.notesSourceFilename ? `(${curr.notesSourceFilename})` : ''}</span>
                           </span>
                         ) : (
-                          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3 text-amber-400" />
+                          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 text-sky-400" />
                             <span>Needs Book Ingestion</span>
                           </span>
                         )}

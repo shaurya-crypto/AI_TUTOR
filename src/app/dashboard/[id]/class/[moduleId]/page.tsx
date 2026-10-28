@@ -14,9 +14,9 @@ const WhiteboardWorkspace = dynamicImport(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-[#FFFFFF] text-[#171817] space-y-3 font-serif">
-        <div className="w-8 h-8 border-2 border-[#52715D] border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm tracking-wide text-[#555852]">Preparing AI Classroom Stage...</p>
+      <div className="w-full h-full flex flex-col items-center justify-center bg-[#FFFFFF] text-[var(--ink-primary)] space-y-3 font-serif">
+        <div className="w-8 h-8 border-2 border-[var(--accent-sage)] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm tracking-wide text-[var(--ink-secondary)]">Preparing AI Classroom Stage...</p>
       </div>
     ),
   }
@@ -118,17 +118,56 @@ function buildConceptMicroDossiers(
 ): string {
   if (!keyConcepts || keyConcepts.length === 0) return ''
 
+  const visualPlan = activeModule?.visual_lesson_plan || {}
+  const textbookDefs = visualPlan?.textbook_definitions || []
+  const textbookExamples = visualPlan?.textbook_examples || []
+  const chapterFlowchart = visualPlan?.chapter_flowchart || ''
+  const diagramType = visualPlan?.diagram_type || 'vector_svg_diagram'
+  const whatToMake = visualPlan?.what_to_make || visualPlan?.diagram_description || ''
+
   return keyConcepts
     .map((rawConcept, idx) => {
       const conceptName = rawConcept.replace(/^[\s\(\[\{]+|[\s\)\]\}]+$/g, '').trim()
       const ex1 = workedExamples[idx] || workedExamples[0]
       const misc = misconceptions[idx] || misconceptions[0]
 
+      const matchingDef = Array.isArray(textbookDefs)
+        ? textbookDefs.find(
+            (d: any) =>
+              (d.concept || '').toLowerCase().includes(conceptName.toLowerCase()) ||
+              conceptName.toLowerCase().includes((d.concept || '').toLowerCase())
+          )
+        : null
+
+      const matchingExample = Array.isArray(textbookExamples)
+        ? textbookExamples.find(
+            (e: any) =>
+              (e.title || '').toLowerCase().includes(conceptName.toLowerCase()) ||
+              conceptName.toLowerCase().includes((e.title || '').toLowerCase())
+          )
+        : null
+
+      const defStr = matchingDef
+        ? ` | Textbook Def: "${matchingDef.definition}" ${matchingDef.si_units ? `[SI Unit: ${matchingDef.si_units}]` : ''}`
+        : ''
+      const exStr = matchingExample
+        ? ` | Textbook Example: ${matchingExample.title} (${matchingExample.scenario})`
+        : ''
+
       const q1 = ex1?.problem
-        ? `Q: ${ex1.problem} | Ans: ${ex1.finalAnswer || ''} ${ex1.unit || ''}`
+        ? `Model Problem: ${ex1.problem} (Given: ${ex1.given || ''}, Formula: ${ex1.formula || ''}, Ans: ${ex1.finalAnswer || ''} ${ex1.unit || ''})`
         : `Q: State the law/definition for ${conceptName}. | Ans: Standard ${resolvedBoard} formulation.`
 
-      return `Concept ${idx + 1} "${conceptName}": ${q1}${misc ? ` [Caution: ${misc}]` : ''}`
+      const diagCue =
+        idx === 0 && (whatToMake || chapterFlowchart)
+          ? `\n   * Mandatory Visual: ${
+              chapterFlowchart
+                ? `draw_flowchart("${chapterFlowchart}")`
+                : `render_svg_diagram("${conceptName}", type="${diagramType}", what="${whatToMake.slice(0, 120)}")`
+            }`
+          : ''
+
+      return `Concept ${idx + 1} "${conceptName}":\n   * Core: ${q1}${defStr}${exStr}${misc ? ` [Caution: ${misc}]` : ''}${diagCue}`
     })
     .join('\n')
 }
@@ -230,6 +269,16 @@ export default function ModuleClassroomPage() {
     sendBoardContext,
     sendTextMessage,
   } = useGeminiLive()
+
+  const [selectedPyqQuestion, setSelectedPyqQuestion] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search)
+      const q = searchParams.get('pyqQuestion')
+      if (q) setSelectedPyqQuestion(decodeURIComponent(q))
+    }
+  }, [])
 
   // Google Gemini 3.8 Live Avatar configuration state
   const [avatarConfig, setAvatarConfig] = useState<LiveAvatarConfig | null>(null)
@@ -1661,7 +1710,9 @@ ${careerHook ? `- ${careerHook}\n` : ''}${favoriteHook ? `- ${favoriteHook}\n` :
       ? `Hallo ${studentFirstName || ''}! Willkommen zur heutigen Stunde über ${resolvedTitle}.`
       : `Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}! Let us dive right in.`
 
-    const kickoffPrompt = isCompletedModule
+    const kickoffPrompt = selectedPyqQuestion
+      ? `[SESSION START - BOARD EXAM PYQ PRACTICE]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that today we are tackling an authentic Board Exam Past Year Question on ${resolvedTitle}: "${selectedPyqQuestion}". YOU MUST CALL write_chalkboard(action="draw_question", content="Board PYQ: ${selectedPyqQuestion}", color="amber") RIGHT NOW IN THIS TURN! Then ask me what our given values or strategy should be in ${studentPreferredLanguage}. HARD STOP: Wait for my answer!`
+      : isCompletedModule
       ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that I have completed this capsule, and ask if I would like a quick review of any concept or if I am ready for the quiz in ${studentPreferredLanguage}. HARD STOP: Wait for my answer.`
       : isResumed
       ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". In 2-3 sentences, introduce the intuition. YOU MUST CALL write_chalkboard(action="draw_note", content="Intuition: <everyday hook>", color="botanical") RIGHT NOW IN THIS TURN! Then ask: "Did you understand this intuition?" or a relatable check. HARD STOP: Wait for my response! Do NOT teach the entire concept in one turn!`
@@ -1685,7 +1736,11 @@ STUDENT: ${studentFirstName ? studentFirstName + ' | ' : ''}${resolvedClassLevel
     ? ` | Final Capsule (Next: #${nextChapterInfo.orderIndex} "${nextChapterInfo.chapterTitle}")`
     : ''
 }
-${boardContinuationNote}
+${boardContinuationNote}${
+  selectedPyqQuestion
+    ? `\n========================================================================================\nCURRENT BOARD EXAM PYQ PRACTICE FOCUS:\n========================================================================================\nThe student is solving this authentic Board Exam question: "${selectedPyqQuestion}".\n1. Lay out the problem on the board using write_chalkboard(action="draw_question", content="Board PYQ: ${selectedPyqQuestion}", color="amber").\n2. Solve step-by-step with the student using the Trio Combo (Given -> Formula -> Substitution -> Scratchpad in [ROUGH_WORK] -> Boxed Answer).\n`
+    : ''
+}
 
 ========================================================================================
 MANDATORY CHALKBOARD WRITING INVARIANT (HIGHEST PRIORITY - ZERO EXCEPTIONS):
@@ -1697,115 +1752,93 @@ The student learns visually by watching notes appear as you speak.
 DO NOT wait for the student to tell you "write on board". Write automatically on EVERY TURN!
 
 MANDATORY TOOL CALL DISPATCH BY CADENCE STEP:
-- Step 1 (Intuition): write_chalkboard(action="draw_note", content="Intuition: <everyday hook>", color="botanical")
-- Step 2 (Definition): write_chalkboard(action="draw_highlight_box", content="Definition: <exact formal law and SI units>", color="coral")
-- Step 3 (Example): write_chalkboard(action="draw_note", content="Example: <concrete daily application>", color="blue")
-- Step 4 (Model Problem):
+- Step 1 (Intuition): write_chalkboard(action="draw_note", content="Intuition: <everyday physical hook>", color="botanical")
+- Step 2 (Definition & Deep Explanation): write_chalkboard(action="draw_highlight_box", content="Definition: <exact formal law and SI units>", color="coral")
+- Step 3 (Example & Intuitive Breakdown): write_chalkboard(action="draw_note", content="Example: <concrete daily application>", color="blue")
+- Step 4 (Tutor-Solved Model Problem - Trio Combo):
     * write_chalkboard(action="draw_note", content="Problem: <Question>", color="coral")
-    * write_chalkboard(action="draw_step", content="Given: <values> | Formula: <formula>", color="amber")
-    * write_chalkboard(action="draw_step", content="Calculation: <working> | Boxed Answer: <answer>", color="botanical")
-- Step 5 (Checkpoint Question): write_chalkboard(action="draw_question", content="Q: <Authentic question for student>", color="amber")
+    * write_chalkboard(action="draw_step", content="Given: <values> | Method: <chosen theorem>", color="amber")
+    * write_chalkboard(action="draw_rough_work", content="Rough: <scratch calculations / intermediate algebra>", color="white")
+    * write_chalkboard(action="draw_step", content="Derivation: <key line> | Boxed Answer: <answer with SI units>", color="botanical")
+    * If problem involves functions, roots, tangents, or motion: plot_mathematical_graph(formula="...", domain="...", range="...", title="...", callout="...")
+- Step 5 (Board-Exam Checkpoint Question): write_chalkboard(action="draw_question", content="Q: <Authentic question for student>", color="amber")
 - Step 6 (Student Answer Evaluation):
     * write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact words>", color="blue")
     * write_chalkboard(action="draw_answer_verdict", content="Verdict: <evaluation & scoring>", color="botanical")
 
-CORE INVARIANTS:
-1. SESSION START (SPEAK FIRST):
-   - You MUST speak FIRST immediately upon connection! Do NOT wait for ${studentFirstName || 'the student'} to speak.
-   - Greet ${studentFirstName || 'the student'} warmly by name strictly in ${studentPreferredLanguage}: "${langGreeting}"
-   - Begin Concept 1 with Step 1 (Intuition only). Write intuition to board immediately!
+========================================================================================
+MANDATORY VISUAL & DIAGRAM TIMING INVARIANT (PROACTIVE AUTOMATIC DRAWING):
+========================================================================================
+On Step 1 (Intuition) or Step 2 (Definition) of each concept, you MUST execute the visual representation on the chalkboard:
+- If a chapter flowchart is specified: Call write_chalkboard(action="draw_flowchart", content="<Flowchart String>")
+- If a scientific or mathematical diagram is specified: Call write_chalkboard(action="render_svg_diagram", title="<Concept>", caption="<Caption>") or plot_mathematical_graph(...)
+- NEVER wait for the student to ask for a diagram. Draw it automatically on cue!
+- If the student ever asks to see a diagram, visual, picture, or flowchart: Immediately call render_svg_diagram or draw_flowchart!
 
-2. STRICT SOCRATIC CADENCE (NEVER LECTURE CONTINUOUSLY IN ONE SHOT):
-   - CRITICAL PEDAGOGICAL RULE: NEVER speak more than 2-3 sentences in a single turn without pausing and asking the student a question or check!
-   - NEVER dump an entire concept (intuition + visual + definition + examples + numerical + questions) in one shot!
-   - Teach one micro-step at a time. After every micro-step: write to the board, ask a basic question or understanding check, and HARD STOP to wait for the student's reply!
+========================================================================================
+DEEP CONCEPTUAL EXPLANATION INVARIANT (ANTI-TELEPROMPTER RULE):
+========================================================================================
+1. NEVER MERELY RECITE BOARD TEXT ALOUD:
+   - The chalkboard is your visual summary; your voice is the human mentor.
+   - Do NOT act like a teleprompter or narrator reading out the exact text you just wrote!
+   - When presenting a definition, formula, or law:
+     a) State the law clearly.
+     b) IMMEDIATELY spend 1-2 spoken sentences unpacking the deep physical or conceptual "why" — explain what is actually happening under the hood, the tangible mechanism, and what the equation reveals in real life.
+     c) Highlight the intuitive pitfall or common board-exam misconception.
+2. EXPLAIN THE "WHY" FOR EVERY STEP:
+   - When transitioning between algebraic steps, derivations, or formulas: Speak the reasoning out loud!
+   - Never just say "Next line is 2x minus 4". Explain WHY you factored, WHY you substituted, WHY a minus sign appeared, or WHAT physical condition eliminated a variable.
 
-3. NEVER ADVANCE TO THE NEXT CONCEPT WITHOUT CONFIRMING ANSWER & UNDERSTANDING:
-   - Stay on the current concept's whiteboard page. Do NOT switch pages or advance concepts mid-explanation or when solving.
-   - When the student answers a question:
-     a) Write the student's answer: write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
-     b) Write the evaluation: write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring & correction>", color="botanical")
-     c) If incorrect: Warmly explain why, provide a helpful hint, and ask them to try again. NEVER advance on an incorrect answer!
-     d) If correct: Warmly congratulate them, and ask: "Are you fully confident with this concept, and ready to move to Concept X?"
-     e) HARD STOP: Wait for the student to explicitly confirm ("yes", "clear", "next", "understood", "chalo")!
-     f) ONLY WHEN THE STUDENT EXPLICITLY CONFIRMS:
-        - write_chalkboard(action="concept_done", content="<Current Concept Name>")
-        - write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
+========================================================================================
+HEAVY & COMPLEX MATHEMATICS SOLVER (TRIO COMBO ENGINE):
+========================================================================================
+For senior school mathematics (Classes 9-12 CBSE, ICSE, IB), handle complex problems with dynamic mastery:
+1. CALCULUS (Derivatives, Integrals, Limits):
+   - Recognize form (chain rule, quotient rule, integration by parts, substitution u = g(x)).
+   - Vocalize the strategic choice out loud before writing.
+   - Write main derivation line with action="draw_step". Put scratch manipulations (du, cancellations, factoring) into action="draw_rough_work".
+   - Conclude with boxed answer.
+   - ALWAYS call plot_mathematical_graph(formula="...", title="...", callout="...") to show the function curve, tangent, or area under curve in the in-board graph box!
+2. ALGEBRA & QUADRATICS / POLYNOMIALS:
+   - Formulate standard form ax^2 + bx + c = 0.
+   - Choose optimal Trio method (Factoring combo, Discriminant/Quadratic formula combo, or Completing the square combo) and explain why it is chosen.
+   - Compute discriminant in rough work (action="draw_rough_work").
+   - Box the roots with action="draw_step".
+   - ALWAYS plot the parabola on the board using plot_mathematical_graph(formula="...", points="...", title="...") showing where it intersects the x-axis!
+3. TRIGONOMETRY & IDENTITIES:
+   - State LHS. Announce strategy (e.g. converting to sin/cos or using Pythagorean identity).
+   - Show progressive step-by-step reduction using draw_step.
+4. KINEMATICS & PHYSICS NUMERICALS:
+   - Extract Given data with SI units + Target unknown + Sign convention.
+   - Select kinematic equation. Solve scratch math in rough work, write formal derivation on board.
+   - Call plot_mathematical_graph to render the velocity-time or displacement curve in the moveable graph box!
 
-4. WRITE ON THE BOARD WHILE SPEAKING (TOOL CALLS):
-   - You have the write_chalkboard tool (also accessible as write_board). Always use it to write notes, definitions, formulas, and steps on the chalkboard.
-   - For every definition, example, flowchart, numerical, or note:
-     a) Explain the intuitive concept and mechanism FIRST in conversational spoken ${studentPreferredLanguage} (2 sentences max).
-     b) READ the exact definition, example, formula, flowchart step, or numerical aloud word-for-word so the student hears it clearly.
-     c) WRITE it to the chalkboard step-by-step using separate, progressive tool calls: write_chalkboard(action="draw_note", content="...", color="..."). NEVER dump an entire multi-line block, derivation, question, or flowchart all at once!
-   - You MUST speak aloud what you are writing while you write it (examples, definitions, flowcharts, steps). Never write or draw in silence.
+========================================================================================
+MOVEABLE IN-BOARD GRAPH CONTAINER DIRECTIVE:
+========================================================================================
+Graphs render inside a high-precision Mafs vector box directly on the student's chalkboard.
+The student can drag/move it anywhere across the board, zoom in/out, view coordinates, toggle dy/dx derivatives, or dock it alongside notes.
+Whenever explaining a function, curve, wave, or kinematic motion:
+Call: plot_mathematical_graph(formula="...", domain="[min,max]", range="[min,max]", title="...", callout="...", points="...")
+(Formula examples: "x^2 - 4", "2*x + 3", "sin(x)", "-4.9*x^2 + 20*x", "x^3 - 3*x")
 
-5. RE-TEACHING & DOUBTS (HIGHEST PRIORITY):
-   - When a student asks to re-teach, re-explain, says "teach again", "explain again", "didn't understand", "why", "no", "repeat", or expresses ANY confusion:
-     a) NEVER say "perfect let's move on", "excellent let's continue", or advance to the next concept!
-     b) DO NOT call concept_done or concept_focus. STAY ON THE CURRENT WHITEBOARD PAGE.
-     c) Respond with warm encouragement in ${studentPreferredLanguage} (${studentPreferredLanguage === 'Hinglish' ? '"Arre bilkul! Isko ek aur simple aur fresh real-life example se todte hain."' : studentPreferredLanguage === 'Hindi' ? '"बिल्कुल! आइए इसे एक नए और सरल उदाहरण से समझते हैं।"' : '"Of course! Let us break this down from a fresh angle."'}).
-     d) Explain WHY the concept works using a completely fresh, tangible real-life analogy.
-     e) Add a clarification note: write_chalkboard(action="draw_note", content="Breakdown: <fresh simplified intuition>", color="amber")
-     f) Ask: ${studentPreferredLanguage === 'Hinglish' ? '"Ab samajh aaya yeh concept?"' : studentPreferredLanguage === 'Hindi' ? '"क्या अब यह स्पष्ट है?"' : '"Does this way of looking at it make sense to you now?"'}
-     g) Only advance when the student explicitly confirms understanding.
-
-DYNAMIC VISUAL & GRAPH ENGINE DIRECTIVES:
-1. Mathematical, Kinematic & Coordinate Graphs:
-   Call plot_mathematical_graph(formula="...", domain="[min,max]", range="[min,max]", title="...", callout="...")
-   (Powered by Mafs.dev pure vector React/SVG engine. Fully customizable for every curve, line, or kinematic motion. NEVER render static images for graphs).
-2. Scientific Diagrams & Physical Models:
-   Call render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision'>...</svg>", caption="...")
-   (Generate authentic vector SVG markup tailored to the exact topic, with clear shapes, contrasting labels, and leader lines. Never use fixed templates).
-
-PEDAGOGICAL CADENCE (STRICT 6-STEP INTERACTIVE SEQUENCE PER CONCEPT):
-
-STEP 1 - INTUITION & EVERYDAY HOOK (2-3 sentences max):
-1. Provide an everyday physical scenario or relatable hook before any equations.
-2. write_chalkboard(action="draw_note", content="Intuition: <everyday real-world hook>", color="botanical")
-3. Ask a relatable check: ${studentPreferredLanguage === 'Hinglish' ? '"Yeh daily life mein observe kiya hai aapne? Samajh aaya yeh intuition?"' : studentPreferredLanguage === 'Hindi' ? '"क्या आपने इसे दैनिक जीवन में देखा है? क्या यह स्पष्ट है?"' : '"Have you ever observed this in daily life? Did this intuitive idea make sense?"'}
-4. HARD STOP: Wait for student's voice response before moving to Step 2!
-
-STEP 2 - SCIENTIFIC DEFINITION & CORE LAW (2-3 sentences max):
-1. Acknowledge student's reply warmly. Explain the precise scientific law or definition and SI units.
-2. write_chalkboard(action="draw_highlight_box", content="Definition: <exact scientific formulation with SI units>", color="coral")
-3. If visual or graph illustrates this concept: call render_svg_diagram(...) or plot_mathematical_graph(...).
-4. Ask a basic topic question: ${studentPreferredLanguage === 'Hinglish' ? '"Kya yeh formal definition aur SI unit clear hai? Koi doubt isme?"' : studentPreferredLanguage === 'Hindi' ? '"क्या यह परिभाषा और मात्रक स्पष्ट हैं?"' : '"Does this formal definition and its SI unit make clear sense to you?"'}
-5. HARD STOP: Wait for student's voice response before moving to Step 3!
-
-STEP 3 - CONCRETE EXAMPLE & BASIC TOPIC QUESTION (2-3 sentences max):
-1. Acknowledge student's reply. Explain 1 clear concrete practical application illustrating the definition.
-2. write_chalkboard(action="draw_note", content="Example: <concrete illustration addressing common pitfalls>", color="blue")
-3. Ask an interactive basic question related to the topic: (e.g. "So if we double the force, what will happen to acceleration?", "Can you tell me which factor is directly proportional here?").
-4. HARD STOP: Wait for student to answer this basic question!
-
-STEP 4 - TUTOR-SOLVED MODEL PROBLEM (STEP-BY-STEP WORKED DEMO):
-1. Acknowledge and praise student's answer.
-2. Walk through a model problem step-by-step on the board:
-   - write_chalkboard(action="draw_note", content="Model Problem: <Question text>", color="coral")
-   - write_chalkboard(action="draw_step", content="Given: <values with units> | Formula: <formula>", color="amber")
-   - write_chalkboard(action="draw_step", content="Calculation: <step-by-step substitution> | Boxed Answer: <final result with SI units>", color="botanical")
-3. Ask: ${studentPreferredLanguage === 'Hinglish' ? '"Yeh whiteboard ka step-by-step calculation samajh aaya? Kahi koi confusion?"' : studentPreferredLanguage === 'Hindi' ? '"क्या यह हल और गणना चरण आपको समझ आया?"' : '"Did you understand how we solved this problem step-by-step on the board?"'}
-4. HARD STOP: Wait for student confirmation before moving to Step 5!
-
-STEP 5 - BOARD-EXAM CHECKPOINT QUESTION FOR STUDENT:
-1. Pose an authentic board-exam question for the student to solve:
-   write_chalkboard(action="draw_question", content="Q: <Targeted board exam question testing this concept>", color="amber")
-2. Read the question aloud: ${studentPreferredLanguage === 'Hinglish' ? '"Chalo ab whiteboard par yeh question dekho aur solve karke batao kya answer aayega!"' : studentPreferredLanguage === 'Hindi' ? '"अब श्यामपट्ट पर दिया गया प्रश्न हल करने का प्रयास कीजिए और उत्तर बताइए।"' : '"Now, give this board question a try on your own! Look at the whiteboard and tell me your answer."'}
-3. HARD STOP: Wait for student's voice response.
-
-STEP 6 - EVALUATION & STRICT CONFIRMATION BEFORE NEXT CONCEPT:
-1. Evaluate student reply:
-   write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
-   write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring & correction>", color="botanical")
-2. If incorrect: Explain where the error occurred warmly, give a targeted hint, and ask them to try again. Stay on current page!
-3. If correct: Praise warmly, and ask:
-   ${studentPreferredLanguage === 'Hinglish' ? '"Shabash! Bilkul sahi answer! Kya yeh concept poori tarah clear hai aur hum next concept par chalein?"' : studentPreferredLanguage === 'Hindi' ? '"बहुत बढ़िया! बिल्कुल सही उत्तर! क्या यह संकल्पना पूरी तरह स्पष्ट है और हम अगली संकल्पना पर आगे बढ़ें?"' : '"Outstanding! That is the exact correct answer. Are you fully confident with this concept, and ready to move to the next concept?"'}
-4. HARD STOP: Wait for student to say "yes", "understood", "clear", "next", "chalo"!
-5. ONLY WHEN STUDENT CONFIRMS UNDERSTANDING:
-   a) write_chalkboard(action="concept_done", content="<Current Concept Name>")
-   b) write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
-   c) If all concepts completed, call: conclude_and_open_quiz(summary="...")
+========================================================================================
+STRICT SOCRATIC CADENCE & UNDERSTANDING CHECKS:
+========================================================================================
+1. SESSION START:
+   - Speak FIRST upon connection! Warmly greet ${studentFirstName || 'the student'} in ${studentPreferredLanguage}: "${langGreeting}"
+   - Begin Concept 1 with Step 1 (Intuition). Write intuition to board immediately!
+2. MAX 2-3 SENTENCES PER TURN:
+   - Teach in bite-sized conversational chunks. Never dump intuition, definition, examples, and math in one turn.
+   - After each micro-step: write on the board, ask an intuitive check or basic question, and HARD STOP to wait for the student!
+3. NEVER ADVANCE WITHOUT CONFIRMING UNDERSTANDING:
+   - When the student replies, evaluate and write their answer + verdict to the board.
+   - If incorrect: explain why with a fresh analogy, give a hint, and re-ask. Stay on the current page!
+   - If correct: Praise warmly, and ask: "Are you fully confident with this concept, and ready to move to Concept X?"
+   - HARD STOP: Wait for explicit student confirmation ("yes", "clear", "next", "understood", "chalo")!
+   - Only then call:
+     * write_chalkboard(action="concept_done", content="<Current Concept Name>")
+     * write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
 
 QUIZ TIMING RULE:
 - NEVER mention the 10-MCQ quiz or call conclude_and_open_quiz until ALL concepts have been fully taught, solved, and marked done with concept_done!
@@ -1933,31 +1966,54 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           else if (action === 'draw_flowchart') chalkboardRef.current.drawFlowchart(content, color)
           else if (action === 'draw_table' || action === 'table') chalkboardRef.current.drawTable?.(content)
           else if (action === 'draw_geometry' || action === 'geometry') chalkboardRef.current.drawGeometry?.(content)
-          else if (action === 'draw_graph' || action === 'graph') {
-            chalkboardRef.current.drawGraph(content)
-            const pipeParts = (content || '').split('|').map((s: string) => s.trim())
-            let formula = ''
+          else if (action === 'draw_graph' || action === 'graph' || action === 'plot_mathematical_graph') {
+            let formula = 'x^2 - 4'
             let domain: [number, number] = [-5, 5]
             let range: [number, number] = [-5, 5]
             let title = 'Graph'
             let callout = ''
             let points = ''
-            pipeParts.forEach((p: string) => {
-              if (p.startsWith('formula=')) formula = p.substring(8).trim()
-              else if (p.startsWith('title=')) title = p.substring(6).trim()
-              else if (p.startsWith('callout=')) callout = p.substring(8).trim()
-              else if (p.startsWith('points=')) points = p.substring(7).trim()
-              else if (p.startsWith('domain=')) {
-                const m = p.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
-                if (m) domain = [parseFloat(m[1]), parseFloat(m[2])]
-              } else if (p.startsWith('range=')) {
-                const m = p.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
-                if (m) range = [parseFloat(m[1]), parseFloat(m[2])]
-              } else if (!formula && (p.includes('x') || p.includes('^') || p.includes('sin') || p.includes('cos'))) {
-                formula = p
+
+            if (typeof content === 'object' && content !== null) {
+              formula = content.formula || 'x^2 - 4'
+              title = content.title || `Graph: y = ${formula}`
+              callout = content.callout || ''
+              points = typeof content.points === 'string' ? content.points : (Array.isArray(content.points) ? JSON.stringify(content.points) : '')
+              if (content.domain) {
+                if (Array.isArray(content.domain)) domain = [Number(content.domain[0]), Number(content.domain[1])]
+                else if (typeof content.domain === 'string') {
+                  const m = content.domain.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
+                  if (m) domain = [parseFloat(m[1]), parseFloat(m[2])]
+                }
               }
-            })
-            if (!formula) formula = pipeParts[0] || 'x^2 - 4'
+              if (content.range) {
+                if (Array.isArray(content.range)) range = [Number(content.range[0]), Number(content.range[1])]
+                else if (typeof content.range === 'string') {
+                  const m = content.range.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
+                  if (m) range = [parseFloat(m[1]), parseFloat(m[2])]
+                }
+              }
+              chalkboardRef.current.drawGraph?.(`formula=${formula} | title=${title}`)
+            } else if (typeof content === 'string') {
+              chalkboardRef.current.drawGraph(content)
+              const pipeParts = (content || '').split('|').map((s: string) => s.trim())
+              pipeParts.forEach((p: string) => {
+                if (p.startsWith('formula=')) formula = p.substring(8).trim()
+                else if (p.startsWith('title=')) title = p.substring(6).trim()
+                else if (p.startsWith('callout=')) callout = p.substring(8).trim()
+                else if (p.startsWith('points=')) points = p.substring(7).trim()
+                else if (p.startsWith('domain=')) {
+                  const m = p.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
+                  if (m) domain = [parseFloat(m[1]), parseFloat(m[2])]
+                } else if (p.startsWith('range=')) {
+                  const m = p.match(/\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\]/)
+                  if (m) range = [parseFloat(m[1]), parseFloat(m[2])]
+                } else if (!formula && (p.includes('x') || p.includes('^') || p.includes('sin') || p.includes('cos'))) {
+                  formula = p
+                }
+              })
+              if (!formula) formula = pipeParts[0] || 'x^2 - 4'
+            }
             setActiveGraph({ formula, domain, range, title, callout, points })
           }
           else if (action === 'draw_numerical' || action === 'numerical' || action === 'worked_example' || action === 'solve') {
@@ -2120,7 +2176,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
 
           {/* Call Controls or Start Call Bar */}
           {isCallActive ? (
-            <div className="p-3 rounded-2xl bg-white border border-[#E5E3DB] shadow-sm flex items-center justify-between">
+            <div className="p-3 rounded-2xl bg-white border border-[var(--border-subtle)] shadow-sm flex items-center justify-between">
               <CallControls
                 isMuted={isMuted}
                 userVolume={userVolume}
@@ -2129,12 +2185,12 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
               />
             </div>
           ) : (
-            <div className="p-4 rounded-2xl bg-white border border-[#E5E3DB] shadow-sm space-y-3">
+            <div className="p-4 rounded-2xl bg-white border border-[var(--border-subtle)] shadow-sm space-y-3">
               <Button
                 id="start-module-spoken-class-btn"
                 onClick={handleStartClass}
                 disabled={isLoadingLesson}
-                className="w-full h-12 bg-[#C85A43] hover:bg-[#A94734] text-white rounded-xl font-medium text-base shadow-sm cursor-pointer flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
+                className="w-full h-12 bg-[var(--accent-warm)] hover:bg-[var(--accent-warm-hover)] text-white rounded-xl font-medium text-base shadow-sm cursor-pointer flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
               >
                 <Play className="w-5 h-5 fill-current" />
                 <span>
@@ -2146,7 +2202,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                 </span>
               </Button>
               <p className="text-center text-[11px] text-[#7A7C75] flex items-center justify-center gap-1.5 font-mono">
-                <Mic className="w-3.5 h-3.5 text-[#52715D]" strokeWidth={1.5} />
+                <Mic className="w-3.5 h-3.5 text-[var(--accent-sage)]" strokeWidth={1.5} />
                 <span>
                   {isCompletedBefore || moduleCompletedSuccess
                     ? 'Ask doubts anytime • Revisit concepts or take quiz'
@@ -2158,17 +2214,17 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                   id="manual-mark-completed-btn"
                   variant="outline"
                   onClick={() => markModuleAsCompleted()}
-                  className="w-full bg-white hover:bg-[#F0F6F2] border border-[#C8EBD2] text-[#52715D] rounded-xl text-xs font-semibold py-2 h-9 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                  className="w-full bg-white hover:bg-[var(--accent-sage-soft)] border border-[var(--accent-sage-border)] text-[var(--accent-sage)] rounded-xl text-xs font-semibold py-2 h-9 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
                   title="Mark this capsule as completed and unlock next capsule"
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#52715D]" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
                   <span>Mark Capsule Complete & Unlock Next</span>
                 </Button>
               )}
               <button
                 type="button"
                 onClick={handleBackToDashboard}
-                className="w-full text-center text-xs text-[#7A7C75] hover:text-[#171817] font-medium py-1 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                className="w-full text-center text-xs text-[#7A7C75] hover:text-[var(--ink-primary)] font-medium py-1 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 title="Return to Student Portal"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
@@ -2179,14 +2235,14 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
 
           {/* Progression Banner: Next Capsule or Chapter Completed */}
           {(isCompletedBefore || moduleCompletedSuccess) && (
-            <div className="p-3.5 rounded-2xl bg-[#F0F6F2] border border-[#C8EBD2] shadow-xs space-y-2">
+            <div className="p-3.5 rounded-2xl bg-[var(--accent-sage-soft)] border border-[var(--accent-sage-border)] shadow-xs space-y-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-[#52715D] font-semibold text-xs">
-                  <CheckCircle2 className="w-4 h-4 text-[#52715D] shrink-0" />
+                <div className="flex items-center gap-1.5 text-[var(--accent-sage)] font-semibold text-xs">
+                  <CheckCircle2 className="w-4 h-4 text-[var(--accent-sage)] shrink-0" />
                   <span>Capsule Mastered!</span>
                 </div>
                 {nextSiblingModule && (
-                  <span className="text-[10px] font-mono text-[#52715D] uppercase">
+                  <span className="text-[10px] font-mono text-[var(--accent-sage)] uppercase">
                     Next: Capsule #{nextSiblingModule.order_index}
                   </span>
                 )}
@@ -2201,7 +2257,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                         chalkboardRef.current.rewriteNotes(chapterNotes)
                       }
                     }}
-                    className="flex-1 bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl text-[11px] font-semibold py-1.5 h-8 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] transition-transform"
+                    className="flex-1 bg-[var(--accent-sage)] hover:bg-[var(--accent-sage-hover)] text-white rounded-xl text-[11px] font-semibold py-1.5 h-8 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] transition-transform"
                     title="Apply clean, AI-optimized master notes directly onto the whiteboard"
                   >
                     <RotateCcw className="w-3 h-3 text-white" />
@@ -2210,10 +2266,10 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                   <Button
                     id="view-clean-notes-modal-btn"
                     onClick={() => setNotesModalOpen(true)}
-                    className="px-3 bg-white hover:bg-[#F8F6F0] border border-[#E5E3DB] text-[#171817] rounded-xl text-[11px] font-semibold py-1.5 h-8 flex items-center justify-center gap-1 cursor-pointer transition-transform"
+                    className="px-3 bg-white hover:bg-[var(--canvas-base)] border border-[var(--border-subtle)] text-[var(--ink-primary)] rounded-xl text-[11px] font-semibold py-1.5 h-8 flex items-center justify-center gap-1 cursor-pointer transition-transform"
                     title="View full clean notes in modal"
                   >
-                    <BookOpen className="w-3 h-3 text-[#52715D]" />
+                    <BookOpen className="w-3 h-3 text-[var(--accent-sage)]" />
                     <span>View Notes</span>
                   </Button>
                 </div>
@@ -2228,7 +2284,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                       router.refresh()
                       router.push(`/dashboard/${userId}/class/${nextSiblingModule.id}`)
                     }}
-                    className="w-full bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl text-xs font-semibold py-2 h-9 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] transition-transform"
+                    className="w-full bg-[var(--accent-sage)] hover:bg-[var(--accent-sage-hover)] text-white rounded-xl text-xs font-semibold py-2 h-9 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] transition-transform"
                   >
                     <span>Start Next Capsule: {nextSiblingModule.title}</span>
                     <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
@@ -2241,22 +2297,22 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                       router.refresh()
                       router.push(`/dashboard/${userId}`)
                     }}
-                    className="w-full bg-white hover:bg-[#F8F6F0] border-[#E5E3DB] text-[#555852] rounded-xl text-xs py-2 h-9 cursor-pointer"
+                    className="w-full bg-white hover:bg-[var(--canvas-base)] border-[var(--border-subtle)] text-[var(--ink-secondary)] rounded-xl text-xs py-2 h-9 cursor-pointer"
                   >
                     <span>Return to Dashboard</span>
                   </Button>
                 </div>
               ) : nextChapterInfo ? (
                 <div className="space-y-2 pt-1">
-                  <div className="p-3 rounded-xl bg-white border border-[#E5E3DB] space-y-1">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-[#52715D]">
+                  <div className="p-3 rounded-xl bg-white border border-[var(--border-subtle)] space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-[var(--accent-sage)]">
                       <span className="uppercase font-bold tracking-wider">Chapter Mastered</span>
                       <span>Next: Chapter #{nextChapterInfo.orderIndex}</span>
                     </div>
-                    <h5 className="text-xs font-semibold text-[#171817] leading-snug">
+                    <h5 className="text-xs font-semibold text-[var(--ink-primary)] leading-snug">
                       {nextChapterInfo.chapterTitle}
                     </h5>
-                    <p className="text-[11px] text-[#555852]">
+                    <p className="text-[11px] text-[var(--ink-secondary)]">
                       Capsule 1: {nextChapterInfo.firstModuleTitle}
                     </p>
                   </div>
@@ -2267,7 +2323,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                         endCall()
                         router.push(`/dashboard/${userId}/class/${nextChapterInfo.firstModuleId}`)
                       }}
-                      className="flex-1 bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl text-xs font-semibold py-2 h-9 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] transition-transform"
+                      className="flex-1 bg-[var(--accent-sage)] hover:bg-[var(--accent-sage-hover)] text-white rounded-xl text-xs font-semibold py-2 h-9 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] transition-transform"
                     >
                       <span>Begin Next Chapter</span>
                       <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
@@ -2279,7 +2335,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                         router.push(`/dashboard/${userId}`)
                       }}
                       variant="outline"
-                      className="bg-white hover:bg-[#F8F6F0] border-[#E5E3DB] text-[#555852] rounded-xl text-xs py-2 h-9 px-3 cursor-pointer"
+                      className="bg-white hover:bg-[var(--canvas-base)] border-[var(--border-subtle)] text-[var(--ink-secondary)] rounded-xl text-xs py-2 h-9 px-3 cursor-pointer"
                     >
                       <span>Dashboard</span>
                     </Button>
@@ -2292,7 +2348,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                     endCall()
                     router.push(`/dashboard/${userId}`)
                   }}
-                  className="w-full bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl text-xs font-semibold py-2 h-9 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] transition-transform"
+                  className="w-full bg-[var(--accent-sage)] hover:bg-[var(--accent-sage-hover)] text-white rounded-xl text-xs font-semibold py-2 h-9 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] transition-transform"
                 >
                   <span>All Chapters Completed! Return to Dashboard</span>
                   <Check className="w-3.5 h-3.5" />
@@ -2303,14 +2359,14 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
 
           {/* Interactive Chapter End Confirmation Banner - Only visible once module is completed */}
           {(isCompletedBefore || moduleCompletedSuccess) && endChapterConfirmPrompt && (
-            <div className="p-4 rounded-2xl bg-white border-2 border-[#52715D]/50 shadow-md space-y-3 animate-in fade-in duration-300">
+            <div className="p-4 rounded-2xl bg-white border-2 border-[var(--accent-sage)]/50 shadow-md space-y-3 animate-in fade-in duration-300">
               <div className="flex items-start gap-2.5">
-                <Sparkles className="w-4 h-4 text-[#52715D] shrink-0 mt-0.5" />
+                <Sparkles className="w-4 h-4 text-[var(--accent-sage)] shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="font-semibold text-xs uppercase font-mono tracking-wider text-[#52715D]">
+                  <h4 className="font-semibold text-xs uppercase font-mono tracking-wider text-[var(--accent-sage)]">
                     Chapter Confirmation
                   </h4>
-                  <p className="text-xs text-[#171817] font-medium mt-1 leading-snug">
+                  <p className="text-xs text-[var(--ink-primary)] font-medium mt-1 leading-snug">
                     {endChapterConfirmPrompt}
                   </p>
                 </div>
@@ -2323,7 +2379,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                     markModuleAsCompleted()
                     handleOpenQuiz()
                   }}
-                  className="flex-1 bg-[#52715D] hover:bg-[#3E5D4B] text-white rounded-xl text-xs font-semibold py-2 h-9 cursor-pointer shadow-xs"
+                  className="flex-1 bg-[var(--accent-sage)] hover:bg-[var(--accent-sage-hover)] text-white rounded-xl text-xs font-semibold py-2 h-9 cursor-pointer shadow-xs"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                   <span>Yes, Take 10 MCQs</span>
@@ -2341,7 +2397,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                       autoDismissMs: 10000,
                     })
                   }}
-                  className="flex-1 bg-white hover:bg-[#F8F6F0] border-[#E5E3DB] text-[#555852] rounded-xl text-xs font-semibold py-2 h-9 cursor-pointer"
+                  className="flex-1 bg-white hover:bg-[var(--canvas-base)] border-[var(--border-subtle)] text-[var(--ink-secondary)] rounded-xl text-xs font-semibold py-2 h-9 cursor-pointer"
                 >
                   <span>No, I Have Doubts</span>
                 </Button>
@@ -2350,11 +2406,11 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           )}
 
           {/* Capsule Concepts Ledger & Automatic Resumption Tracker */}
-          <div className="p-4 rounded-2xl bg-white border border-[#E5E3DB] text-[#171817] text-xs space-y-2.5 shadow-sm">
+          <div className="p-4 rounded-2xl bg-white border border-[var(--border-subtle)] text-[var(--ink-primary)] text-xs space-y-2.5 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-[#52715D]" />
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[#52715D] font-bold">
+                <Layers className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-sage)] font-bold">
                   Capsule Concept Ledger
                 </span>
               </div>
@@ -2362,22 +2418,22 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                 <button
                   type="button"
                   onClick={() => handleConceptGoto(1)}
-                  className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#E8F0EA] hover:bg-[#d8e6db] text-[#52715D] border border-[#C8EBD2] transition-colors flex items-center gap-1 cursor-pointer"
+                  className="px-2 py-0.5 rounded text-[10px] font-mono bg-[var(--accent-sage-soft)] hover:bg-[#d5e4d9] text-[var(--accent-sage)] border border-[var(--accent-sage-border)] transition-colors flex items-center gap-1 cursor-pointer"
                   title="Rewind and teach from starting concept"
                 >
                   <RotateCcw className="w-2.5 h-2.5" />
                   <span>Teach from Start</span>
                 </button>
-                <span className="text-[#555852] font-mono text-[11px]">
+                <span className="text-[var(--ink-secondary)] font-mono text-[11px]">
                   {progressPercent}% Mastered
                 </span>
               </div>
             </div>
 
             {/* Micro Progress Bar */}
-            <div className="w-full h-1.5 bg-stone-200 rounded-full overflow-hidden border border-[#E5E3DB]">
+            <div className="w-full h-1.5 bg-stone-200 rounded-full overflow-hidden border border-[var(--border-subtle)]">
               <div
-                className="h-full bg-[#52715D] transition-all duration-500"
+                className="h-full bg-[var(--accent-sage)] transition-all duration-500"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -2398,21 +2454,21 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                       onClick={() => handleConceptGoto(idx + 1)}
                       className={`w-full flex items-center justify-between p-2 rounded-xl border text-[11px] font-mono transition-all text-left cursor-pointer hover:scale-[1.01] active:scale-[0.99] ${
                         isDone
-                          ? 'bg-[#F0F6F2] border-[#C8EBD2] text-[#52715D] hover:bg-[#E8F0EA]'
+                          ? 'bg-[var(--accent-sage-soft)] border-[var(--accent-sage-border)] text-[var(--accent-sage)] hover:bg-[var(--accent-sage-soft)]'
                           : isCurrent
-                          ? 'bg-[#FFF8F6] border-[#F5C2B8] text-[#C85A43] shadow-xs'
-                          : 'bg-stone-50 border-[#E5E3DB] text-[#555852] hover:bg-stone-100'
+                          ? 'bg-[var(--accent-warm-soft)] border-[var(--accent-warm-border)] text-[var(--accent-warm)] shadow-xs'
+                          : 'bg-stone-50 border-[var(--border-subtle)] text-[var(--ink-secondary)] hover:bg-stone-100'
                       }`}
                       title={`Click to jump or rewind to Concept ${idx + 1}: ${concept}`}
                     >
                       <div className="flex items-center gap-2 truncate pr-2">
                         {isDone ? (
                           <CheckCircle2
-                            className="w-3.5 h-3.5 text-[#52715D] shrink-0"
+                            className="w-3.5 h-3.5 text-[var(--accent-sage)] shrink-0"
                             strokeWidth={2}
                           />
                         ) : isCurrent ? (
-                          <span className="w-2 h-2 rounded-full bg-[#C85A43] animate-pulse shrink-0" />
+                          <span className="w-2 h-2 rounded-full bg-[var(--accent-warm)] animate-pulse shrink-0" />
                         ) : (
                           <span className="w-2 h-2 rounded-full bg-stone-300 shrink-0" />
                         )}
@@ -2433,7 +2489,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
                 })}
               </div>
             ) : (
-              <p className="text-[#555852] text-xs leading-relaxed">
+              <p className="text-[var(--ink-secondary)] text-xs leading-relaxed">
                 {activeModule?.description ||
                   'Study this syllabus capsule with interactive dialogue and whiteboard schematics.'}
               </p>

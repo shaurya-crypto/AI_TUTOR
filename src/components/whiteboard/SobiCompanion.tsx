@@ -267,14 +267,14 @@ export function SobiCompanion({
         <div
           className={`pointer-events-auto mb-2 p-3 rounded-2xl backdrop-blur-xl border transition-all duration-300 shadow-[0_12px_32px_rgba(23,24,23,0.08)] text-xs text-[#171817] relative animate-in fade-in slide-in-from-right-4 ${
             isQuestionActive
-              ? 'bg-[#FFF8F6] border-[#C85A43]/40 ring-2 ring-[#C85A43]/15'
+              ? 'bg-[#EEF5FA] border-[#255D88]/40 ring-2 ring-[#255D88]/15'
               : 'bg-[#F8F6F0]/95 border-[#E5E3DB]'
           }`}
         >
           <div className="flex items-start gap-2">
             <span
               className={`p-1 rounded-lg shrink-0 mt-0.5 ${
-                isQuestionActive ? 'bg-[#C85A43]/10 text-[#C85A43]' : 'bg-[#52715D]/10 text-[#52715D]'
+                isQuestionActive ? 'bg-[#255D88]/10 text-[#255D88]' : 'bg-[#52715D]/10 text-[#52715D]'
               }`}
             >
               {isQuestionActive ? (
@@ -308,15 +308,15 @@ export function SobiCompanion({
       <div className="flex items-start gap-3 justify-end pointer-events-auto">
         {/* Interactive Response Pod (Glides with Sobi and opens when question is active) */}
         {isQuestionActive && (
-          <div className="p-3 rounded-2xl bg-white/95 backdrop-blur-xl border border-[#C85A43]/30 shadow-[0_16px_40px_rgba(200,90,67,0.12)] w-[260px] sm:w-[290px] animate-in fade-in zoom-in-95 duration-300">
+          <div className="p-3 rounded-2xl bg-white/95 backdrop-blur-xl border border-[#255D88]/30 shadow-[0_16px_40px_rgba(37,93,136,0.15)] w-[260px] sm:w-[290px] animate-in fade-in zoom-in-95 duration-300">
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#E5E3DB]">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#C85A43] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#C85A43] animate-ping" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#255D88] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#255D88] animate-ping" />
                 <span>Your Answer</span>
               </span>
               <span className="text-[10px] text-[#7A7C75] font-mono flex items-center gap-1">
                 <span>Speak or Type</span>
-                <ArrowRight className="w-3 h-3 text-[#C85A43]" />
+                <ArrowRight className="w-3 h-3 text-[#255D88]" />
               </span>
             </div>
 
@@ -328,7 +328,7 @@ export function SobiCompanion({
                   onChange={(e) => setTypedAnswer(e.target.value)}
                   placeholder="Type answer or speak..."
                   disabled={isSubmitting}
-                  className="w-full pl-3 pr-8 py-2 text-xs rounded-xl bg-[#F8F6F0] border border-[#E5E3DB] text-[#171817] placeholder-[#7A7C75] focus:outline-none focus:ring-2 focus:ring-[#C85A43]/40 focus:border-[#C85A43] transition-all font-sans"
+                  className="w-full pl-3 pr-8 py-2 text-xs rounded-xl bg-[#F8F6F0] border border-[#E5E3DB] text-[#171817] placeholder-[#7A7C75] focus:outline-none focus:ring-2 focus:ring-[#255D88]/40 focus:border-[#255D88] transition-all font-sans"
                 />
                 <button
                   type="button"
@@ -351,7 +351,7 @@ export function SobiCompanion({
                 <button
                   type="submit"
                   disabled={!typedAnswer.trim() || isSubmitting}
-                  className="px-3 py-1.5 rounded-xl bg-[#C85A43] text-white text-xs font-semibold hover:bg-[#B34832] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  className="px-3 py-1.5 rounded-xl bg-[#255D88] text-white text-xs font-semibold hover:bg-[#1C486B] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                 >
                   <span>Submit</span>
                   <CornerDownLeft className="w-3 h-3" />
@@ -366,7 +366,7 @@ export function SobiCompanion({
           onClick={handleSobiClick}
           className={`cursor-pointer transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center relative w-[75px] h-[75px] sm:w-[88px] sm:h-[88px] rounded-full shrink-0 ${
             isQuestionActive
-              ? 'ring-4 ring-[#C85A43]/30 shadow-[0_0_24px_rgba(200,90,67,0.35)]'
+              ? 'ring-4 ring-[#255D88]/30 shadow-[0_0_24px_rgba(37,93,136,0.35)]'
               : 'ring-2 ring-[#52715D]/20 shadow-[0_10px_25px_rgba(23,24,23,0.1)]'
           } ${isGiggling ? 'animate-bounce' : ''}`}
           title="Sobi - Interactive Classroom Companion"
@@ -374,7 +374,7 @@ export function SobiCompanion({
           {/* Pointer Cue from Sobi to response pod */}
           {isQuestionActive && (
             <div
-              className="absolute -left-2 top-1/2 -translate-y-1/2 w-0 h-0 border-y-[6px] border-y-transparent border-r-[8px] border-r-[#C85A43] drop-shadow-xs animate-pulse"
+              className="absolute -left-2 top-1/2 -translate-y-1/2 w-0 h-0 border-y-[6px] border-y-transparent border-r-[8px] border-r-[#255D88] drop-shadow-xs animate-pulse"
               title="Sobi pointing to input pod"
             />
           )}
@@ -415,7 +415,7 @@ export function SobiCompanion({
 
           {/* Question Active Alert Badge */}
           {isQuestionActive && (
-            <span className="absolute -top-1 -left-1 bg-[#C85A43] text-white p-1 rounded-full shadow-xs animate-bounce">
+            <span className="absolute -top-1 -left-1 bg-[#255D88] text-white p-1 rounded-full shadow-xs animate-bounce">
               <HelpCircle className="w-3.5 h-3.5" />
             </span>
           )}

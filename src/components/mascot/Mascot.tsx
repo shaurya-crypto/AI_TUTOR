@@ -316,7 +316,7 @@ export function Mascot() {
               ? 'bg-amber-50/95 border-amber-300 ring-2 ring-amber-400/20'
               : isCelebrate
               ? 'bg-emerald-50/95 border-emerald-300 ring-2 ring-emerald-400/20'
-              : 'bg-white/95 border-[#E5E3DB]'
+              : 'bg-white/95 border-[var(--border-subtle)]'
           }`}
         >
           {/* Dismiss button to dock mascot */}
@@ -333,11 +333,11 @@ export function Mascot() {
 
           <div className="flex items-start gap-2.5 pr-4">
             {isSuspicious ? (
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+              <AlertCircle className="w-4 h-4 text-sky-600 shrink-0 mt-0.5 animate-pulse" />
             ) : isCelebrate ? (
               <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             ) : (
-              <Sparkles className="w-4 h-4 text-[#C85A43] shrink-0 mt-0.5" />
+              <Sparkles className="w-4 h-4 text-[var(--accent-warm)] shrink-0 mt-0.5" />
             )}
             <p className="leading-relaxed font-medium text-[11px] sm:text-xs text-[#171817]">
               {currentMessage}
@@ -346,8 +346,8 @@ export function Mascot() {
 
           {/* Action pills for forgot password / assistance */}
           {currentMood === 'warning' && (
-            <div className="mt-2.5 pt-2 border-t border-amber-200 flex justify-end">
-              <span className="text-[10px] text-amber-800 font-bold flex items-center gap-1">
+            <div className="mt-2.5 pt-2 border-t border-sky-200 flex justify-end">
+              <span className="text-[10px] text-sky-800 font-bold flex items-center gap-1">
                 <Key className="w-3 h-3" /> Tap 'Forgot Password' above
               </span>
             </div>
@@ -362,7 +362,7 @@ export function Mascot() {
                 ? 'bg-amber-50 border-amber-300'
                 : isCelebrate
                 ? 'bg-emerald-50 border-emerald-300'
-                : 'bg-white border-[#E5E3DB]'
+                : 'bg-white border-[var(--border-subtle)]'
             }`}
           />
         </div>
@@ -404,7 +404,7 @@ export function Mascot() {
 
         {/* Sleeping Status Badge */}
         {isSleeping && (
-          <span className="absolute top-1 right-2 bg-white/90 border border-[#E5E3DB] text-[10px] font-bold px-1.5 py-0.5 rounded-full text-[#7A7C75] shadow-xs animate-bounce">
+          <span className="absolute top-1 right-2 bg-white/90 border border-[var(--border-subtle)] text-[10px] font-bold px-1.5 py-0.5 rounded-full text-[#7A7C75] shadow-xs animate-bounce">
             zZz
           </span>
         )}

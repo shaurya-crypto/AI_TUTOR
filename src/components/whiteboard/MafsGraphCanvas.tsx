@@ -13,7 +13,20 @@ import {
 import 'mafs/core.css'
 import 'mafs/font.css'
 import { compile } from 'mathjs'
-import { Sparkles, X, HelpCircle, Activity } from 'lucide-react'
+import { 
+  Activity, 
+  X, 
+  Maximize2, 
+  Minimize2, 
+  Move, 
+  RotateCcw, 
+  ZoomIn, 
+  ZoomOut,
+  PanelRight,
+  GripHorizontal
+} from 'lucide-react'
+
+export type GraphDisplayMode = 'docked' | 'floating' | 'maximized' | 'minimized'
 
 export interface MafsGraphCanvasProps {
   formula?: string
@@ -24,11 +37,14 @@ export interface MafsGraphCanvasProps {
   points?: Array<[number, number]> | string
   width?: number | 'auto'
   height?: number
+  displayMode?: GraphDisplayMode
+  onModeChange?: (mode: GraphDisplayMode) => void
   onClose?: () => void
 }
 
 /**
  * Normalizes user / LLM mathematical formula string into a mathjs-evaluable expression.
+ * Handles implicit multiplication (2x -> 2*x), trigonometric notation, powers (^ -> **), and constants.
  */
 function normalizeMathFormula(raw: string): string {
   if (!raw) return 'x'
@@ -50,10 +66,23 @@ export function MafsGraphCanvas({
   callout,
   points,
   width = 'auto',
-  height = 360,
+  height,
+  displayMode = 'docked',
+  onModeChange,
   onClose,
 }: MafsGraphCanvasProps) {
-  // Parse discrete points if string was provided
+  // Interactive view bounds with local zoom & pan state
+  const [viewDomain, setViewDomain] = useState<[number, number]>(domain)
+  const [viewRange, setViewRange] = useState<[number, number]>(range)
+  const [showDerivative, setShowDerivative] = useState(false)
+
+  // Reset to initial bounds if incoming props change significantly
+  React.useEffect(() => {
+    setViewDomain(domain)
+    setViewRange(range)
+  }, [domain[0], domain[1], range[0], range[1], formula])
+
+  // Parse discrete points if string or array was provided
   const parsedPoints: [number, number][] = useMemo(() => {
     if (!points) return []
     if (Array.isArray(points)) return points
@@ -69,7 +98,7 @@ export function MafsGraphCanvas({
     return pts
   }, [points])
 
-  // Clean and compile formula
+  // Clean and compile primary function formula
   const normalizedFormula = useMemo(() => normalizeMathFormula(formula), [formula])
   const compiledFn = useMemo(() => {
     try {
@@ -83,73 +112,207 @@ export function MafsGraphCanvas({
         }
       }
     } catch {
-      // Fallback function
       return (x: number) => x
     }
   }, [normalizedFormula])
 
-  // Display title
+  // Numerical derivative function: f'(x) ≈ (f(x+h) - f(x-h)) / 2h
+  const derivativeFn = useMemo(() => {
+    const h = 0.0001
+    return (x: number): number => {
+      const y2 = compiledFn(x + h)
+      const y1 = compiledFn(x - h)
+      if (isNaN(y1) || isNaN(y2)) return NaN
+      return (y2 - y1) / (2 * h)
+    }
+  }, [compiledFn])
+
+  const handleZoom = (factor: number) => {
+    setViewDomain(([min, max]) => {
+      const span = (max - min) * factor
+      const mid = (min + max) / 2
+      return [mid - span / 2, mid + span / 2]
+    })
+    setViewRange(([min, max]) => {
+      const span = (max - min) * factor
+      const mid = (min + max) / 2
+      return [mid - span / 2, mid + span / 2]
+    })
+  }
+
+  const handleReset = () => {
+    setViewDomain(domain)
+    setViewRange(range)
+  }
+
   const displayTitle = title || `Graph: y = ${formula}`
+  const resolvedHeight = height || (displayMode === 'maximized' ? 620 : displayMode === 'docked' ? 480 : 380)
 
   return (
-    <div className="w-full relative flex flex-col bg-[#162B23] border border-[#2E5444] rounded-2xl overflow-hidden shadow-2xl text-emerald-100 font-sans">
-      {/* Header bar */}
-      <div className="px-4 py-2.5 bg-[#12241D] border-b border-[#2E5444] flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-          <h4 className="text-xs font-semibold tracking-wide text-white uppercase font-mono">
+    <div className="w-full h-full relative flex flex-col bg-[#111C16] border-2 border-[#233930] rounded-2xl overflow-hidden shadow-2xl text-emerald-100 font-sans select-none">
+      {/* Top Header & Move Handle Toolbar */}
+      <div className="px-3.5 py-2.5 bg-[#0D1712] border-b border-[#233930] flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="drag-handle-graph cursor-grab active:cursor-grabbing p-1 rounded hover:bg-emerald-950/60 text-emerald-400/80 hover:text-emerald-300 transition-colors" title="Drag to move graph box">
+            <GripHorizontal className="w-4 h-4" />
+          </div>
+          <Activity className="w-4 h-4 text-sky-400 animate-pulse shrink-0" />
+          <h4 className="text-xs font-semibold tracking-wide text-white uppercase font-mono truncate">
             {displayTitle}
           </h4>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Action Controls & Mode Switcher */}
+        <div className="flex items-center gap-1.5 shrink-0">
           {callout && (
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#1F3D31] text-emerald-300 border border-[#2E5444]">
+            <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-[#172B20] text-emerald-300 border border-[#233930] truncate max-w-[140px]">
               {callout}
             </span>
           )}
+
+          {/* Toggle Derivative Curve */}
+          <button
+            onClick={() => setShowDerivative((prev) => !prev)}
+            className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors ${
+              showDerivative
+                ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                : 'bg-emerald-950/40 text-emerald-400/80 border-[#233930] hover:text-emerald-200'
+            }`}
+            title="Toggle first derivative f'(x)"
+          >
+            dy/dx
+          </button>
+
+          {/* Zoom In */}
+          <button
+            onClick={() => handleZoom(0.8)}
+            className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-950/80 transition-colors"
+            title="Zoom in graph"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Zoom Out */}
+          <button
+            onClick={() => handleZoom(1.25)}
+            className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-950/80 transition-colors"
+            title="Zoom out graph"
+          >
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Reset Zoom */}
+          <button
+            onClick={handleReset}
+            className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-950/80 transition-colors"
+            title="Reset coordinate axes"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Dock vs Floating toggle */}
+          {onModeChange && (
+            <>
+              {displayMode !== 'docked' && (
+                <button
+                  onClick={() => onModeChange('docked')}
+                  className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-950/80 transition-colors"
+                  title="Dock graph to right side of chalkboard"
+                >
+                  <PanelRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {displayMode !== 'floating' && (
+                <button
+                  onClick={() => onModeChange('floating')}
+                  className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-950/80 transition-colors"
+                  title="Float graph as moveable box"
+                >
+                  <Move className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {displayMode !== 'maximized' ? (
+                <button
+                  onClick={() => onModeChange('maximized')}
+                  className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-950/80 transition-colors"
+                  title="Maximize graph full board"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => onModeChange('docked')}
+                  className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-950/80 transition-colors"
+                  title="Restore dock view"
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                onClick={() => onModeChange('minimized')}
+                className="p-1 rounded text-emerald-300 hover:text-white hover:bg-emerald-950/80 transition-colors"
+                title="Minimize graph to pill"
+              >
+                <Minimize2 className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
+
+          {/* Close button */}
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 rounded-md text-emerald-400 hover:text-white hover:bg-emerald-950/60 transition-colors"
-              title="Close Graph Viewport"
+              className="p-1 rounded text-emerald-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors ml-1"
+              title="Close graph view"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Graph Area */}
-      <div className="w-full flex justify-center items-center bg-[#1E3A2F] p-2 overflow-hidden">
+      {/* High-Precision Interactive Vector Graph Viewport */}
+      <div className="flex-1 w-full bg-[#13211B] relative flex justify-center items-center overflow-hidden">
         <Mafs
-          viewBox={{ x: domain, y: range }}
+          viewBox={{ x: viewDomain, y: viewRange }}
           preserveAspectRatio={false}
-          height={height}
+          height={resolvedHeight}
           pan={true}
-          zoom={{ min: 0.2, max: 5 }}
+          zoom={{ min: 0.1, max: 10 }}
         >
+          {/* High-Resolution Chalkboard Cartesian Grid */}
           <Coordinates.Cartesian
             subdivisions={2}
             xAxis={{ lines: 1, labels: (x) => (x !== 0 ? `${x}` : '') }}
             yAxis={{ lines: 1, labels: (y) => (y !== 0 ? `${y}` : '') }}
           />
 
-          {/* Plotted Function Curve */}
+          {/* Primary Function Curve (Terracotta Amber Chalk) */}
           <Plot.OfX
             y={compiledFn}
-            color="#C85A43"
+            color="#E87D65"
             weight={3}
           />
 
-          {/* Discrete / Critical Points */}
+          {/* Derivative Curve if toggled (Botanical Sage Chalk) */}
+          {showDerivative && (
+            <Plot.OfX
+              y={derivativeFn}
+              color="#68B084"
+              weight={2}
+              style="dashed"
+            />
+          )}
+
+          {/* Critical / Intersect Points with Coordinates */}
           {parsedPoints.map(([px, py], idx) => (
             <React.Fragment key={idx}>
-              <Point x={px} y={py} color={Theme.yellow} />
+              <Point x={px} y={py} color="#F3B455" />
               <Text
                 x={px}
                 y={py + 0.35}
                 color="#FFFFFF"
-                size={14}
+                size={13}
               >
                 {`(${px}, ${py})`}
               </Text>
@@ -158,10 +321,17 @@ export function MafsGraphCanvas({
         </Mafs>
       </div>
 
-      {/* Footer info badge */}
-      <div className="px-4 py-2 bg-[#12241D] border-t border-[#2E5444] flex items-center justify-between text-[11px] text-emerald-300 font-mono">
-        <div>Formula: y = {formula}</div>
-        <div>Domain: [{domain[0]}, {domain[1]}] | Range: [{range[0]}, {range[1]}]</div>
+      {/* Coordinate Status Footer Bar */}
+      <div className="px-3.5 py-2 bg-[#0D1712] border-t border-[#233930] flex items-center justify-between text-[11px] text-emerald-300 font-mono shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-white font-semibold">y = {formula}</span>
+          {showDerivative && (
+            <span className="text-emerald-400 text-[10px] hidden sm:inline">(dashed: dy/dx)</span>
+          )}
+        </div>
+        <div className="text-[10px] text-emerald-400/80">
+          x: [{viewDomain[0].toFixed(1)}, {viewDomain[1].toFixed(1)}] | y: [{viewRange[0].toFixed(1)}, {viewRange[1].toFixed(1)}]
+        </div>
       </div>
     </div>
   )

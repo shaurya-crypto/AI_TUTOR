@@ -62,7 +62,7 @@ export function CognitiveProfileCard({ profile, memories }: CognitiveProfileCard
                   Conversation Pacing
                 </span>
                 <span className="font-medium text-sm text-ink-primary capitalize flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-coral" />
+                  <Sparkles className="w-4 h-4 text-accent-warm" />
                   {(profile.preferred_pacing || 'Standard').replace(/_/g, ' ')}
                 </span>
                 <span className="text-[11px] text-ink-muted mt-1 block">
@@ -105,7 +105,7 @@ export function CognitiveProfileCard({ profile, memories }: CognitiveProfileCard
         <div className="rounded-[calc(2.5rem-0.5rem)] bg-white p-6 md:p-8 border border-[#E5E3DB]/40 h-full flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-11 h-11 rounded-2xl bg-coral-soft flex items-center justify-center border border-coral/20 text-coral-dark">
+              <div className="w-11 h-11 rounded-2xl bg-accent-warm-soft flex items-center justify-center border border-accent-warm/20 text-accent-warm">
                 <BrainCircuit className="w-5 h-5" />
               </div>
               <div>
@@ -131,7 +131,7 @@ export function CognitiveProfileCard({ profile, memories }: CognitiveProfileCard
                     <Badge
                       key={sub}
                       variant="secondary"
-                      className="bg-coral-soft/60 hover:bg-coral-soft text-coral-dark font-medium capitalize px-3 py-1 rounded-xl border border-coral/20 text-xs"
+                      className="bg-accent-warm-soft/60 hover:bg-accent-warm-soft text-accent-warm font-medium capitalize px-3 py-1 rounded-xl border border-accent-warm/20 text-xs"
                     >
                       {sub}
                     </Badge>

@@ -274,7 +274,7 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
             </p>
           ) : isSpeaking ? (
             <div className="flex items-center gap-1.5 text-stone-400 text-xs font-mono">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-spin" />
+              <Sparkles className="w-3.5 h-3.5 text-sky-400 animate-spin" />
               <span>Anaxly speaking...</span>
             </div>
           ) : isUserTalking ? (

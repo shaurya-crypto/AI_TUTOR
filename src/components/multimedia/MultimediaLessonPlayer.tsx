@@ -214,58 +214,58 @@ export function MultimediaLessonPlayer({
   const getStepIcon = (type: LessonContentType) => {
     switch (type) {
       case 'TEXT_STEP':
-        return <FileText className="w-3.5 h-3.5 text-[#52715D]" />
+        return <FileText className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
       case 'BOARD_STEP':
-        return <Compass className="w-3.5 h-3.5 text-[#52715D]" />
+        return <Compass className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
       case 'IMAGE':
-        return <ImageIcon className="w-3.5 h-3.5 text-[#52715D]" />
+        return <ImageIcon className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
       case 'VIDEO':
-        return <VideoIcon className="w-3.5 h-3.5 text-[#C85A43]" />
+        return <VideoIcon className="w-3.5 h-3.5 text-[var(--accent-warm)]" />
       case 'ANIMATION':
-        return <Activity className="w-3.5 h-3.5 text-[#52715D]" />
+        return <Activity className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
       case 'GRAPH':
-        return <Activity className="w-3.5 h-3.5 text-[#52715D]" />
+        return <Activity className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
       case 'DIAGRAM':
-        return <Layers className="w-3.5 h-3.5 text-[#52715D]" />
+        return <Layers className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
       case 'SCENE_3D':
-        return <Box className="w-3.5 h-3.5 text-[#C85A43]" />
+        return <Box className="w-3.5 h-3.5 text-[var(--accent-warm)]" />
       case 'QUICK_CHECK':
-        return <HelpCircle className="w-3.5 h-3.5 text-[#C85A43]" />
+        return <HelpCircle className="w-3.5 h-3.5 text-[var(--accent-warm)]" />
       case 'SUMMARY':
-        return <Award className="w-3.5 h-3.5 text-[#52715D]" />
+        return <Award className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
       default:
-        return <Layers className="w-3.5 h-3.5 text-[#52715D]" />
+        return <Layers className="w-3.5 h-3.5 text-[var(--accent-sage)]" />
     }
   }
 
   if (!currentStep) {
     return (
-      <div className="w-full h-full flex items-center justify-center p-6 bg-[#F8F6F0] text-[#555852]">
+      <div className="w-full h-full flex items-center justify-center p-6 bg-[var(--canvas-base)] text-[var(--ink-secondary)]">
         <p className="text-xs font-mono">No steps available in this lesson plan.</p>
       </div>
     )
   }
 
   return (
-    <div className="relative w-full h-full flex flex-col bg-[#F8F6F0] text-[#171817] rounded-2xl overflow-hidden border border-[#E5E3DB] shadow-sm">
+    <div className="relative w-full h-full flex flex-col bg-[var(--canvas-base)] text-[var(--ink-primary)] rounded-2xl overflow-hidden border border-[var(--border-subtle)] shadow-sm">
       {/* Top Header & Navigation Ribbon */}
-      <div className="z-20 px-3 sm:px-4 py-2 bg-white/95 backdrop-blur-md border-b border-[#E5E3DB] flex items-center justify-between gap-2 shadow-xs">
+      <div className="z-20 px-3 sm:px-4 py-2 bg-white/95 backdrop-blur-md border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 shadow-xs">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1 rounded-md bg-[#E8F0EA] border border-[#C8EBD2] text-[#52715D] shrink-0">
+          <div className="p-1 rounded-md bg-[var(--accent-sage-soft)] border border-[var(--accent-sage-border)] text-[var(--accent-sage)] shrink-0">
             {getStepIcon(currentStep.type)}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#52715D] font-bold">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--accent-sage)] font-bold">
                 Step {currentStepIndex + 1} of {steps.length} - {currentStep.type.replace('_', ' ')}
               </span>
               {currentStep.sourceCitation && (
-                <span className="hidden sm:inline-block text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#F8F6F0] border border-[#E5E3DB] text-[#7A7C75] truncate">
+                <span className="hidden sm:inline-block text-[9px] font-mono px-1.5 py-0.2 rounded bg-[var(--canvas-base)] border border-[var(--border-subtle)] text-[var(--ink-muted)] truncate">
                   {currentStep.sourceCitation.textbookName || 'NCERT Standard'}
                 </span>
               )}
             </div>
-            <h3 className="text-xs sm:text-sm font-semibold text-[#171817] truncate">
+            <h3 className="text-xs sm:text-sm font-semibold text-[var(--ink-primary)] truncate">
               {currentStep.title}
             </h3>
           </div>
@@ -276,7 +276,7 @@ export function MultimediaLessonPlayer({
           <button
             onClick={handlePrev}
             disabled={currentStepIndex === 0}
-            className="p-1.5 rounded-lg bg-white hover:bg-[#F8F6F0] text-[#171817] border border-[#E5E3DB] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-xs"
+            className="p-1.5 rounded-lg bg-white hover:bg-[var(--canvas-base)] text-[var(--ink-primary)] border border-[var(--border-subtle)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-xs"
             title="Previous Step"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -286,8 +286,8 @@ export function MultimediaLessonPlayer({
             onClick={handleTogglePause}
             className={`p-1.5 rounded-lg border transition-colors cursor-pointer shadow-xs ${
               isPaused
-                ? 'bg-[#FFF8F6] text-[#C85A43] border-[#F5C2B8] hover:bg-[#faeae6]'
-                : 'bg-white text-[#52715D] border-[#E5E3DB] hover:bg-[#F8F6F0]'
+                ? 'bg-[var(--accent-warm-soft)] text-[var(--accent-warm)] border-[var(--accent-warm-border)] hover:bg-[#faeae6]'
+                : 'bg-white text-[var(--accent-sage)] border-[var(--border-subtle)] hover:bg-[var(--canvas-base)]'
             }`}
             title={isPaused ? 'Resume Lesson' : 'Pause Lesson'}
           >
@@ -296,20 +296,20 @@ export function MultimediaLessonPlayer({
 
           <button
             onClick={handleReplay}
-            className="p-1.5 rounded-lg bg-white hover:bg-[#F8F6F0] text-[#555852] border border-[#E5E3DB] cursor-pointer transition-colors shadow-xs"
+            className="p-1.5 rounded-lg bg-white hover:bg-[var(--canvas-base)] text-[var(--ink-secondary)] border border-[var(--border-subtle)] cursor-pointer transition-colors shadow-xs"
             title="Replay Current Step"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
 
-          <span className="text-xs font-mono text-[#555852] font-semibold px-1">
+          <span className="text-xs font-mono text-[var(--ink-secondary)] font-semibold px-1">
             {currentStepIndex + 1} / {steps.length}
           </span>
 
           <button
             onClick={handleNext}
             disabled={currentStepIndex === steps.length - 1}
-            className="p-1.5 rounded-lg bg-white hover:bg-[#F8F6F0] text-[#171817] border border-[#E5E3DB] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-xs"
+            className="p-1.5 rounded-lg bg-white hover:bg-[var(--canvas-base)] text-[var(--ink-primary)] border border-[var(--border-subtle)] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-xs"
             title="Next Step"
           >
             <ChevronRight className="w-4 h-4" />
@@ -318,21 +318,21 @@ export function MultimediaLessonPlayer({
       </div>
 
       {/* Main Visual Presentation Stage */}
-      <div className="relative flex-1 w-full h-full min-h-0 overflow-hidden bg-[#F8F6F0] flex flex-col">
+      <div className="relative flex-1 w-full h-full min-h-0 overflow-hidden bg-[var(--canvas-base)] flex flex-col">
         {/* 1. TEXT_STEP */}
         {currentStep.type === 'TEXT_STEP' && currentStep.content.text && (
           <div className="w-full h-full p-5 sm:p-6 overflow-y-auto space-y-4 flex flex-col justify-center">
-            <div className="p-4 rounded-2xl bg-white border border-[#E5E3DB] space-y-3 shadow-xs">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#52715D] font-bold">
+            <div className="p-4 rounded-2xl bg-white border border-[var(--border-subtle)] space-y-3 shadow-xs">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-sage)] font-bold">
                 Teacher Explanation
               </span>
-              <p className="text-sm sm:text-base text-[#171817] leading-relaxed font-sans">
+              <p className="text-sm sm:text-base text-[var(--ink-primary)] leading-relaxed font-sans">
                 {currentStep.content.text.explanation}
               </p>
             </div>
             {currentStep.content.text.keyTakeaway && (
-              <div className="p-3.5 rounded-xl bg-[#E8F0EA] border border-[#C8EBD2] text-xs text-[#171817] font-mono">
-                <span className="font-bold text-[#52715D] block mb-1">Core Takeaway:</span>
+              <div className="p-3.5 rounded-xl bg-[var(--accent-sage-soft)] border border-[var(--accent-sage-border)] text-xs text-[var(--ink-primary)] font-mono">
+                <span className="font-bold text-[var(--accent-sage)] block mb-1">Core Takeaway:</span>
                 {currentStep.content.text.keyTakeaway}
               </div>
             )}
@@ -342,15 +342,15 @@ export function MultimediaLessonPlayer({
         {/* 2. BOARD_STEP */}
         {currentStep.type === 'BOARD_STEP' && currentStep.content.board && (
           <div className="w-full h-full p-5 sm:p-6 overflow-y-auto space-y-4 flex flex-col justify-center">
-            <div className="p-4 rounded-2xl bg-white border border-[#E5E3DB] space-y-3 shadow-xs">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#C85A43] font-bold">
+            <div className="p-4 rounded-2xl bg-white border border-[var(--border-subtle)] space-y-3 shadow-xs">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-warm)] font-bold">
                 {currentStep.content.board.title || 'Mathematical Derivation & Board Notes'}
               </span>
               <div className="space-y-2">
                 {currentStep.content.board.equations.map((eq, i) => (
                   <div
                     key={i}
-                    className="p-2.5 rounded-xl bg-stone-50 border border-[#E5E3DB] text-xs sm:text-sm font-mono text-[#171817]"
+                    className="p-2.5 rounded-xl bg-stone-50 border border-[var(--border-subtle)] text-xs sm:text-sm font-mono text-[var(--ink-primary)]"
                   >
                     {eq}
                   </div>
@@ -360,7 +360,7 @@ export function MultimediaLessonPlayer({
             {currentStep.content.board.derivationSteps && (
               <div className="space-y-1.5 pl-2">
                 {currentStep.content.board.derivationSteps.map((stepText, idx) => (
-                  <p key={idx} className="text-xs text-[#555852] font-mono">
+                  <p key={idx} className="text-xs text-[var(--ink-secondary)] font-mono">
                     {idx + 1}. {stepText}
                   </p>
                 ))}
@@ -372,7 +372,7 @@ export function MultimediaLessonPlayer({
         {/* 3. IMAGE */}
         {currentStep.type === 'IMAGE' && currentStep.content.image && (
           <div className="w-full h-full p-3 sm:p-4 flex flex-col items-center justify-between bg-white overflow-hidden">
-            <div className="relative flex-1 w-full flex items-center justify-center rounded-xl overflow-hidden bg-stone-50 border border-[#E5E3DB] p-2">
+            <div className="relative flex-1 w-full flex items-center justify-center rounded-xl overflow-hidden bg-stone-50 border border-[var(--border-subtle)] p-2">
               {!mediaLoadError && currentStep.content.image.url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -395,11 +395,11 @@ export function MultimediaLessonPlayer({
             </div>
 
             {/* Caption & Provenance */}
-            <div className="w-full pt-2 flex items-center justify-between text-[11px] font-mono text-[#555852]">
+            <div className="w-full pt-2 flex items-center justify-between text-[11px] font-mono text-[var(--ink-secondary)]">
               <span className="truncate max-w-[70%]">
                 {currentStep.content.image.caption || currentStep.content.image.alt}
               </span>
-              <span className="text-[10px] text-[#7A7C75] shrink-0">
+              <span className="text-[10px] text-[var(--ink-muted)] shrink-0">
                 {currentStep.content.image.attribution || 'Verified NCERT Provenance'}
               </span>
             </div>
@@ -412,7 +412,7 @@ export function MultimediaLessonPlayer({
             {/* If video provider is unverified or external URL is unavailable, render smooth procedural animation fallback */}
             {mediaLoadError || !MediaAssetService.isAuthorizedDomain(currentStep.content.video.url) ? (
               <div className="w-full h-full flex flex-col">
-                <div className="px-3 py-1.5 mb-2 rounded-lg bg-[#FFF8F6] border border-[#F5C2B8] text-[11px] font-mono text-[#C85A43] flex items-center gap-1.5">
+                <div className="px-3 py-1.5 mb-2 rounded-lg bg-[var(--accent-warm-soft)] border border-[var(--accent-warm-border)] text-[11px] font-mono text-[var(--accent-warm)] flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>External video provider unconfigured - Running local interactive procedural animation</span>
                 </div>
@@ -430,7 +430,7 @@ export function MultimediaLessonPlayer({
               <video
                 src={currentStep.content.video.url}
                 controls
-                className="w-full max-h-full rounded-xl border border-[#E5E3DB] shadow-sm"
+                className="w-full max-h-full rounded-xl border border-[var(--border-subtle)] shadow-sm"
                 onError={() => setMediaLoadError(true)}
               />
             )}

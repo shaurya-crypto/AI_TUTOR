@@ -41,7 +41,7 @@ export function QuickCheckCard({ content, onCompleted }: QuickCheckCardProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-[11px] font-mono uppercase tracking-widest text-amber-400 font-bold">
+            <span className="text-[11px] font-mono uppercase tracking-widest text-sky-400 font-bold">
               Concept Checkpoint
             </span>
           </div>

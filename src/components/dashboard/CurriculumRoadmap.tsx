@@ -77,7 +77,7 @@ export function CurriculumRoadmap({
         <p className="text-sm text-ink-secondary max-w-md mb-6 leading-relaxed">
           Select or enroll in a syllabus to unlock your personalized real-time learning path with Anaxly.
         </p>
-        <Button className="rounded-full bg-coral hover:bg-coral-dark text-white px-7 py-3 font-medium text-sm">
+        <Button className="rounded-full bg-primary hover:bg-primary/90 text-white px-7 py-3 font-medium text-sm">
           Browse Learning Paths
         </Button>
       </div>
@@ -160,8 +160,8 @@ export function CurriculumRoadmap({
                       <CheckCircle2 className="w-5 h-5 text-botanical" />
                     </div>
                   ) : isInProgress ? (
-                    <div className="w-10 h-10 rounded-full bg-coral-soft text-coral-dark flex items-center justify-center border border-coral/20">
-                      <PlayCircle className="w-5 h-5 text-coral animate-pulse" />
+                    <div className="w-10 h-10 rounded-full bg-accent-warm-soft text-accent-warm flex items-center justify-center border border-accent-warm/20">
+                      <PlayCircle className="w-5 h-5 text-accent-warm animate-pulse" />
                     </div>
                   ) : (
                     <div className="w-10 h-10 rounded-full bg-canvas text-ink-muted flex items-center justify-center border border-[#E5E3DB]">
@@ -177,7 +177,7 @@ export function CurriculumRoadmap({
                       Module {mod.order_index}
                     </span>
                     {isInProgress && (
-                      <Badge className="bg-coral text-white font-medium text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      <Badge className="bg-primary text-white font-medium text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">
                         Current Focus
                       </Badge>
                     )}
@@ -188,7 +188,7 @@ export function CurriculumRoadmap({
                     )}
                   </div>
 
-                  <h3 className="font-sans font-semibold text-base text-ink-primary group-hover:text-coral transition-colors">
+                  <h3 className="font-sans font-semibold text-base text-ink-primary group-hover:text-primary transition-colors">
                     {mod.title}
                   </h3>
                   
@@ -222,7 +222,7 @@ export function CurriculumRoadmap({
                     {mod.estimated_minutes} min
                   </span>
                 )}
-                <div className="w-8 h-8 rounded-full bg-canvas border border-[#E5E3DB] flex items-center justify-center text-ink-muted group-hover:border-coral group-hover:text-coral transition-all">
+                <div className="w-8 h-8 rounded-full bg-canvas border border-[#E5E3DB] flex items-center justify-center text-ink-muted group-hover:border-primary group-hover:text-primary transition-all">
                   <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
                 </div>
               </div>
@@ -301,7 +301,7 @@ export function CurriculumRoadmap({
                 Close
               </Button>
               <Link href={`/dashboard/${userId}/class`} className="w-full sm:w-auto">
-                <Button className="w-full rounded-xl bg-coral hover:bg-coral-dark text-white font-medium px-6 gap-2">
+                <Button className="w-full rounded-xl bg-primary hover:bg-primary/90 text-white font-medium px-6 gap-2">
                   Launch Lesson with Anaxly
                   <ArrowRight className="w-4 h-4" />
                 </Button>

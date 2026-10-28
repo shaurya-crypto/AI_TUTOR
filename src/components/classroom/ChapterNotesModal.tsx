@@ -103,13 +103,13 @@ export const ChapterNotesModal: React.FC<ChapterNotesModalProps> = ({
             return (
               <div
                 key={idx}
-                className="mt-4 p-4 rounded-xl bg-amber-950/40 border border-amber-600/40 text-amber-200"
+                className="mt-4 p-4 rounded-xl bg-blue-950/40 border border-blue-600/40 text-sky-200"
               >
-                <div className="flex items-center gap-2 mb-1.5 text-xs font-bold uppercase tracking-wider text-amber-300 font-mono">
+                <div className="flex items-center gap-2 mb-1.5 text-xs font-bold uppercase tracking-wider text-sky-300 font-mono">
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Chapter Synthesis &amp; Key Takeaways</span>
                 </div>
-                <div className="text-xs md:text-sm leading-relaxed text-amber-100/90 whitespace-pre-wrap">
+                <div className="text-xs md:text-sm leading-relaxed text-sky-100/90 whitespace-pre-wrap">
                   {trimmed.replace(/^#### Chapter Summary:?\s*/i, '')}
                 </div>
               </div>
@@ -122,8 +122,8 @@ export const ChapterNotesModal: React.FC<ChapterNotesModalProps> = ({
                 key={idx}
                 className="pt-3 pb-1 border-b border-emerald-900/60 flex items-center gap-2"
               >
-                <div className="w-2 h-2 rounded-full bg-amber-400" />
-                <h3 className="text-base font-bold text-amber-200 font-serif tracking-wide">
+                <div className="w-2 h-2 rounded-full bg-sky-400" />
+                <h3 className="text-base font-bold text-sky-200 font-serif tracking-wide">
                   {trimmed.replace(/^###\s*/, '')}
                 </h3>
               </div>
@@ -135,9 +135,9 @@ export const ChapterNotesModal: React.FC<ChapterNotesModalProps> = ({
             return (
               <div
                 key={idx}
-                className="p-3.5 rounded-xl bg-[#142d20] border-l-4 border-amber-400 border border-emerald-800/60 shadow-xs"
+                className="p-3.5 rounded-xl bg-[#142d20] border-l-4 border-sky-400 border border-emerald-800/60 shadow-xs"
               >
-                <span className="text-[11px] font-mono uppercase tracking-wider text-amber-300 font-bold block mb-1">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-sky-300 font-bold block mb-1">
                   Scientific Law / Core Formula
                 </span>
                 <p className="text-sm font-semibold text-emerald-100 font-mono tracking-tight">
@@ -239,8 +239,8 @@ export const ChapterNotesModal: React.FC<ChapterNotesModalProps> = ({
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono border bg-emerald-950/60 border-emerald-800/60 text-emerald-300">
               {notesSaveStatus === 'saving' ? (
                 <>
-                  <RefreshCw className="w-3 h-3 text-amber-400 animate-spin" />
-                  <span className="text-amber-300">Auto-Saving...</span>
+                  <RefreshCw className="w-3 h-3 text-sky-400 animate-spin" />
+                  <span className="text-sky-300">Auto-Saving...</span>
                 </>
               ) : (
                 <>
@@ -317,10 +317,10 @@ export const ChapterNotesModal: React.FC<ChapterNotesModalProps> = ({
                 size="sm"
                 onClick={onOptimizeNotes}
                 disabled={isOptimizing}
-                className="bg-amber-950/60 hover:bg-amber-900 text-amber-200 border-amber-800/70 rounded-xl px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+                className="bg-blue-950/60 hover:bg-blue-900 text-sky-200 border-blue-800/70 rounded-xl px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
                 title="Synthesize clean, optimized master notes with AI"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <Sparkles className="w-3.5 h-3.5 text-sky-300" />
                 <span>{isOptimizing ? 'Optimizing...' : 'AI Optimize'}</span>
               </Button>
             )}

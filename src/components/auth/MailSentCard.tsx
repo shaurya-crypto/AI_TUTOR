@@ -96,12 +96,12 @@ export const MailSentCard: React.FC<MailSentCardProps> = ({
               <motion.div
                 animate={{ scale: [1, 1.25, 1], opacity: [0.35, 0.1, 0.35] }}
                 transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute inset-0 rounded-full bg-[#52715D]/20 blur-md pointer-events-none"
+                className="absolute inset-0 rounded-full bg-[var(--accent-sage)]/20 blur-md pointer-events-none"
               />
               <motion.div
                 animate={{ scale: [1, 1.12, 1], opacity: [0.6, 0.25, 0.6] }}
                 transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute inset-2 rounded-full border border-[#52715D]/30 pointer-events-none"
+                className="absolute inset-2 rounded-full border border-[var(--accent-sage-border)] pointer-events-none"
               />
 
               {/* Central Machined Icon Orb */}
@@ -109,14 +109,14 @@ export const MailSentCard: React.FC<MailSentCardProps> = ({
                 initial={{ rotate: -8, scale: 0.8 }}
                 animate={{ rotate: 0, scale: 1 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F4F7F5] to-[#E5ECE7] border border-[#52715D]/30 flex items-center justify-center shadow-md text-[#3D5A47]"
+                className="relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--accent-sage-soft)] to-[#E0EBE3] border border-[var(--accent-sage-border)] flex items-center justify-center shadow-md text-[var(--accent-sage-hover)]"
               >
-                <Mail className="w-8 h-8 text-[#3D5A47]" strokeWidth={1.75} />
+                <Mail className="w-8 h-8 text-[var(--accent-sage-hover)]" strokeWidth={1.75} />
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.3, type: 'spring', stiffness: 400, damping: 15 }}
-                  className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[#52715D] text-white flex items-center justify-center shadow-sm border-2 border-white"
+                  className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-[var(--accent-sage)] text-white flex items-center justify-center shadow-sm border-2 border-white"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
                 </motion.div>
@@ -127,9 +127,9 @@ export const MailSentCard: React.FC<MailSentCardProps> = ({
             <div className="flex justify-center mb-3">
               <Badge
                 variant="outline"
-                className="bg-[#F4F7F5] text-[#3D5A47] border-[#52715D]/30 font-mono text-[10px] tracking-wide uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1.5"
+                className="bg-[#F4F7F5] text-[var(--accent-sage-hover)] border-[var(--accent-sage-border)] font-mono text-[10px] tracking-wide uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1.5"
               >
-                <ShieldCheck className="w-3 h-3 text-[#52715D]" />
+                <ShieldCheck className="w-3 h-3 text-[var(--accent-sage)]" />
                 <span>Brevo Certified Dispatch</span>
               </Badge>
             </div>
@@ -158,8 +158,8 @@ export const MailSentCard: React.FC<MailSentCardProps> = ({
                   exit={{ opacity: 0, height: 0 }}
                   className={`p-3 rounded-xl text-xs font-medium border leading-relaxed flex items-start gap-2 ${
                     feedback.type === 'success'
-                      ? 'bg-[#F0F6F2] text-[#3D5A47] border-[#C8EBD2]'
-                      : 'bg-[#FDF2F0] text-[#9F3C27] border-[#F5C2B8]'
+                      ? 'bg-[#F0F6F2] text-[var(--accent-sage-hover)] border-[#C8EBD2]'
+                      : 'bg-rose-50 text-rose-800 border-rose-200'
                   }`}
                 >
                   <span className="shrink-0 mt-0.5">•</span>
@@ -199,7 +199,7 @@ export const MailSentCard: React.FC<MailSentCardProps> = ({
             {/* Primary Action: Direct Webmail Link */}
             <Button
               asChild
-              className="w-full h-11 bg-[#52715D] hover:bg-[#3D5A47] text-white font-medium rounded-full shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+              className="w-full h-11 bg-[var(--accent-sage)] hover:bg-[#3D5A47] text-white font-medium rounded-full shadow-sm transition-all active:scale-[0.98] cursor-pointer"
             >
               <a
                 href={webmailUrl}
@@ -247,7 +247,7 @@ export const MailSentCard: React.FC<MailSentCardProps> = ({
             <button
               type="button"
               onClick={onSwitchToLogin}
-              className="text-[#C85A43] hover:text-[#A94734] transition-colors cursor-pointer font-medium"
+              className="text-[var(--accent-warm)] hover:text-[var(--accent-warm-hover)] transition-colors cursor-pointer font-medium"
             >
               Sign In Instead
             </button>

@@ -84,7 +84,7 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
     <header className="sticky top-4 z-40 w-full mb-10">
       {/* Outer Shell for Apple-translucent Island Navbar */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="relative backdrop-blur-xl bg-white/85 border border-[#E5E3DB]/80 shadow-[0_8px_30px_rgb(23,24,23,0.04)] rounded-[1.75rem] px-4 py-3 md:px-6 md:py-3.5 flex items-center justify-between transition-all">
+        <div className="relative backdrop-blur-xl bg-white/85 border border-[var(--border-subtle)]/80 shadow-[0_8px_30px_rgb(23,24,23,0.04)] rounded-[1.75rem] px-4 py-3 md:px-6 md:py-3.5 flex items-center justify-between transition-all">
           
           {/* Left: Brand & Live Indicator */}
           <div className="flex items-center gap-4">
@@ -123,8 +123,8 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
           <div className="flex items-center gap-3">
             
             {/* Streak Counter Pill */}
-            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-canvas border border-[#E5E3DB] shadow-sm">
-              <Flame className="w-4 h-4 text-coral animate-pulse" fill="currentColor" />
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-canvas border border-[var(--border-subtle)] shadow-sm">
+              <Flame className="w-4 h-4 text-accent-ochre animate-pulse" fill="currentColor" />
               <span className="text-xs font-medium text-ink-secondary">
                 <strong className="text-ink-primary font-semibold">{profile.current_streak || 0}</strong> Day Streak
               </span>
@@ -144,7 +144,7 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
             {/* User Profile Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full hover:bg-canvas transition-all border border-transparent hover:border-[#E5E3DB] focus:outline-none">
+                <button className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full hover:bg-canvas transition-all border border-transparent hover:border-[var(--border-subtle)] focus:outline-none">
                   <Avatar className="w-8 h-8 border border-botanical/20">
                     <AvatarImage src={profile.avatar_url || ''} alt={profile.full_name || 'Student'} />
                     <AvatarFallback className="bg-botanical-soft text-botanical-dark text-xs font-medium">
@@ -157,12 +157,12 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
                   <ChevronDown className="w-3 h-3 text-ink-muted" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 bg-white/95 backdrop-blur-md border-[#E5E3DB] shadow-lg">
+              <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 bg-white/95 backdrop-blur-md border-[var(--border-subtle)] shadow-lg">
                 <DropdownMenuLabel className="px-3 py-2">
                   <p className="text-xs text-ink-muted uppercase tracking-wider font-semibold">Signed in as</p>
                   <p className="text-sm font-medium text-ink-primary truncate mt-0.5">{user.email}</p>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-[#E5E3DB]" />
+                <DropdownMenuSeparator className="bg-[var(--border-subtle)]" />
                 <DropdownMenuItem 
                   onClick={() => setPreferencesOpen(true)}
                   className="rounded-xl px-3 py-2 cursor-pointer text-ink-secondary hover:text-ink-primary focus:bg-canvas"
@@ -175,11 +175,11 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
                   className="rounded-xl px-3 py-2 cursor-pointer text-ink-secondary hover:text-ink-primary focus:bg-canvas"
                 >
                   <Link href={`/dashboard/${user.id}/class`}>
-                    <Sparkles className="w-4 h-4 mr-2.5 text-coral" />
+                    <Sparkles className="w-4 h-4 mr-2.5 text-accent-warm" />
                     <span>Enter Live Classroom</span>
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-[#E5E3DB]" />
+                <DropdownMenuSeparator className="bg-[var(--border-subtle)]" />
                 <DropdownMenuItem
                   onClick={() => signOutAction()}
                   className="rounded-xl px-3 py-2 cursor-pointer text-red-600 hover:text-red-700 focus:bg-red-50"
@@ -196,9 +196,9 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
 
       {/* Tutor Preferences Dialog */}
       <Dialog open={preferencesOpen} onOpenChange={setPreferencesOpen}>
-        <DialogContent className="max-w-lg bg-white rounded-[2rem] border-[#E5E3DB] p-6 md:p-8 shadow-xl">
+        <DialogContent className="max-w-lg bg-white rounded-[2rem] border-[var(--border-subtle)] p-6 md:p-8 shadow-xl">
           <DialogHeader className="text-left mb-4">
-            <div className="w-10 h-10 rounded-2xl bg-coral-soft flex items-center justify-center text-coral-dark mb-2 border border-coral/20">
+            <div className="w-10 h-10 rounded-2xl bg-accent-warm-soft flex items-center justify-center text-accent-warm mb-2 border border-accent-warm/20">
               <Settings className="w-5 h-5" />
             </div>
             <DialogTitle className="font-serif text-2xl tracking-tight text-ink-primary">
@@ -224,13 +224,13 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
                     onClick={() => setSelectedVoice(v.id)}
                     className={`flex flex-col text-left p-3 rounded-xl border transition-all ${
                       selectedVoice === v.id
-                        ? 'border-coral bg-coral-soft/40 text-ink-primary shadow-xs'
-                        : 'border-[#E5E3DB] hover:border-ink-muted/50 bg-white text-ink-secondary'
+                        ? 'border-coral bg-accent-warm-soft/40 text-ink-primary shadow-xs'
+                        : 'border-[var(--border-subtle)] hover:border-ink-muted/50 bg-white text-ink-secondary'
                     }`}
                   >
                     <div className="flex items-center justify-between w-full">
                       <span className="font-medium text-sm text-ink-primary">{v.name}</span>
-                      {selectedVoice === v.id && <Check className="w-4 h-4 text-coral" />}
+                      {selectedVoice === v.id && <Check className="w-4 h-4 text-accent-warm" />}
                     </div>
                     <span className="text-[11px] text-ink-muted mt-1 leading-snug">{v.desc}</span>
                   </button>
@@ -252,7 +252,7 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
                     className={`flex flex-col text-left p-3 rounded-xl border transition-all ${
                       selectedStyle === s.id
                         ? 'border-botanical bg-botanical-soft/50 text-ink-primary'
-                        : 'border-[#E5E3DB] hover:border-ink-muted/50 bg-white text-ink-secondary'
+                        : 'border-[var(--border-subtle)] hover:border-ink-muted/50 bg-white text-ink-secondary'
                     }`}
                   >
                     <div className="flex items-center justify-between w-full">
@@ -279,7 +279,7 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
                     className={`flex flex-col text-left p-2.5 rounded-xl border transition-all ${
                       selectedPacing === p.id
                         ? 'border-ink-primary bg-ink-primary text-white'
-                        : 'border-[#E5E3DB] hover:border-ink-muted/50 bg-white text-ink-secondary'
+                        : 'border-[var(--border-subtle)] hover:border-ink-muted/50 bg-white text-ink-secondary'
                     }`}
                   >
                     <span className={`font-medium text-xs ${selectedPacing === p.id ? 'text-white' : 'text-ink-primary'}`}>
@@ -297,7 +297,7 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-xl border-[#E5E3DB]"
+                className="rounded-xl border-[var(--border-subtle)]"
                 onClick={() => setPreferencesOpen(false)}
               >
                 Cancel

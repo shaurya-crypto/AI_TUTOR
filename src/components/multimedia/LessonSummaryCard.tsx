@@ -15,7 +15,7 @@ export function LessonSummaryCard({ content, moduleTitle }: LessonSummaryCardPro
       {/* Header */}
       <div className="flex items-center justify-between border-b border-emerald-900/50 pb-3">
         <div className="flex items-center gap-2">
-          <Award className="w-5 h-5 text-amber-400" />
+          <Award className="w-5 h-5 text-sky-400" />
           <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wide">
             Capsule Synthesis &amp; Recap
           </h3>
@@ -26,7 +26,7 @@ export function LessonSummaryCard({ content, moduleTitle }: LessonSummaryCardPro
       </div>
 
       {moduleTitle && (
-        <p className="text-xs text-amber-200/90 font-mono font-medium">
+        <p className="text-xs text-sky-200/90 font-mono font-medium">
           Topic: {moduleTitle}
         </p>
       )}
@@ -73,15 +73,15 @@ export function LessonSummaryCard({ content, moduleTitle }: LessonSummaryCardPro
       {/* Exam Tips */}
       {content.examTips && content.examTips.length > 0 && (
         <div className="space-y-2 pt-2 border-t border-emerald-950">
-          <div className="flex items-center gap-1.5 text-xs font-mono font-semibold text-amber-300">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <div className="flex items-center gap-1.5 text-xs font-mono font-semibold text-sky-300">
+            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
             <span>Board Examination Strategy</span>
           </div>
           <div className="space-y-1">
             {content.examTips.map((tip, i) => (
               <p
                 key={i}
-                className="text-[11px] text-amber-200/80 leading-relaxed pl-3 border-l-2 border-amber-500/60"
+                className="text-[11px] text-sky-200/80 leading-relaxed pl-3 border-l-2 border-sky-500/60"
               >
                 {tip}
               </p>

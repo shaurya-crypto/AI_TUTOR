@@ -188,7 +188,7 @@ export function LandingNav() {
       {/* HeyAristotle Mobile Full-Screen Dialog with Staggered Entrance Animation */}
       {mobileMenuOpen && (
         <div
-          className="fixed inset-0 z-[100] flex flex-col backdrop-blur-2xl bg-[#F8F6F0]/95 transition-opacity duration-300 md:hidden"
+          className="fixed inset-0 z-[100] flex flex-col backdrop-blur-2xl bg-[var(--canvas-base)]/95 transition-opacity duration-300 md:hidden"
           role="dialog"
           aria-modal="true"
           aria-label="Primary mobile navigation"

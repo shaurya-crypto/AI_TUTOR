@@ -230,6 +230,40 @@ export function StitchDashboardView({
     new Set(allAvailableCurriculums.map((c) => c.category || 'General').filter(Boolean))
   )
 
+  // Chapter PYQs State
+  const defaultChapterId = activeCourse?.id || (allCurriculums.length > 0 ? allCurriculums[0].id : null)
+  const [selectedPyqChapterId, setSelectedPyqChapterId] = useState<string | null>(defaultChapterId)
+  const [chapterPyqsData, setChapterPyqsData] = useState<any | null>(null)
+  const [isLoadingPyqs, setIsLoadingPyqs] = useState(false)
+  const [pyqMarkFilter, setPyqMarkFilter] = useState<'all' | '1' | '2' | '3' | '5'>('all')
+
+  useEffect(() => {
+    if (!selectedPyqChapterId) return
+    let isCancelled = false
+    setIsLoadingPyqs(true)
+    fetch(`/api/curriculum/pyq?curriculumId=${selectedPyqChapterId}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!isCancelled) {
+          if (json.success && Array.isArray(json.pyqs) && json.pyqs.length > 0) {
+            setChapterPyqsData(json.pyqs[0])
+          } else {
+            setChapterPyqsData(null)
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load dashboard PYQs:', err)
+        if (!isCancelled) setChapterPyqsData(null)
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoadingPyqs(false)
+      })
+    return () => {
+      isCancelled = true
+    }
+  }, [selectedPyqChapterId])
+
   // Current active subject in syllabus modal
   const activeSyllabusCategory = selectedSyllabusCategory 
     || (activeCourse?.category || syllabusSubjects[0] || 'General')
@@ -365,7 +399,7 @@ export function StitchDashboardView({
   }
 
   return (
-    <div className="min-h-full font-body-md text-body-md text-ink-primary bg-canvas botanical-pattern antialiased selection:bg-primary-fixed selection:text-ink-primary">
+    <div className="min-h-full font-body-md text-body-md text-ink-primary bg-canvas botanical-pattern antialiased selection:bg-primary selection:text-white">
       
       {/* ========================================================================= */}
       {/* 1. SIDE NAVIGATION (Desktop Fixed Shell: w-64)                           */}
@@ -498,7 +532,7 @@ export function StitchDashboardView({
           <div className="pt-2 px-1">
             <button
               onClick={() => setLiveModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-accent-hover text-on-primary py-2.5 px-4 rounded-xl font-label-md text-label-md transition-all scale-[0.98] active:scale-95 shadow-xs cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-accent-hover text-white font-semibold py-2.5 px-4 rounded-xl font-label-md text-label-md transition-all scale-[0.98] active:scale-95 shadow-xs cursor-pointer"
             >
               <span className="material-symbols-outlined text-lg">mic</span>
               <span>Start Session</span>
@@ -704,12 +738,12 @@ export function StitchDashboardView({
                   <svg className="w-full h-full overflow-visible" viewBox="0 0 280 60" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id="cadenceGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#466552" stopOpacity="0.25" />
-                        <stop offset="100%" stopColor="#466552" stopOpacity="0.0" />
+                        <stop offset="0%" stopColor="#3B7CAE" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#3B7CAE" stopOpacity="0.0" />
                       </linearGradient>
                     </defs>
-                    <line x1="0" y1="55" x2="280" y2="55" stroke="#E5E3DB" strokeWidth="1" strokeDasharray="3 3" />
-                    <line x1="0" y1="30" x2="280" y2="30" stroke="#E5E3DB" strokeWidth="1" strokeDasharray="3 3" />
+                    <line x1="0" y1="55" x2="280" y2="55" stroke="#E2E6EA" strokeWidth="1" strokeDasharray="3 3" />
+                    <line x1="0" y1="30" x2="280" y2="30" stroke="#E2E6EA" strokeWidth="1" strokeDasharray="3 3" />
                     
                     {Number(studyHours) > 0 ? (
                       <>
@@ -720,18 +754,18 @@ export function StitchDashboardView({
                         <path
                           d="M 0,50 Q 25,48 45,38 T 90,32 T 135,42 T 180,22 T 225,16 T 260,10 L 280,8"
                           fill="none"
-                          stroke="#466552"
+                          stroke="#3B7CAE"
                           strokeWidth="2.5"
                           strokeLinecap="round"
                         />
-                        <circle cx="225" cy="16" r="3.5" fill="#FFFFFF" stroke="#466552" strokeWidth="2" />
-                        <circle cx="260" cy="10" r="3.5" fill="#FFFFFF" stroke="#9f3c27" strokeWidth="2" />
-                        <circle cx="280" cy="8" r="4" fill="#9f3c27" />
+                        <circle cx="225" cy="16" r="3.5" fill="#FFFFFF" stroke="#3B7CAE" strokeWidth="2" />
+                        <circle cx="260" cy="10" r="3.5" fill="#FFFFFF" stroke="#3B7CAE" strokeWidth="2" />
+                        <circle cx="280" cy="8" r="4" fill="#3B7CAE" />
                       </>
                     ) : (
                       <>
-                        <line x1="0" y1="54" x2="280" y2="54" stroke="#466552" strokeWidth="2" strokeDasharray="4 4" />
-                        <circle cx="280" cy="54" r="3.5" fill="#466552" />
+                        <line x1="0" y1="54" x2="280" y2="54" stroke="#3B7CAE" strokeWidth="2" strokeDasharray="4 4" />
+                        <circle cx="280" cy="54" r="3.5" fill="#3B7CAE" />
                       </>
                     )}
                   </svg>
@@ -985,7 +1019,7 @@ export function StitchDashboardView({
                 <div className="pt-8 flex flex-wrap items-center gap-4 relative z-10 border-t border-border-subtle/60 mt-6">
                   <Link
                     id="primary-resume-btn"
-                    className="inline-flex items-center gap-2.5 bg-primary hover:bg-accent-hover text-on-primary font-label-md text-label-md px-7 py-3.5 rounded-xl transition-all scale-[0.98] active:scale-95 shadow-xs"
+                    className="inline-flex items-center gap-2.5 bg-primary hover:bg-accent-hover text-white font-semibold font-label-md text-label-md px-7 py-3.5 rounded-xl transition-all scale-[0.98] active:scale-95 shadow-xs"
                     href={activeModule?.id ? `/dashboard/${user.id}/class/${activeModule.id}` : `/dashboard/${user.id}/class`}
                   >
                     <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: '"FILL" 1' }}>
@@ -1043,7 +1077,7 @@ export function StitchDashboardView({
                   <button
                     id="browse-curriculums-btn"
                     onClick={() => setCoursesDialogOpen(true)}
-                    className="inline-flex items-center gap-2 bg-primary hover:bg-accent-hover text-on-primary font-label-md px-6 py-3 rounded-xl transition-all shadow-xs cursor-pointer"
+                    className="inline-flex items-center gap-2 bg-primary hover:bg-accent-hover text-white font-semibold font-label-md px-6 py-3 rounded-xl transition-all shadow-xs cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-lg">add</span>
                     <span>Browse Curriculums</span>
@@ -1113,7 +1147,7 @@ export function StitchDashboardView({
                     </div>
                     <Link
                       href={activeModule?.id ? `/dashboard/${user.id}/class/${activeModule.id}` : `/dashboard/${user.id}/class`}
-                      className="sm:self-center flex-shrink-0 px-5 py-2.5 rounded-xl bg-primary hover:bg-accent-hover text-on-primary font-label-md text-label-md transition-colors scale-[0.98] text-center"
+                      className="sm:self-center flex-shrink-0 px-5 py-2.5 rounded-xl bg-primary hover:bg-accent-hover text-white font-semibold font-label-md text-label-md transition-colors scale-[0.98] text-center"
                     >
                       Continue
                     </Link>
@@ -1189,7 +1223,7 @@ export function StitchDashboardView({
                   </p>
                   <button
                     onClick={() => setCoursesDialogOpen(true)}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-sm hover:bg-accent-hover cursor-pointer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white font-semibold font-label-md text-sm hover:bg-accent-hover cursor-pointer"
                   >
                     <span>Browse Courses</span>
                   </button>
@@ -1307,7 +1341,7 @@ export function StitchDashboardView({
                 </p>
                 <button
                   onClick={() => setCoursesDialogOpen(true)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-sm hover:bg-accent-hover cursor-pointer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white font-semibold font-label-md text-sm hover:bg-accent-hover cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-sm">add</span>
                   <span>Browse Available Subjects</span>
@@ -1316,7 +1350,7 @@ export function StitchDashboardView({
             )}
           </section>
 
-          {/* SECTION 5: DELIBERATE PRACTICE QUICK LAUNCHER */}
+          {/* SECTION 5: DELIBERATE PRACTICE & PAST YEAR QUESTIONS (PYQ) HUB */}
           <section id="deliberate-practice-section" className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-12">
             <div className="lg:col-span-5 bg-surface rounded-3xl border border-border-subtle p-7 md:p-8 diffused-card-shadow flex flex-col justify-between">
               <div className="space-y-5">
@@ -1369,6 +1403,131 @@ export function StitchDashboardView({
                   <span className="material-symbols-outlined text-lg">edit_document</span>
                   <span>Launch Custom 15-Question Set</span>
                 </Link>
+              </div>
+            </div>
+
+            {/* Chapter Past Year Questions (PYQ) Practice Hub */}
+            <div className="lg:col-span-7 bg-surface rounded-3xl border border-border-subtle p-7 md:p-8 diffused-card-shadow flex flex-col justify-between space-y-5">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="font-label-micro text-label-micro text-secondary uppercase tracking-wider font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-secondary" />
+                    <span>Board Exam PYQ Practice Hub</span>
+                  </span>
+                  {chapterPyqsData && (
+                    <span className="text-xs font-mono text-ink-muted bg-surface-container-low px-2.5 py-1 rounded-full border border-border-subtle">
+                      {chapterPyqsData.practice_set?.length || 0} Questions
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-headline-md text-headline-md text-ink-primary leading-tight">
+                      Chapter Previous Year Questions
+                    </h4>
+                    <p className="font-body-md text-body-md text-ink-secondary text-xs mt-1">
+                      Authentic board examination problems with step-by-step chalkboard derivations.
+                    </p>
+                  </div>
+
+                  {/* Chapter Selector Dropdown */}
+                  {allCurriculums.length > 0 && (
+                    <select
+                      value={selectedPyqChapterId || ''}
+                      onChange={(e) => setSelectedPyqChapterId(e.target.value)}
+                      className="h-9 px-3 rounded-xl bg-canvas border border-border-subtle text-xs text-ink-primary focus:outline-none focus:border-secondary font-sans cursor-pointer max-w-[210px] truncate"
+                    >
+                      {allCurriculums.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.title}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Mark Allocation Filter Chips */}
+                <div className="flex items-center gap-2 mt-4">
+                  <span className="font-label-micro text-label-micro text-ink-muted">Filter:</span>
+                  {(['all', '1', '2', '3', '5'] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setPyqMarkFilter(m)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-colors cursor-pointer ${
+                        pyqMarkFilter === m
+                          ? 'bg-secondary text-white font-bold'
+                          : 'bg-canvas text-ink-secondary border border-border-subtle hover:text-ink-primary'
+                      }`}
+                    >
+                      {m === 'all' ? 'All Marks' : `${m} Mark${m !== '1' ? 's' : ''}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Questions List */}
+              <div className="space-y-3 min-h-[220px] max-h-[340px] overflow-y-auto pr-1">
+                {isLoadingPyqs ? (
+                  <div className="py-12 text-center text-xs font-mono text-ink-muted">
+                    Loading authentic board exam questions...
+                  </div>
+                ) : chapterPyqsData && chapterPyqsData.practice_set?.length > 0 ? (
+                  (() => {
+                    const filteredQuestions = chapterPyqsData.practice_set.filter((q: any) =>
+                      pyqMarkFilter === 'all' ? true : String(q.marks) === pyqMarkFilter
+                    )
+
+                    if (filteredQuestions.length === 0) {
+                      return (
+                        <div className="py-8 text-center text-xs font-mono text-ink-muted">
+                          No {pyqMarkFilter}-mark questions in this practice set.
+                        </div>
+                      )
+                    }
+
+                    const matchingModule = modules.find((m) => m.curriculum_id === selectedPyqChapterId) || activeModule
+
+                    return filteredQuestions.map((q: any, idx: number) => (
+                      <div
+                        key={q.id || idx}
+                        className="p-4 rounded-2xl bg-canvas border border-border-subtle space-y-2 hover:border-secondary/40 transition-colors"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="px-2 py-0.5 rounded bg-surface text-secondary text-[11px] font-mono border border-secondary/20 font-bold">
+                            {q.year || 'Board Exam'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-surface text-ink-primary text-[11px] font-mono border border-border-subtle">
+                            {q.marks || 1} Mark{(q.marks || 1) > 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-ink-primary font-medium leading-relaxed">
+                          {q.question}
+                        </p>
+
+                        <div className="pt-2 flex items-center justify-between border-t border-border-subtle/60 text-xs">
+                          <span className="text-[11px] font-mono text-ink-muted">
+                            {q.topic || 'Core Concept'}
+                          </span>
+                          {matchingModule && (
+                            <Link
+                              href={`/dashboard/${user.id}/class/${matchingModule.id}?pyqQuestion=${encodeURIComponent(q.question)}`}
+                              className="text-xs font-medium text-secondary hover:underline flex items-center gap-1"
+                            >
+                              <span>Solve on Chalkboard</span>
+                              <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  })()
+                ) : (
+                  <div className="py-12 text-center rounded-2xl bg-canvas border border-border-subtle text-xs text-ink-muted font-mono">
+                    No past year questions uploaded for this chapter yet. Upload question papers in Admin Studio!
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -1443,7 +1602,7 @@ export function StitchDashboardView({
               <button
                 disabled={isStartingSession}
                 onClick={handleStartSession}
-                className="flex-1 py-3 px-4 rounded-xl bg-primary hover:bg-accent-hover text-on-primary font-label-md text-label-md transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                className="flex-1 py-3 px-4 rounded-xl bg-primary hover:bg-accent-hover text-white font-semibold font-label-md text-label-md transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
                 <span className="material-symbols-outlined text-lg">mic</span>
                 <span>{isStartingSession ? 'Connecting...' : 'Begin Conversation'}</span>
@@ -1457,7 +1616,7 @@ export function StitchDashboardView({
       {/* 4. MODAL: CHAPTER NOTES DIALOG                                            */}
       {/* ========================================================================= */}
       <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
-        <DialogContent className="max-w-xl bg-surface border-border-subtle rounded-3xl p-7">
+        <DialogContent className="max-w-xl bg-surface border-border-subtle rounded-3xl p-7 text-ink-primary shadow-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline-md text-2xl text-ink-primary">
               {activeModule?.title || 'Chapter Notes'}
@@ -1505,7 +1664,7 @@ export function StitchDashboardView({
             </button>
             <Link
               href={activeModule?.id ? `/dashboard/${user.id}/class/${activeModule.id}` : `/dashboard/${user.id}/class`}
-              className="px-5 py-2 rounded-xl bg-primary text-on-primary font-label-md hover:bg-accent-hover text-center"
+              className="px-5 py-2 rounded-xl bg-primary text-white font-semibold font-label-md hover:bg-accent-hover text-center"
             >
               Open Live Session
             </Link>
@@ -1517,7 +1676,7 @@ export function StitchDashboardView({
       {/* 5. MODAL: SETTINGS & PREFERENCES DIALOG                                  */}
       {/* ========================================================================= */}
       <Dialog open={preferencesOpen} onOpenChange={setPreferencesOpen}>
-        <DialogContent className="max-w-md bg-surface border-border-subtle rounded-3xl p-7">
+        <DialogContent className="max-w-md bg-surface border-border-subtle rounded-3xl p-7 text-ink-primary shadow-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline-md text-2xl text-ink-primary">
               Student Preferences
@@ -1618,7 +1777,7 @@ export function StitchDashboardView({
                 <button
                   type="submit"
                   disabled={savingPrefs}
-                  className="px-5 py-2 rounded-xl bg-primary text-on-primary font-label-md text-sm hover:bg-accent-hover cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-primary text-white font-semibold font-label-md text-sm hover:bg-accent-hover cursor-pointer"
                 >
                   {savingPrefs ? 'Saving...' : 'Save Settings'}
                 </button>
@@ -1632,7 +1791,7 @@ export function StitchDashboardView({
       {/* 6. MODAL: MANAGE COURSES DIALOG                                           */}
       {/* ========================================================================= */}
       <Dialog open={coursesDialogOpen} onOpenChange={setCoursesDialogOpen}>
-        <DialogContent className="max-w-lg bg-surface border-border-subtle rounded-3xl p-7">
+        <DialogContent className="max-w-lg bg-surface border-border-subtle rounded-3xl p-7 text-ink-primary shadow-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline-md text-2xl text-ink-primary">
               All Available Curriculums
@@ -1668,7 +1827,7 @@ export function StitchDashboardView({
                         await enrollCurriculumAction(curr.id)
                         setCoursesDialogOpen(false)
                       }}
-                      className="px-3.5 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-medium hover:bg-accent-hover cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-lg bg-primary text-white font-semibold text-xs font-medium hover:bg-accent-hover cursor-pointer"
                     >
                       Enroll
                     </button>
@@ -1693,7 +1852,7 @@ export function StitchDashboardView({
       {/* 6B. MODAL: SYLLABUS & DIVIDED CAPSULES DIALOG                             */}
       {/* ========================================================================= */}
       <Dialog open={syllabusModalOpen} onOpenChange={setSyllabusModalOpen}>
-        <DialogContent className="max-w-4xl w-[95vw] md:w-full bg-surface border border-border-subtle rounded-3xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <DialogContent className="max-w-4xl w-[95vw] md:w-full bg-surface border border-border-subtle rounded-3xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh] text-ink-primary">
           {/* Modal Header */}
           <div className="p-6 md:p-7 border-b border-border-subtle bg-surface/95 backdrop-blur-md">
             <div className="flex flex-wrap items-center gap-2 mb-2.5">
@@ -2003,10 +2162,10 @@ export function StitchDashboardView({
                             onClick={() => setSyllabusModalOpen(false)}
                             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-label-md text-xs font-semibold transition-all ${
                               isInProg
-                                ? 'bg-primary hover:bg-accent-hover text-on-primary shadow-xs'
+                                ? 'bg-primary hover:bg-accent-hover text-white font-semibold shadow-xs'
                                 : isDone
                                 ? 'border border-border-subtle hover:bg-canvas text-ink-primary'
-                                : 'bg-primary hover:bg-accent-hover text-on-primary shadow-xs'
+                                : 'bg-primary hover:bg-accent-hover text-white font-semibold shadow-xs'
                             }`}
                           >
                             <span className="material-symbols-outlined text-sm">

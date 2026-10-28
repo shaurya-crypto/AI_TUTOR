@@ -190,14 +190,14 @@ export function VisualizationViewport({
             className="p-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border border-emerald-800/60 transition-colors cursor-pointer"
             title="Reset View"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-300" />
+            <RotateCcw className="w-3.5 h-3.5 text-sky-300" />
           </button>
 
           <button
             onClick={handleTogglePlayPause}
             className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
               isPaused
-                ? 'bg-amber-950/80 text-amber-200 border-amber-800/60'
+                ? 'bg-blue-950/80 text-sky-200 border-blue-800/60'
                 : 'bg-emerald-950/80 text-emerald-200 border-emerald-800/60'
             }`}
             title={isPaused ? 'Resume Simulation' : 'Pause Simulation'}
@@ -228,7 +228,7 @@ export function VisualizationViewport({
         ) : (
           /* WebGL Fallback Card */
           <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-emerald-200 space-y-3">
-            <HelpCircle className="w-10 h-10 text-amber-400" />
+            <HelpCircle className="w-10 h-10 text-sky-400" />
             <h5 className="font-semibold text-sm">3D Graphics Hardware Acceleration Unavailable</h5>
             <p className="text-xs text-emerald-300/80 max-w-sm">
               Your browser or hardware did not report WebGL support. Don't worry! All conceptual explanations and formulas are preserved on your live chalkboard.

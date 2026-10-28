@@ -149,8 +149,8 @@ function SixDigitOtpInput({
             hasError
               ? 'border-rose-300 bg-rose-50/20 text-rose-900 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
               : digit
-              ? 'border-[#52715D] bg-white text-[#1F1C18] focus:border-[#52715D] focus:ring-2 focus:ring-[#52715D]/20'
-              : 'border-[#E5E3DB] bg-white text-[#1F1C18] focus:border-[#1F1C18] focus:ring-2 focus:ring-neutral-900/10'
+              ? 'border-[var(--accent-sage)] bg-white text-[var(--ink-primary)] focus:border-[var(--accent-sage)] focus:ring-2 focus:ring-[var(--accent-sage)]/20'
+              : 'border-[var(--border-subtle)] bg-white text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:ring-2 focus:ring-neutral-900/10'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       ))}
@@ -332,12 +332,12 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-[#FAF9F5] text-[#1F1C18]">
+    <div className="flex min-h-screen w-full bg-[var(--canvas-base)] text-[var(--ink-primary)]">
       {/* Left Column: Form (45% - 50%) */}
       <div className="flex w-full flex-col justify-between p-8 md:w-1/2 md:p-12 lg:w-[46%] lg:p-16">
         {/* Brand Header */}
         <div className="flex items-center justify-between">
-          <Link href="/" className="font-serif text-2xl font-normal tracking-tight text-[#1F1C18]">
+          <Link href="/" className="font-serif text-2xl font-normal tracking-tight text-[var(--ink-primary)]">
             Anaxly
           </Link>
         </div>
@@ -353,7 +353,7 @@ function LoginForm() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <h1 className="font-serif text-4xl font-normal tracking-tight text-[#1F1C18]">
+                <h1 className="font-serif text-4xl font-normal tracking-tight text-[var(--ink-primary)]">
                   Come on in.
                 </h1>
                 <p className="mt-2 text-sm text-neutral-500">
@@ -391,7 +391,7 @@ function LoginForm() {
                 {/* Classical Subtle Divider */}
                 <div className="relative my-7 flex items-center justify-center">
                   <div className="w-full border-t border-neutral-200/90" />
-                  <span className="absolute bg-[#FAF9F5] px-3 text-xs font-normal text-neutral-400">
+                  <span className="absolute bg-[var(--canvas-base)] px-3 text-xs font-normal text-neutral-400">
                     or
                   </span>
                 </div>
@@ -420,7 +420,7 @@ function LoginForm() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#2C241E] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#1E1712] active:scale-[0.99] disabled:opacity-50"
+                    className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[var(--accent-primary)] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[var(--accent-primary-hover)] active:scale-[0.99] disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -470,7 +470,7 @@ function LoginForm() {
                   <span>Use different email</span>
                 </button>
 
-                <h1 className="font-serif text-3xl font-normal tracking-tight text-[#1F1C18]">
+                <h1 className="font-serif text-3xl font-normal tracking-tight text-[var(--ink-primary)]">
                   Check your inbox.
                 </h1>
                 <p className="mt-2 text-sm text-neutral-500">
@@ -508,14 +508,14 @@ function LoginForm() {
 
                   {/* Security Validity Badge */}
                   <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-neutral-500">
-                    <ShieldCheck className="h-3.5 w-3.5 text-[#52715D]" />
+                    <ShieldCheck className="h-3.5 w-3.5 text-[var(--accent-sage)]" />
                     <span>Valid for 10 minutes &bull; Single-use only</span>
                   </div>
 
                   <button
                     type="submit"
                     disabled={isSubmitting || code.length < 6}
-                    className="mt-5 flex w-full items-center justify-center rounded-2xl bg-[#2C241E] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#1E1712] active:scale-[0.99] disabled:opacity-50"
+                    className="mt-5 flex w-full items-center justify-center rounded-2xl bg-[var(--accent-primary)] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[var(--accent-primary-hover)] active:scale-[0.99] disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -564,7 +564,7 @@ function LoginForm() {
                   <span>Back to email code</span>
                 </button>
 
-                <h1 className="font-serif text-3xl font-normal tracking-tight text-[#1F1C18]">
+                <h1 className="font-serif text-3xl font-normal tracking-tight text-[var(--ink-primary)]">
                   Sign in.
                 </h1>
                 <p className="mt-2 text-sm text-neutral-500">
@@ -611,7 +611,7 @@ function LoginForm() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#2C241E] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#1E1712] active:scale-[0.99] disabled:opacity-50"
+                    className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[var(--accent-primary)] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[var(--accent-primary-hover)] active:scale-[0.99] disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -652,7 +652,7 @@ function LoginForm() {
       </div>
 
       {/* Right Column: Classical Arch Artwork (Desktop Only, 50% - 54%) */}
-      <div className="relative hidden md:block md:w-1/2 lg:w-[54%] overflow-hidden border-l border-neutral-200/60 bg-[#EFECE6]">
+      <div className="relative hidden md:block md:w-1/2 lg:w-[54%] overflow-hidden border-l border-neutral-200/60 bg-[var(--canvas-soft)]">
         <Image
           src="/landing_images/classical-arch.jpg"
           alt="Classical Italian arch overlooking golden sunlit hills"
@@ -662,7 +662,7 @@ function LoginForm() {
           className="object-cover object-center select-none pointer-events-none"
         />
         {/* Soft vignette gradient on edge */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#FAF9F5]/20 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[var(--canvas-base)]/20 via-transparent to-transparent pointer-events-none" />
       </div>
     </div>
   )
@@ -672,7 +672,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#FAF9F5]">
+        <div className="flex min-h-screen items-center justify-center bg-[var(--canvas-base)]">
           <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
         </div>
       }

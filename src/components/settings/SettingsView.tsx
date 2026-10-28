@@ -316,7 +316,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-[#2D2A26] flex flex-col">
       {/* Top Header Bar */}
-      <header className="sticky top-0 z-30 w-full bg-[#FDFBF7]/90 backdrop-blur-md border-b border-[#E5E3DB] px-4 sm:px-8 py-3.5 flex items-center justify-between">
+      <header className="sticky top-0 z-30 w-full bg-[#FDFBF7]/90 backdrop-blur-md border-b border-[var(--border-subtle)] px-4 sm:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
             href={`/dashboard/${user.id}`}
@@ -340,7 +340,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
         <div className="flex items-center gap-2">
           <Link
             href={`/dashboard/${user.id}`}
-            className="px-3.5 py-1.5 rounded-lg bg-[#C85A43] hover:bg-[#A94734] text-white text-xs font-medium shadow-xs transition-colors"
+            className="px-3.5 py-1.5 rounded-lg bg-[var(--accent-warm)] hover:bg-[var(--accent-warm-hover)] text-white text-xs font-medium shadow-xs transition-colors"
           >
             Open Classroom
           </Link>
@@ -351,12 +351,12 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
       <div className="max-w-7xl w-full mx-auto p-4 sm:p-8 flex-1 flex flex-col md:flex-row gap-6">
         {/* Left Navigation Tabs Sidebar */}
         <aside className="w-full md:w-64 shrink-0">
-          <nav className="flex md:flex-col gap-1.5 p-1.5 bg-white border border-[#E5E3DB] rounded-2xl shadow-xs overflow-x-auto">
+          <nav className="flex md:flex-col gap-1.5 p-1.5 bg-white border border-[var(--border-subtle)] rounded-2xl shadow-xs overflow-x-auto">
             <button
               onClick={() => handleTabChange('avatars')}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap cursor-pointer ${
                 activeTab === 'avatars'
-                  ? 'bg-[#C85A43] text-white shadow-xs'
+                  ? 'bg-[var(--accent-warm)] text-white shadow-xs'
                   : 'text-[#57534E] hover:text-[#2D2A26] hover:bg-[#F5F2EB]'
               }`}
             >
@@ -368,7 +368,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               onClick={() => handleTabChange('account')}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap cursor-pointer ${
                 activeTab === 'account'
-                  ? 'bg-[#C85A43] text-white shadow-xs'
+                  ? 'bg-[var(--accent-warm)] text-white shadow-xs'
                   : 'text-[#57534E] hover:text-[#2D2A26] hover:bg-[#F5F2EB]'
               }`}
             >
@@ -380,7 +380,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               onClick={() => handleTabChange('general')}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap cursor-pointer ${
                 activeTab === 'general'
-                  ? 'bg-[#C85A43] text-white shadow-xs'
+                  ? 'bg-[var(--accent-warm)] text-white shadow-xs'
                   : 'text-[#57534E] hover:text-[#2D2A26] hover:bg-[#F5F2EB]'
               }`}
             >
@@ -392,7 +392,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               onClick={() => handleTabChange('teaching')}
               className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap cursor-pointer ${
                 activeTab === 'teaching'
-                  ? 'bg-[#C85A43] text-white shadow-xs'
+                  ? 'bg-[var(--accent-warm)] text-white shadow-xs'
                   : 'text-[#57534E] hover:text-[#2D2A26] hover:bg-[#F5F2EB]'
               }`}
             >
@@ -402,9 +402,9 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
           </nav>
 
           {/* Quick Academic Profile Summary Card */}
-          <div className="hidden md:block mt-6 p-4 rounded-2xl bg-white border border-[#E5E3DB] shadow-xs space-y-3">
+          <div className="hidden md:block mt-6 p-4 rounded-2xl bg-white border border-[var(--border-subtle)] shadow-xs space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#F5F2EB] border border-[#E5E3DB] flex items-center justify-center font-serif font-bold text-[#C85A43] text-base">
+              <div className="w-10 h-10 rounded-full bg-[#F5F2EB] border border-[var(--border-subtle)] flex items-center justify-center font-serif font-bold text-[var(--accent-warm)] text-base">
                 {fullName ? fullName.charAt(0).toUpperCase() : 'S'}
               </div>
               <div className="min-w-0">
@@ -414,7 +414,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                 <p className="text-[11px] text-[#78716C] truncate">{user.email}</p>
               </div>
             </div>
-            <div className="pt-2 border-t border-[#E5E3DB] flex items-center justify-between text-[11px] text-[#78716C]">
+            <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[#78716C]">
               <span>Board Track</span>
               <span className="font-semibold text-[#2D2A26] uppercase">{targetBoard}</span>
             </div>
@@ -443,8 +443,8 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               )}
 
               {/* Active Classroom Persona Live Stage Preview */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#E5E3DB] shadow-xs flex flex-col md:flex-row items-center gap-6">
-                <div className="relative w-36 h-36 sm:w-40 sm:h-40 rounded-full p-1.5 bg-white border-2 border-[#E5E3DB] shadow-md flex items-center justify-center shrink-0 overflow-hidden">
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[var(--border-subtle)] shadow-xs flex flex-col md:flex-row items-center gap-6">
+                <div className="relative w-36 h-36 sm:w-40 sm:h-40 rounded-full p-1.5 bg-white border-2 border-[var(--border-subtle)] shadow-md flex items-center justify-center shrink-0 overflow-hidden">
                   <img
                     src={activeAvatarObj.image || `/avatars/${selectedAvatarId}.jpg`}
                     alt="Active Face ID Avatar Preview"
@@ -471,7 +471,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                     {activeAvatarObj.description}
                   </p>
                   <div className="pt-1 flex items-center gap-2 justify-center md:justify-start">
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#F5F2EB] text-[#78716C] border border-[#E5E3DB]">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#F5F2EB] text-[#78716C] border border-[var(--border-subtle)]">
                       Face ID: {selectedAvatarId}
                     </span>
                   </div>
@@ -491,7 +491,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                   </div>
                   <button
                     onClick={handleResetToDefault}
-                    className="text-xs text-[#C85A43] hover:text-[#A94734] font-medium flex items-center gap-1 hover:underline cursor-pointer"
+                    className="text-xs text-[var(--accent-warm)] hover:text-[#A94734] font-medium flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Reset to Default</span>
@@ -506,12 +506,12 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                         key={avatar.id}
                         className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
                           isSelected
-                            ? 'bg-[#FDF6F0] border-[#C85A43] shadow-xs ring-1 ring-[#C85A43]/30'
-                            : 'bg-white border-[#E5E3DB] hover:border-[#D6D3C9]'
+                            ? 'bg-[#EEF5FA] border-[#255D88] shadow-xs ring-1 ring-[#255D88]/30'
+                            : 'bg-white border-[var(--border-subtle)] hover:border-[#D6D3C9]'
                         }`}
                       >
                         <div className="flex gap-4">
-                          <div className="relative w-16 h-16 rounded-full overflow-hidden shrink-0 border border-[#E5E3DB] bg-[#F5F2EB]">
+                          <div className="relative w-16 h-16 rounded-full overflow-hidden shrink-0 border border-[var(--border-subtle)] bg-[#F5F2EB]">
                             <img
                               src={avatar.image}
                               alt={avatar.name}
@@ -521,7 +521,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                               }}
                             />
                             {isSelected && (
-                              <div className="absolute inset-0 bg-[#C85A43]/20 flex items-center justify-center">
+                              <div className="absolute inset-0 bg-[var(--accent-warm)]/20 flex items-center justify-center">
                                 <Check className="w-5 h-5 text-white drop-shadow-sm" />
                               </div>
                             )}
@@ -535,7 +535,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                               <span
                                 className={`text-[10px] px-2 py-0.2 rounded-full font-medium ${
                                   avatar.badge === 'Primary Default'
-                                    ? 'bg-[#C85A43]/10 text-[#C85A43]'
+                                    ? 'bg-[var(--accent-warm)]/10 text-[var(--accent-warm)]'
                                     : 'bg-stone-100 text-stone-600'
                                 }`}
                               >
@@ -551,7 +551,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                           </div>
                         </div>
 
-                        <div className="pt-3 mt-3 border-t border-[#E5E3DB]/60 flex items-center justify-between">
+                        <div className="pt-3 mt-3 border-t border-[var(--border-subtle)]/60 flex items-center justify-between">
                           <span className="text-[10px] text-[#78716C] font-mono">
                             {avatar.recommendedBoard}
                           </span>
@@ -562,7 +562,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                             disabled={isSelected}
                             className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                               isSelected
-                                ? 'bg-[#C85A43] text-white cursor-default'
+                                ? 'bg-[var(--accent-warm)] text-white cursor-default'
                                 : 'bg-[#F5F2EB] text-[#2D2A26] hover:bg-[#EAE7DF]'
                             }`}
                           >
@@ -576,7 +576,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               </div>
 
               {/* Streaming Engine Information */}
-              <div className="p-4 rounded-2xl bg-[#F5F2EB]/60 border border-[#E5E3DB] flex items-start gap-3">
+              <div className="p-4 rounded-2xl bg-[#F5F2EB]/60 border border-[var(--border-subtle)] flex items-start gap-3">
                 <Shield className="w-4 h-4 text-[#78716C] mt-0.5 shrink-0" />
                 <div className="text-xs text-[#57534E] space-y-1">
                   <p className="font-semibold text-[#2D2A26]">
@@ -614,7 +614,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               )}
 
               {/* Personal Details Form */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#E5E3DB] shadow-xs space-y-4">
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[var(--border-subtle)] shadow-xs space-y-4">
                 <div>
                   <h3 className="text-base font-serif font-bold text-[#2D2A26]">
                     Student Profile
@@ -633,7 +633,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                       onChange={(e) => setFullName(e.target.value)}
                       required
                       placeholder="e.g. Aarav Sharma"
-                      className="w-full px-3.5 py-2 rounded-xl border border-[#E5E3DB] text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#C85A43]/20 focus:border-[#C85A43]"
+                      className="w-full px-3.5 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#255D88]/20 focus:border-[#255D88]"
                     />
                   </div>
 
@@ -645,7 +645,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                       type="email"
                       value={user.email || ''}
                       disabled
-                      className="w-full px-3.5 py-2 rounded-xl border border-[#E5E3DB] bg-[#F5F2EB]/50 text-sm text-[#78716C] cursor-not-allowed"
+                      className="w-full px-3.5 py-2 rounded-xl border border-[var(--border-subtle)] bg-[#F5F2EB]/50 text-sm text-[#78716C] cursor-not-allowed"
                     />
                   </div>
 
@@ -657,7 +657,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                       <select
                         value={targetBoard}
                         onChange={(e) => setTargetBoard(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-[#E5E3DB] bg-white text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#C85A43]/20"
+                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-subtle)] bg-white text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#255D88]/20"
                       >
                         {BOARD_OPTIONS.map((b) => (
                           <option key={b.id} value={b.id}>
@@ -674,7 +674,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                       <select
                         value={classLevel}
                         onChange={(e) => setClassLevel(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-[#E5E3DB] bg-white text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#C85A43]/20"
+                        className="w-full px-3 py-2 rounded-xl border border-[var(--border-subtle)] bg-white text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#255D88]/20"
                       >
                         {CLASS_LEVEL_OPTIONS.map((c) => (
                           <option key={c.id} value={c.label}>
@@ -689,7 +689,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                     <button
                       type="submit"
                       disabled={isUpdatingAccount}
-                      className="px-4 py-2 rounded-xl bg-[#C85A43] hover:bg-[#A94734] text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-[var(--accent-warm)] hover:bg-[var(--accent-warm-hover)] text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
                     >
                       {isUpdatingAccount ? 'Saving...' : 'Save Profile Changes'}
                     </button>
@@ -698,7 +698,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               </div>
 
               {/* Password Management */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#E5E3DB] shadow-xs space-y-4">
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[var(--border-subtle)] shadow-xs space-y-4">
                 <div>
                   <h3 className="text-base font-serif font-bold text-[#2D2A26]">
                     Security & Password
@@ -717,7 +717,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="Minimum 6 characters"
-                        className="w-full px-3.5 py-2 rounded-xl border border-[#E5E3DB] text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#C85A43]/20"
+                        className="w-full px-3.5 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#255D88]/20"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -729,7 +729,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Re-enter password"
-                        className="w-full px-3.5 py-2 rounded-xl border border-[#E5E3DB] text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#C85A43]/20"
+                        className="w-full px-3.5 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#255D88]/20"
                       />
                     </div>
                   </div>
@@ -747,7 +747,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               </div>
 
               {/* Account Signout */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#E5E3DB] shadow-xs flex items-center justify-between">
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[var(--border-subtle)] shadow-xs flex items-center justify-between">
                 <div>
                   <h4 className="text-sm font-semibold text-[#2D2A26]">Active Session</h4>
                   <p className="text-xs text-[#78716C]">
@@ -786,7 +786,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               )}
 
               {/* Voice & Speech Tuning */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#E5E3DB] shadow-xs space-y-4">
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[var(--border-subtle)] shadow-xs space-y-4">
                 <div>
                   <h3 className="text-base font-serif font-bold text-[#2D2A26]">
                     Voice & Speech Cadence
@@ -804,7 +804,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                     <select
                       value={preferredVoice}
                       onChange={(e) => setPreferredVoice(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#E5E3DB] bg-white text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#C85A43]/20"
+                      className="w-full px-3 py-2 rounded-xl border border-[var(--border-subtle)] bg-white text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#255D88]/20"
                     >
                       {VOICE_OPTIONS.map((v) => (
                         <option key={v.id} value={v.id}>
@@ -830,8 +830,8 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                           onClick={() => setSpeechRate(rate.id)}
                           className={`p-3 rounded-xl border text-left transition-colors cursor-pointer ${
                             speechRate === rate.id
-                              ? 'bg-[#FDF6F0] border-[#C85A43] text-[#2D2A26]'
-                              : 'bg-white border-[#E5E3DB] text-[#57534E] hover:bg-[#F5F2EB]'
+                              ? 'bg-[#EEF5FA] border-[#255D88] text-[#2D2A26]'
+                              : 'bg-white border-[var(--border-subtle)] text-[#57534E] hover:bg-[#F5F2EB]'
                           }`}
                         >
                           <p className="text-xs font-semibold">{rate.label}</p>
@@ -841,7 +841,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                     </div>
                   </div>
 
-                  <div className="pt-2 flex items-center justify-between border-t border-[#E5E3DB]">
+                  <div className="pt-2 flex items-center justify-between border-t border-[var(--border-subtle)]">
                     <div>
                       <p className="text-xs font-semibold text-[#2D2A26]">
                         Continuous Voice Activity Detection (Auto-Listen)
@@ -854,7 +854,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                       type="checkbox"
                       checked={autoListen}
                       onChange={(e) => setAutoListen(e.target.checked)}
-                      className="w-4 h-4 accent-[#C85A43] rounded-sm cursor-pointer"
+                      className="w-4 h-4 accent-[#255D88] rounded-sm cursor-pointer"
                     />
                   </div>
 
@@ -862,7 +862,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                     <button
                       type="submit"
                       disabled={isSavingGeneral}
-                      className="px-4 py-2 rounded-xl bg-[#C85A43] hover:bg-[#A94734] text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-[var(--accent-warm)] hover:bg-[var(--accent-warm-hover)] text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
                     >
                       {isSavingGeneral ? 'Saving...' : 'Save Audio Preferences'}
                     </button>
@@ -891,7 +891,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               )}
 
               {/* Pedagogical Cadence Section */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#E5E3DB] shadow-xs space-y-4">
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[var(--border-subtle)] shadow-xs space-y-4">
                 <div>
                   <h3 className="text-base font-serif font-bold text-[#2D2A26]">
                     Pedagogical Cadence & Board Alignment
@@ -930,8 +930,8 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                           onClick={() => setLearningStyle(style.id)}
                           className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
                             learningStyle === style.id
-                              ? 'bg-[#FDF6F0] border-[#C85A43] ring-1 ring-[#C85A43]/20'
-                              : 'bg-white border-[#E5E3DB] hover:bg-[#F5F2EB]'
+                              ? 'bg-[#EEF5FA] border-[#255D88] ring-1 ring-[#255D88]/20'
+                              : 'bg-white border-[var(--border-subtle)] hover:bg-[#F5F2EB]'
                           }`}
                         >
                           <div className="flex items-center justify-between">
@@ -942,7 +942,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                               value={style.id}
                               checked={learningStyle === style.id}
                               onChange={() => setLearningStyle(style.id)}
-                              className="accent-[#C85A43]"
+                              className="accent-[#255D88]"
                             />
                           </div>
                           <p className="text-[11px] text-[#78716C] leading-relaxed mt-1">
@@ -954,7 +954,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                   </div>
 
                   {/* Chalkboard Note Detail Level */}
-                  <div className="space-y-2 pt-2 border-t border-[#E5E3DB]">
+                  <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
                     <label className="text-xs font-semibold text-[#57534E]">
                       Chalkboard Note Density
                     </label>
@@ -963,8 +963,8 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                         onClick={() => setNoteDensity('topper_detailed')}
                         className={`p-3 rounded-xl border transition-all cursor-pointer ${
                           noteDensity === 'topper_detailed'
-                            ? 'bg-[#FDF6F0] border-[#C85A43]'
-                            : 'bg-white border-[#E5E3DB] hover:bg-[#F5F2EB]'
+                            ? 'bg-[#EEF5FA] border-[#255D88]'
+                            : 'bg-white border-[var(--border-subtle)] hover:bg-[#F5F2EB]'
                         }`}
                       >
                         <p className="text-xs font-semibold text-[#2D2A26]">Topper Master Notes</p>
@@ -977,8 +977,8 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                         onClick={() => setNoteDensity('summary_keypoints')}
                         className={`p-3 rounded-xl border transition-all cursor-pointer ${
                           noteDensity === 'summary_keypoints'
-                            ? 'bg-[#FDF6F0] border-[#C85A43]'
-                            : 'bg-white border-[#E5E3DB] hover:bg-[#F5F2EB]'
+                            ? 'bg-[#EEF5FA] border-[#255D88]'
+                            : 'bg-white border-[var(--border-subtle)] hover:bg-[#F5F2EB]'
                         }`}
                       >
                         <p className="text-xs font-semibold text-[#2D2A26]">Executive Summary</p>
@@ -993,7 +993,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                     <button
                       type="submit"
                       disabled={isSavingTeaching}
-                      className="px-4 py-2 rounded-xl bg-[#C85A43] hover:bg-[#A94734] text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-[var(--accent-warm)] hover:bg-[var(--accent-warm-hover)] text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
                     >
                       {isSavingTeaching ? 'Saving...' : 'Save Teaching Style'}
                     </button>

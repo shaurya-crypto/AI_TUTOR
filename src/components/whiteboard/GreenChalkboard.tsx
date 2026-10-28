@@ -2101,124 +2101,300 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
-    // Universal Topic-Adaptive Flowchart on Board (Multi-Row Wrapping, Decision Trees & Cycles)
+    // Universal Topic-Adaptive Flowchart on Board (Multi-Level Trees, Branching Decisions, Multi-Row Wrapping & Cycles)
     const drawFlowchart = async (flowText: string, color?: string) => {
       if (!excalidrawAPI || !flowText?.trim()) return
       if (shouldSkipDuplicate('draw_flowchart', flowText)) return
       const rawText = flowText.trim()
       const isCycle = rawText.toLowerCase().startsWith('cycle:') || rawText.toLowerCase().includes('[cycle]')
       const cleanText = rawText.replace(/^cycle:\s*/i, '').replace(/\[cycle\]/gi, '').trim()
-      const steps = cleanText.split(/->|=>|\|/).map((s) => s.trim()).filter(Boolean)
-      if (steps.length === 0) return
+      if (!cleanText) return
 
-      const maxBoxesPerRow = 3
-      const numRows = Math.ceil(steps.length / maxBoxesPerRow)
-      const estimatedHeight = Math.max(70, numRows * 76 + 20)
-      await checkAutoPageOverflow(estimatedHeight)
+      const hasMultiStatements = cleanText.includes(';') || cleanText.includes('\n')
+      const hasBranches = cleanText.includes('|') && (cleanText.includes('->') || cleanText.includes('=>'))
 
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
-        const startY = getDynamicNextY(16)
         const flowColor = resolveChalkColor(color, INK_BOTANICAL)
         const skeletons: any[] = []
-        const rowPositions: { x: number; y: number; w: number; h: number }[] = []
 
-        steps.forEach((st, i) => {
-          const rowIdx = Math.floor(i / maxBoxesPerRow)
-          const colIdx = i % maxBoxesPerRow
-          const w = Math.min(210, Math.max(120, st.length * 8.5 + 24))
-          const h = 36
-          const boxX = 60 + colIdx * (210 + 28)
-          const boxY = startY + rowIdx * (h + 38)
+        if (hasMultiStatements || hasBranches) {
+          // --- HIERARCHICAL BRANCHING TREE FLOWCHART ---
+          // Format e.g. "Root -> Branch A | Branch B; Branch A -> Sub 1 | Sub 2"
+          const statements = cleanText.split(/;|\n/).map((s) => s.trim()).filter(Boolean)
+          const parentChildMap: Map<string, string[]> = new Map()
+          const allNodes = new Set<string>()
+          const nonRootNodes = new Set<string>()
 
-          rowPositions.push({ x: boxX, y: boxY, w, h })
-
-          skeletons.push(
-            {
-              type: 'rectangle',
-              x: boxX,
-              y: boxY,
-              width: w,
-              height: h,
-              strokeColor: flowColor,
-              backgroundColor: '#F0F6F2',
-              fillStyle: 'solid',
-              strokeWidth: 1.5,
-              roundness: { type: 3 },
-              customData: { isRough: false },
-            },
-            {
-              type: 'text',
-              x: boxX + 10,
-              y: boxY + 10,
-              text: st,
-              fontSize: 13,
-              fontFamily: 1,
-              strokeColor: INK_PRIMARY,
-              customData: { isRough: false },
-            }
-          )
-
-          // Connecting arrow to next step
-          if (i < steps.length - 1) {
-            const nextRowIdx = Math.floor((i + 1) / maxBoxesPerRow)
-            if (nextRowIdx === rowIdx) {
-              // Horizontal arrow to next box in same row
-              skeletons.push({
-                type: 'arrow',
-                x: boxX + w,
-                y: boxY + Math.floor(h / 2),
-                points: [[0, 0], [22, 0]],
-                strokeColor: flowColor,
-                strokeWidth: 2,
-                customData: { isRough: false },
+          statements.forEach((stmt) => {
+            const parts = stmt.split(/->|=>/).map((s) => s.trim())
+            if (parts.length >= 2) {
+              const parent = parts[0]
+              const children = parts[1].split('|').map((c) => c.trim()).filter(Boolean)
+              allNodes.add(parent)
+              if (!parentChildMap.has(parent)) {
+                parentChildMap.set(parent, [])
+              }
+              children.forEach((c) => {
+                allNodes.add(c)
+                nonRootNodes.add(c)
+                parentChildMap.get(parent)!.push(c)
               })
-            } else {
-              // Row wrap: downward connector arrow to next row
+            }
+          })
+
+          // Determine root nodes
+          let roots = Array.from(allNodes).filter((n) => !nonRootNodes.has(n))
+          if (roots.length === 0 && allNodes.size > 0) {
+            roots = [Array.from(allNodes)[0]]
+          }
+
+          // Build levels
+          const levels: string[][] = []
+          const visited = new Set<string>()
+          let currentLevel = [...roots]
+
+          while (currentLevel.length > 0 && levels.length < 5) {
+            levels.push(currentLevel)
+            currentLevel.forEach((n) => visited.add(n))
+            const nextLevel: string[] = []
+            currentLevel.forEach((parent) => {
+              const children = parentChildMap.get(parent) || []
+              children.forEach((child) => {
+                if (!visited.has(child) && !nextLevel.includes(child)) {
+                  nextLevel.push(child)
+                }
+              })
+            })
+            currentLevel = nextLevel
+          }
+
+          // Fallback if some nodes were not placed
+          allNodes.forEach((n) => {
+            if (!visited.has(n)) {
+              if (levels.length > 0) levels[levels.length - 1].push(n)
+              else levels.push([n])
+            }
+          })
+
+          const boxH = 38
+          const levelGap = 42
+          const estimatedHeight = Math.max(90, levels.length * (boxH + levelGap) + 20)
+          await checkAutoPageOverflow(estimatedHeight)
+
+          const startY = getDynamicNextY(16)
+          const nodePositions: Map<string, { x: number; y: number; w: number; h: number }> = new Map()
+          const canvasWidth = 720
+          const startX = 60
+
+          levels.forEach((lvlNodes, lvlIdx) => {
+            const rowY = startY + lvlIdx * (boxH + levelGap)
+            const count = lvlNodes.length
+            const slotWidth = (canvasWidth - startX) / Math.max(1, count)
+
+            lvlNodes.forEach((nodeLabel, nodeIdx) => {
+              const w = Math.min(Math.max(110, nodeLabel.length * 8 + 20), slotWidth - 16)
+              const boxX = startX + nodeIdx * slotWidth + (slotWidth - w) / 2
+              nodePositions.set(nodeLabel, { x: boxX, y: rowY, w, h: boxH })
+
+              // Node box
+              skeletons.push(
+                {
+                  type: 'rectangle',
+                  x: boxX,
+                  y: rowY,
+                  width: w,
+                  height: boxH,
+                  strokeColor: flowColor,
+                  backgroundColor: lvlIdx === 0 ? '#E8F3EC' : '#F4F9F6',
+                  fillStyle: 'solid',
+                  strokeWidth: lvlIdx === 0 ? 2 : 1.5,
+                  roundness: { type: 3 },
+                  customData: { isRough: false },
+                },
+                {
+                  type: 'text',
+                  x: boxX + 8,
+                  y: rowY + 10,
+                  text: nodeLabel,
+                  fontSize: lvlIdx === 0 ? 13 : 12,
+                  fontFamily: 1,
+                  strokeColor: INK_PRIMARY,
+                  customData: { isRough: false },
+                }
+              )
+            })
+          })
+
+          // Draw connecting arrows from parents to children
+          parentChildMap.forEach((children, parent) => {
+            const pPos = nodePositions.get(parent)
+            if (!pPos) return
+            children.forEach((child) => {
+              const cPos = nodePositions.get(child)
+              if (!cPos) return
+              const pCenterX = pPos.x + pPos.w / 2
+              const pBottomY = pPos.y + pPos.h
+              const cCenterX = cPos.x + cPos.w / 2
+              const cTopY = cPos.y
+
               skeletons.push({
                 type: 'arrow',
-                x: boxX + Math.floor(w / 2),
-                y: boxY + h,
+                x: pCenterX,
+                y: pBottomY,
                 points: [
                   [0, 0],
-                  [0, 20],
-                  [-colIdx * (210 + 28), 20],
-                  [-colIdx * (210 + 28), 38],
+                  [0, 16],
+                  [cCenterX - pCenterX, 16],
+                  [cCenterX - pCenterX, cTopY - pBottomY],
                 ],
                 strokeColor: flowColor,
-                strokeWidth: 2,
+                strokeWidth: 1.8,
+                customData: { isRough: false },
+              })
+            })
+          })
+
+          // If cycle, draw loopback arrow from last level back to root
+          if (isCycle && levels.length > 1) {
+            const lastLvl = levels[levels.length - 1]
+            const firstRoot = roots[0]
+            const lastPos = nodePositions.get(lastLvl[lastLvl.length - 1])
+            const rootPos = nodePositions.get(firstRoot)
+            if (lastPos && rootPos) {
+              skeletons.push({
+                type: 'arrow',
+                x: lastPos.x + lastPos.w / 2,
+                y: lastPos.y + lastPos.h,
+                points: [
+                  [0, 0],
+                  [0, 18],
+                  [rootPos.x - lastPos.x, 18],
+                  [rootPos.x - lastPos.x, -(lastPos.y - rootPos.y)],
+                ],
+                strokeColor: flowColor,
+                strokeWidth: 1.5,
+                strokeStyle: 'dashed',
                 customData: { isRough: false },
               })
             }
           }
-        })
 
-        // If cycle, draw curved return arrow from last step back to first step
-        if (isCycle && rowPositions.length > 1) {
-          const lastPos = rowPositions[rowPositions.length - 1]
-          const firstPos = rowPositions[0]
-          skeletons.push({
-            type: 'arrow',
-            x: lastPos.x + Math.floor(lastPos.w / 2),
-            y: lastPos.y + lastPos.h,
-            points: [
-              [0, 0],
-              [0, 18],
-              [firstPos.x - lastPos.x, 18],
-              [firstPos.x - lastPos.x, -(lastPos.y - firstPos.y)],
-            ],
-            strokeColor: flowColor,
-            strokeWidth: 1.5,
-            strokeStyle: 'dashed',
-            customData: { isRough: false },
+          const elements = convertToExcalidrawElements(skeletons)
+          const current = getCurrentElements()
+          const merged = [...current, ...elements]
+          updateCurrentPageElements(merged, startY + estimatedHeight)
+          onNoteRecorded?.(`[Hierarchy Flowchart]: ${statements.join(' | ')}`)
+        } else {
+          // --- LINEAR PIPELINE FLOWCHART WITH MULTI-ROW WRAPPING ---
+          const steps = cleanText.split(/->|=>/).map((s) => s.trim()).filter(Boolean)
+          if (steps.length === 0) return
+
+          const maxBoxesPerRow = 3
+          const numRows = Math.ceil(steps.length / maxBoxesPerRow)
+          const estimatedHeight = Math.max(70, numRows * 76 + 20)
+          await checkAutoPageOverflow(estimatedHeight)
+
+          const startY = getDynamicNextY(16)
+          const rowPositions: { x: number; y: number; w: number; h: number }[] = []
+
+          steps.forEach((st, i) => {
+            const rowIdx = Math.floor(i / maxBoxesPerRow)
+            const colIdx = i % maxBoxesPerRow
+            const w = Math.min(210, Math.max(120, st.length * 8.5 + 24))
+            const h = 36
+            const boxX = 60 + colIdx * (210 + 28)
+            const boxY = startY + rowIdx * (h + 38)
+
+            rowPositions.push({ x: boxX, y: boxY, w, h })
+
+            skeletons.push(
+              {
+                type: 'rectangle',
+                x: boxX,
+                y: boxY,
+                width: w,
+                height: h,
+                strokeColor: flowColor,
+                backgroundColor: '#F0F6F2',
+                fillStyle: 'solid',
+                strokeWidth: 1.5,
+                roundness: { type: 3 },
+                customData: { isRough: false },
+              },
+              {
+                type: 'text',
+                x: boxX + 10,
+                y: boxY + 10,
+                text: st,
+                fontSize: 13,
+                fontFamily: 1,
+                strokeColor: INK_PRIMARY,
+                customData: { isRough: false },
+              }
+            )
+
+            // Connecting arrow to next step
+            if (i < steps.length - 1) {
+              const nextRowIdx = Math.floor((i + 1) / maxBoxesPerRow)
+              if (nextRowIdx === rowIdx) {
+                // Horizontal arrow to next box in same row
+                skeletons.push({
+                  type: 'arrow',
+                  x: boxX + w,
+                  y: boxY + Math.floor(h / 2),
+                  points: [[0, 0], [22, 0]],
+                  strokeColor: flowColor,
+                  strokeWidth: 2,
+                  customData: { isRough: false },
+                })
+              } else {
+                // Row wrap: downward connector arrow to next row
+                skeletons.push({
+                  type: 'arrow',
+                  x: boxX + Math.floor(w / 2),
+                  y: boxY + h,
+                  points: [
+                    [0, 0],
+                    [0, 20],
+                    [-colIdx * (210 + 28), 20],
+                    [-colIdx * (210 + 28), 38],
+                  ],
+                  strokeColor: flowColor,
+                  strokeWidth: 2,
+                  customData: { isRough: false },
+                })
+              }
+            }
           })
-        }
 
-        const elements = convertToExcalidrawElements(skeletons)
-        const current = getCurrentElements()
-        const merged = [...current, ...elements]
-        updateCurrentPageElements(merged, startY + estimatedHeight)
-        onNoteRecorded?.(`[Flow${isCycle ? ' Cycle' : ''}]: ${steps.join(' -> ')}`)
+          // If cycle, draw curved return arrow from last step back to first step
+          if (isCycle && rowPositions.length > 1) {
+            const lastPos = rowPositions[rowPositions.length - 1]
+            const firstPos = rowPositions[0]
+            skeletons.push({
+              type: 'arrow',
+              x: lastPos.x + Math.floor(lastPos.w / 2),
+              y: lastPos.y + lastPos.h,
+              points: [
+                [0, 0],
+                [0, 18],
+                [firstPos.x - lastPos.x, 18],
+                [firstPos.x - lastPos.x, -(lastPos.y - firstPos.y)],
+              ],
+              strokeColor: flowColor,
+              strokeWidth: 1.5,
+              strokeStyle: 'dashed',
+              customData: { isRough: false },
+            })
+          }
+
+          const elements = convertToExcalidrawElements(skeletons)
+          const current = getCurrentElements()
+          const merged = [...current, ...elements]
+          updateCurrentPageElements(merged, startY + estimatedHeight)
+          onNoteRecorded?.(`[Flow${isCycle ? ' Cycle' : ''}]: ${steps.join(' -> ')}`)
+        }
       } catch (err) {
         console.error('drawFlowchart error:', err)
       }

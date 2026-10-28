@@ -278,7 +278,7 @@ export function SobiVectorBot({
         <div className="relative mb-3 animate-in fade-in zoom-in-95 duration-200">
           <div className="relative z-10 flex items-center gap-2 rounded-2xl border border-neutral-200/80 bg-white px-5 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
             <div className="flex flex-col">
-              <span className="text-[17px] font-medium tracking-tight text-[#2A231C]">
+              <span className="text-[17px] font-medium tracking-tight text-[var(--ink-primary)]">
                 {message}
               </span>
               {subtitle && (
@@ -331,7 +331,7 @@ export function SobiVectorBot({
           className="select-none pointer-events-none"
         />
         {/* Soft ambient ground shadow beneath Sobi cloud */}
-        <div className="absolute -bottom-2 w-3/5 h-2 bg-[#2A231C]/10 rounded-full blur-[3px] pointer-events-none transition-transform duration-300 group-hover:scale-90" />
+        <div className="absolute -bottom-2 w-3/5 h-2 bg-[var(--ink-primary)]/10 rounded-full blur-[3px] pointer-events-none transition-transform duration-300 group-hover:scale-90" />
       </div>
 
       {/* Speech Bubble on the Right (for Option Selection mode) */}
@@ -339,7 +339,7 @@ export function SobiVectorBot({
         <div className="relative animate-in fade-in slide-in-from-left-2 duration-200">
           <div className="relative z-10 flex items-center gap-2 rounded-2xl border border-neutral-200/80 bg-white px-5 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
             <div className="flex flex-col">
-              <span className="text-[17px] font-medium tracking-tight text-[#2A231C]">
+              <span className="text-[17px] font-medium tracking-tight text-[var(--ink-primary)]">
                 {message}
               </span>
               {subtitle && (

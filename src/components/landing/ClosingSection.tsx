@@ -87,7 +87,7 @@ export function ClosingSection() {
               <div className="mt-11 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
                 <Link
                   href="/onboarding"
-                  className="inline-flex items-center justify-center gap-2.5 rounded-full bg-coral-primary px-9 py-4 text-base font-medium text-surface-white shadow-md transition-all duration-300 hover:bg-coral-hover hover:shadow-[0_8px_30px_rgba(200,90,67,0.35)] active:scale-[0.98]"
+                  className="inline-flex items-center justify-center gap-2.5 rounded-full bg-coral-primary px-9 py-4 text-base font-medium text-surface-white shadow-md transition-all duration-300 hover:bg-coral-hover hover:shadow-[0_8px_30px_rgba(37,93,136,0.35)] active:scale-[0.98]"
                 >
                   <span>Enter the classroom</span>
                   <ArrowRight className="h-4 w-4" />

@@ -84,7 +84,7 @@ export function StudentDashboardView({
   }) || (modules.length > 0 ? modules[0] : null)
 
   return (
-    <div className="min-h-[100dvh] bg-canvas text-ink-primary font-sans selection:bg-coral-soft selection:text-coral-dark pb-24">
+    <div className="min-h-[100dvh] bg-canvas text-ink-primary font-sans selection:bg-accent-warm-soft selection:text-accent-warm pb-24">
       
       {/* Background Decorative Botanical Linework (Subtle 2% opacity) */}
       <div className="absolute top-0 left-0 w-full h-[600px] overflow-hidden pointer-events-none opacity-[0.035] mix-blend-multiply">
@@ -111,7 +111,7 @@ export function StudentDashboardView({
             
             <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl tracking-tight text-ink-primary leading-[1.08] font-normal">
               Welcome back,{' '}
-              <span className="italic text-coral font-medium">{firstName}</span>.
+              <span className="italic text-accent-warm font-medium">{firstName}</span>.
             </h1>
             
             <p className="text-ink-secondary text-base md:text-lg mt-3 max-w-xl leading-relaxed">
@@ -124,7 +124,7 @@ export function StudentDashboardView({
           {/* Quick Streak Highlight Card */}
           <div className="shrink-0 p-1.5 rounded-[2rem] bg-black/2 border border-[#E5E3DB]/80 shadow-xs">
             <div className="rounded-[calc(2rem-0.375rem)] bg-white px-6 py-4 border border-[#E5E3DB]/40 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-coral-soft flex items-center justify-center text-coral border border-coral/20">
+              <div className="w-12 h-12 rounded-2xl bg-accent-warm-soft flex items-center justify-center text-accent-warm border border-accent-warm/20">
                 <Flame className="w-7 h-7" fill="currentColor" />
               </div>
               <div>
@@ -149,7 +149,7 @@ export function StudentDashboardView({
             <div className="relative z-10 max-w-2xl">
               
               <div className="flex items-center gap-2.5 mb-3">
-                <Badge className="bg-coral-soft text-coral-dark font-medium border border-coral/20 px-3 py-0.5 text-xs rounded-full uppercase tracking-wider">
+                <Badge className="bg-accent-warm-soft text-accent-warm font-medium border border-accent-warm/20 px-3 py-0.5 text-xs rounded-full uppercase tracking-wider">
                   Next Up In Syllabus
                 </Badge>
                 {nextModule?.estimated_minutes && (
@@ -283,7 +283,7 @@ export function StudentDashboardView({
                 <span className="text-[11px] font-semibold text-ink-muted uppercase tracking-wider">
                   Peak Streak
                 </span>
-                <Flame className="w-4 h-4 text-coral" />
+                <Flame className="w-4 h-4 text-accent-warm" />
               </div>
               <div>
                 <span className="font-serif text-3xl md:text-4xl text-ink-primary font-medium block">
@@ -346,7 +346,7 @@ export function StudentDashboardView({
                         <Button
                           variant="ghost"
                           onClick={() => setActiveTab('roadmap')}
-                          className="text-xs text-coral font-semibold hover:text-coral-dark"
+                          className="text-xs text-accent-warm font-semibold hover:text-accent-warm"
                         >
                           View Full Roadmap →
                         </Button>
@@ -455,13 +455,13 @@ export function StudentDashboardView({
                         <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">
                           Focus Concepts
                         </span>
-                        <BrainCircuit className="w-4 h-4 text-coral" />
+                        <BrainCircuit className="w-4 h-4 text-accent-warm" />
                       </div>
 
                       {profile.weak_subjects && profile.weak_subjects.length > 0 ? (
                         <div className="flex flex-wrap gap-2 pt-1">
                           {profile.weak_subjects.map((sub: string) => (
-                            <Badge key={sub} variant="secondary" className="bg-coral-soft text-coral-dark capitalize text-xs px-3 py-1 rounded-lg">
+                            <Badge key={sub} variant="secondary" className="bg-accent-warm-soft text-accent-warm capitalize text-xs px-3 py-1 rounded-lg">
                               {sub}
                             </Badge>
                           ))}
