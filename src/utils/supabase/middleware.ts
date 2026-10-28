@@ -62,6 +62,15 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // 4. Bypass Server Actions from navigation redirects.
+  // Next.js Server Actions (POST with 'Next-Action' header) handle their own redirects and responses.
+  // A middleware redirect response on a Server Action breaks the RSC flight protocol and causes
+  // the client-side "An unexpected response was received from the server" (fetchServerAction) error.
+  const isServerAction = request.headers.has('next-action')
+  if (isServerAction) {
+    return supabaseResponse
+  }
+
   const isLoginPage = pathname === '/login'
   const isOnboardingPage = pathname.startsWith('/onboarding')
   const isDashboardPage = pathname.startsWith('/dashboard')
