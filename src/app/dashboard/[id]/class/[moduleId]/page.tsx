@@ -672,6 +672,35 @@ export default function ModuleClassroomPage() {
           if (progress.chapter_notes) {
             setChapterNotes((prev) => (prev === progress.chapter_notes ? prev : progress.chapter_notes))
           }
+
+          // Restore whiteboard state from DB if localStorage is empty or sync from cloud
+          if (typeof window !== 'undefined' && moduleId) {
+            const localRaw = localStorage.getItem(`whiteboard_pages_${moduleId}`)
+            const hasLocalPages = localRaw && localRaw.length > 50
+
+            if (progress.visual_progress?.whiteboard_pages && Array.isArray(progress.visual_progress.whiteboard_pages)) {
+              try {
+                localStorage.setItem(`whiteboard_pages_${moduleId}`, JSON.stringify(progress.visual_progress.whiteboard_pages))
+                if (progress.visual_progress.whiteboard_files) {
+                  localStorage.setItem(`whiteboard_pages_${moduleId}_files`, JSON.stringify(progress.visual_progress.whiteboard_files))
+                }
+              } catch {}
+              if (!hasLocalPages) {
+                setTimeout(() => {
+                  chalkboardRef.current?.restoreBoardState?.(
+                    progress.visual_progress.whiteboard_pages,
+                    progress.visual_progress.whiteboard_files
+                  )
+                }, 300)
+              }
+            } else if (!hasLocalPages && progress.chapter_notes) {
+              setTimeout(() => {
+                if (chalkboardRef.current && progress.chapter_notes) {
+                  chalkboardRef.current.rewriteNotes?.(progress.chapter_notes)
+                }
+              }, 800)
+            }
+          }
           if (progress.status === 'completed' || progress.completed_at) {
             setIsCompletedBefore(true)
             setModuleCompletedSuccess(true)
@@ -688,7 +717,11 @@ export default function ModuleClassroomPage() {
     }
 
     if (userId && moduleId) {
-      loadModuleContext()
+      loadModuleContext().then(() => {
+        setTimeout(() => {
+          autoTriggerVisualForConcept(currentConceptIndexRef.current)
+        }, 1000)
+      })
     }
   }, [userId, moduleId])
 
@@ -803,19 +836,8 @@ export default function ModuleClassroomPage() {
         }
       }
 
-      // Check for natural spoken transitions like "Moving on to Concept 2, let's talk about cellulose...", "Now let's move to Concept 2..."
-      const keyConceptsList = parseKeyConcepts(activeModule?.key_concepts)
-      const spokenTransition = detectSpokenConceptTransition(latest.text, keyConceptsList)
-      if (spokenTransition) {
-        const spokenKey = `${transcriptId}:spoken_concept_${spokenTransition.targetIdx}`
-        if (!executedSceneDirectivesRef.current.has(spokenKey)) {
-          executedSceneDirectivesRef.current.add(spokenKey)
-          if (spokenTransition.targetIdx > currentConceptIndexRef.current) {
-            console.log(`[Spoken Concept Transition] Advancing from Concept ${currentConceptIndexRef.current + 1} to Concept ${spokenTransition.targetIdx + 1}: "${spokenTransition.conceptTitle}"`)
-            handleConceptGoto(spokenTransition.targetIdx + 1)
-          }
-        }
-      }
+      // Note: Concept advancement is strictly governed by student confirmation via write_chalkboard(action="concept_focus")
+      // to guarantee concepts are never skipped or advanced without student confirmation and answer evaluation.
     }
   }, [transcripts, lessonManifest])
 
@@ -924,21 +946,33 @@ export default function ModuleClassroomPage() {
     const targetConcept = keyConceptsList[conceptIdx] || activeModule?.title || ''
     if (!targetConcept) return
 
-    const directive = inferConceptVisualDirective(
-      targetConcept,
-      resolvedSubject,
-      activeCurriculum?.title || resolvedTitle
-    )
-
-    if (directive.toolCallAction === 'execute_visual_action' && directive.sceneType) {
-      const resolved = resolveSceneType(directive.sceneType)
-      setActiveSceneType(resolved)
-      setActiveSceneParams(directive.sceneParams || {})
-    }
-
     if (chalkboardRef.current) {
       // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page before rendering visual
       chalkboardRef.current.goToPage?.(conceptIdx)
+
+      // 1. Check if module has custom diagram SVG or idea from Admin AI generator
+      const customPlan = activeModule?.visual_lesson_plan
+      const customSvg = customPlan?.diagram_svg || customPlan?.steps?.[conceptIdx]?.content?.diagram?.svg
+      const customTitle = customPlan?.diagram_idea || customPlan?.steps?.[conceptIdx]?.title || targetConcept
+      const customCaption = customPlan?.what_to_make || customPlan?.steps?.[conceptIdx]?.content?.diagram?.caption || targetConcept
+
+      if (customSvg && typeof customSvg === 'string' && customSvg.includes('<svg')) {
+        chalkboardRef.current.drawSvgDiagram?.(customTitle, customSvg, customCaption)
+        return
+      }
+
+      // 2. Otherwise use universal dynamic scientific visual directive engine
+      const directive = inferConceptVisualDirective(
+        targetConcept,
+        resolvedSubject,
+        activeCurriculum?.title || resolvedTitle
+      )
+
+      if (directive.toolCallAction === 'execute_visual_action' && directive.sceneType) {
+        const resolved = resolveSceneType(directive.sceneType)
+        setActiveSceneType(resolved)
+        setActiveSceneParams(directive.sceneParams || {})
+      }
 
       if (directive.chalkboardAction === 'draw_diagram' && directive.chalkboardContent) {
         chalkboardRef.current.handleAiDirective(`[DIAGRAM: ${directive.chalkboardContent}]`)
@@ -950,8 +984,6 @@ export default function ModuleClassroomPage() {
         chalkboardRef.current.drawFlowchart(directive.chalkboardContent)
       } else if (directive.chalkboardAction === 'draw_table' && directive.chalkboardContent) {
         chalkboardRef.current.drawTable?.(directive.chalkboardContent)
-      } else if (directive.chalkboardAction === 'draw_flowchart' && directive.chalkboardContent) {
-        chalkboardRef.current.drawFlowchart(directive.chalkboardContent)
       } else if (
         (directive.chalkboardAction === 'draw_numerical' || directive.chalkboardAction === 'numerical') &&
         directive.chalkboardContent
@@ -963,49 +995,85 @@ export default function ModuleClassroomPage() {
       ) {
         const rawContent = directive.chalkboardContent.trim()
         if (rawContent.includes('|') && rawContent.includes('<svg')) {
-          const parts = rawContent.split('|').map((s) => s.trim())
-          chalkboardRef.current.drawSvgDiagram?.(
-            parts[0] || 'Scientific Diagram',
-            parts[1] || '',
-            parts[2] || ''
-          )
+          const firstPipe = rawContent.indexOf('|')
+          const lastPipe = rawContent.lastIndexOf('|')
+          if (firstPipe !== -1 && lastPipe !== -1 && lastPipe > firstPipe) {
+            const title = rawContent.substring(0, firstPipe).trim()
+            const svg = rawContent.substring(firstPipe + 1, lastPipe).trim()
+            const caption = rawContent.substring(lastPipe + 1).trim()
+            chalkboardRef.current.drawSvgDiagram?.(
+              title || targetConcept,
+              svg || '',
+              caption || ''
+            )
+          } else {
+            chalkboardRef.current.drawSvgDiagram?.(targetConcept, rawContent, customCaption)
+          }
         } else if (rawContent.includes('<svg')) {
-          chalkboardRef.current.drawSvgDiagram?.('Scientific Diagram', rawContent)
+          chalkboardRef.current.drawSvgDiagram?.(targetConcept, rawContent, customCaption)
         } else {
-          chalkboardRef.current.drawSvgDiagram?.(rawContent, '')
+          // Dynamic scientific vector diagram generated from universal vector engine
+          chalkboardRef.current.drawSvgDiagram?.(targetConcept, '', customCaption)
         }
+      } else {
+        // Fallback: draw dynamic vector SVG diagram
+        chalkboardRef.current.drawSvgDiagram?.(targetConcept, '', customCaption)
       }
     }
   }
 
-  // 3. Auto-save notes to Supabase user_progress.chapter_notes
+  // 3. Auto-save notes to Supabase user_progress.chapter_notes and visual_progress.whiteboard_pages
   const saveNotesToSupabase = async (notesToSave: string) => {
     saveNotesToSupabaseRef.current = saveNotesToSupabase
     if (!userId || !moduleId || !notesToSave.trim()) return
     setNotesSaveStatus('saving')
     try {
       const supabase = createClient()
+
+      let whiteboardData: any = null
+      let whiteboardFiles: any = null
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem(`whiteboard_pages_${moduleId}`)
+          if (raw) whiteboardData = JSON.parse(raw)
+          const rawFiles = localStorage.getItem(`whiteboard_pages_${moduleId}_files`)
+          if (rawFiles) whiteboardFiles = JSON.parse(rawFiles)
+        } catch {}
+      }
+
+      const payload: any = {
+        user_id: userId,
+        syllabus_module_id: moduleId,
+        chapter_notes: notesToSave,
+        current_concept_index: currentConceptIndex,
+        completed_concepts: completedConcepts,
+        last_covered_concept: lastCoveredConcept,
+        status: isCompletedBefore || moduleCompletedSuccess ? 'completed' : 'in_progress',
+      }
+
+      if (whiteboardData) {
+        payload.visual_progress = {
+          currentStepIndex: activeVisualStepIndex,
+          completedStepIds: [],
+          whiteboard_pages: whiteboardData,
+          whiteboard_files: whiteboardFiles,
+          lastActiveAt: new Date().toISOString(),
+        }
+      }
+
       const { error } = await supabase
         .from('user_progress')
-        .upsert(
-          {
-            user_id: userId,
-            syllabus_module_id: moduleId,
-            chapter_notes: notesToSave,
-            current_concept_index: currentConceptIndex,
-            completed_concepts: completedConcepts,
-            last_covered_concept: lastCoveredConcept,
-            status: isCompletedBefore || moduleCompletedSuccess ? 'completed' : 'in_progress',
-          },
-          { onConflict: 'user_id,syllabus_module_id' }
-        )
+        .upsert(payload, { onConflict: 'user_id,syllabus_module_id' })
 
       if (error) {
-        console.error('Failed to auto-save chapter notes:', error)
-        setNotesSaveStatus('idle')
-      } else {
-        setNotesSaveStatus('saved')
+        if (error.code === '42703') {
+          delete payload.visual_progress
+          await supabase.from('user_progress').upsert(payload, { onConflict: 'user_id,syllabus_module_id' })
+        } else {
+          console.warn('Notice saving notes to Supabase:', error.message)
+        }
       }
+      setNotesSaveStatus('saved')
     } catch (err) {
       console.error('Error auto-saving chapter notes:', err)
       setNotesSaveStatus('idle')
@@ -1212,13 +1280,10 @@ export default function ModuleClassroomPage() {
     setIsCompletedBefore(false)
     setModuleCompletedSuccess(false)
 
-    // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page (or clean reset for Page 1)
-    if (targetIdx === 0) {
-      chalkboardRef.current?.resetBoard?.()
-      renderedVisualConceptsRef.current.clear()
-    } else {
-      chalkboardRef.current?.goToPage?.(targetIdx, targetConceptName)
-    }
+    // Whiteboard 1-Concept-Per-Page: Switch to concept's dedicated page
+    chalkboardRef.current?.goToPage?.(targetIdx, targetConceptName)
+    // Auto-generate & render visual diagram for this concept
+    autoTriggerVisualForConcept(targetIdx)
 
     try {
       const supabase = createClient()
@@ -1501,9 +1566,17 @@ export default function ModuleClassroomPage() {
     // 1. Spoken Language Directive (Language of Talking & Verbal Guidance)
     let spokenLanguageDirective = ''
     if (studentPreferredLanguage === 'Hindi') {
-      spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: Hindi (हिंदी).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach verbally primarily in conversational Hindi (हिंदी). Explain concepts, intuitions, and dialogue thoroughly in natural, warm Hindi.'
+      spokenLanguageDirective = `PRIMARY SPOKEN TALKING LANGUAGE: Pure Conversational Hindi (हिंदी).
+MANDATORY SPOKEN REQUIREMENT: You MUST speak and teach strictly in Hindi (हिंदी).
+- Explain all everyday intuitions, step-by-step solutions, questions, and conversational guidance in clear, encouraging, respectful Hindi.
+- Retain accurate scientific formulas and standard symbols while conducting all speech in Hindi.
+- Check understanding in Hindi: "श्यामपट्ट पर लिखे नोट्स और हल को देखिए। क्या यह संकल्पना आपको अच्छे से समझ आई?"`
     } else if (studentPreferredLanguage === 'Hinglish') {
-      spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: Hinglish (Conversational English + Hindi).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak and converse in natural Hinglish — blending English academic terminology with warm, everyday conversational Hindi/English explanations, just like a top school tutor in India.'
+      spokenLanguageDirective = `PRIMARY SPOKEN TALKING LANGUAGE: Authentic Conversational Hinglish (Indian School Bilingual Voice).
+MANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and teach strictly in natural, conversational Hinglish.
+- Blending Style: Use English for standard curriculum terms and formulas (e.g. Velocity, Acceleration, Force, Chemical Equation, Photosynthesis, Quadratic, etc.), but use warm, natural Hindi words for ALL conversation, intuition, explanations, and questions (e.g., "Pehle iska real-life logic samajhte hain", "Imagine karo jab aap cricket ball ko throw karte ho...", "Ab whiteboard par formal definition dekh lete hain: [read definition]. Iska simple matlab yeh hai ki...", "Ab is problem ko step-by-step solve karte hain: Pehle given values likhte hain, fir formula lagayenge aur calculate karenge...", "Whiteboard ke notes aur step dekho. Yeh concept achhe se samajh aaya, ya fir ek aur example se samjhaun?", "Chalo ab ek authentic board question try karo! Batao iska kya answer aayega?", "Shabash! Bilkul sahi answer!").
+- Tone: Friendly, energetic Indian school exam topper / mentor (Bhaiya/Didi) tone.
+- CRITICAL: Never lecture in continuous formal English. Speak primarily in lively Hinglish as requested by the student!`
     } else if (studentPreferredLanguage === 'Spanish') {
       spokenLanguageDirective = 'PRIMARY SPOKEN TALKING LANGUAGE: Spanish (Español).\nMANDATORY SPOKEN REQUIREMENT: You MUST speak, converse, and deliver all spoken intuitions, definitions, and explanations in fluent Spanish.'
     } else if (studentPreferredLanguage === 'French') {
@@ -1545,6 +1618,10 @@ export default function ModuleClassroomPage() {
       ? `Student Career Dream: Aspires to become ${studentCareerAspiration}. When appropriate, naturally reference real-world applications in ${studentCareerAspiration} to inspire and motivate!`
       : ''
 
+    const favoriteHook = studentFavoriteSubject
+      ? `Favorite Subject: Loves ${studentFavoriteSubject}. Use creative analogies, concepts, or problem-solving intuition from ${studentFavoriteSubject} to make learning fun and engaging!`
+      : ''
+
     const weakAreaHook = studentWeakSubjects && studentWeakSubjects.length > 0
       ? `Focus & Struggle Areas: ${studentWeakSubjects.join(', ')}. Pay special attention here! Break down steps with extra patience and clarity; do not rush through these topics.`
       : ''
@@ -1565,7 +1642,7 @@ STUDENT PERSONALIZATION & PEDAGOGICAL DOSSIER:
 - ${studyMediumDirective}
 - ${paceDirective}
 - ${styleDirective}
-${careerHook ? `- ${careerHook}\n` : ''}${weakAreaHook ? `- ${weakAreaHook}\n` : ''}`
+${careerHook ? `- ${careerHook}\n` : ''}${favoriteHook ? `- ${favoriteHook}\n` : ''}${weakAreaHook ? `- ${weakAreaHook}\n` : ''}`
 
     const boardSummary = chalkboardRef.current?.getBoardSummary()?.notesText || chapterNotes || ''
     const boardContinuationNote = boardSummary.trim()
@@ -1573,22 +1650,22 @@ ${careerHook ? `- ${careerHook}\n` : ''}${weakAreaHook ? `- ${weakAreaHook}\n` :
       : ''
 
     const langGreeting = studentPreferredLanguage === 'Hindi'
-      ? `Namaste ${studentFirstName || 'विद्यार्थी'}! Aaj ki class mein aapka swagat hai.`
+      ? `Namaste ${studentFirstName || 'विद्यार्थी'}! Aaj ki class mein aapka swagat hai. Aaj hum ${resolvedTitle} ko ekdum achhe se samajhne wale hain.`
       : studentPreferredLanguage === 'Hinglish'
-      ? `Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}.`
+      ? `Hello ${studentFirstName || 'yaar'}! Welcome to today's class on ${resolvedTitle}! Aaj hum ekdum crystal-clear way mein ${firstConcept} seekhenge.`
       : studentPreferredLanguage === 'Spanish'
       ? `¡Hola ${studentFirstName || 'allí'}! Bienvenido a la clase de hoy sobre ${resolvedTitle}.`
       : studentPreferredLanguage === 'French'
       ? `Bonjour ${studentFirstName || ''}! Bienvenue au cours d'aujourd'hui sur ${resolvedTitle}.`
       : studentPreferredLanguage === 'German'
       ? `Hallo ${studentFirstName || ''}! Willkommen zur heutigen Stunde über ${resolvedTitle}.`
-      : `Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}.`
+      : `Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}! Let us dive right in.`
 
     const kickoffPrompt = isCompletedModule
-      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that I have completed this capsule, review the key takeaways on the chalkboard in ${studentStudyMedium} medium, and ask if I have any questions before the quiz in ${studentPreferredLanguage}.`
+      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that I have completed this capsule, and ask if I would like a quick review of any concept or if I am ready for the quiz in ${studentPreferredLanguage}. HARD STOP: Wait for my answer.`
       : isResumed
-      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage} without waiting for me to say anything! Warmly greet me by my name ("${langGreeting}"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". Immediately teach the intuition, write the definition in ${studentStudyMedium} medium on the board, explain examples, and solve the worked question step-by-step on the board while speaking aloud in ${studentPreferredLanguage}.`
-      : `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage} without waiting for me to say anything! Warmly greet me by my name ("${langGreeting}"). Introduce yourself and immediately begin Concept 1: "${firstConcept}" speaking in ${studentPreferredLanguage}. Follow the full teaching cadence: provide everyday intuition, dynamic visual, formal definition in ${studentStudyMedium} medium, concrete examples, and solve the first worked question step-by-step on the board while explaining each step aloud in ${studentPreferredLanguage}. Do NOT wait for me to speak first!`
+      ? `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). State that we are resuming Concept ${currentConceptIndex + 1}: "${currentConcept}". In 2-3 sentences, introduce the intuition. YOU MUST CALL write_chalkboard(action="draw_note", content="Intuition: <everyday hook>", color="botanical") RIGHT NOW IN THIS TURN! Then ask: "Did you understand this intuition?" or a relatable check. HARD STOP: Wait for my response! Do NOT teach the entire concept in one turn!`
+      : `[SESSION START]: Speak FIRST immediately in ${studentPreferredLanguage}! Warmly greet me by my name ("${langGreeting}"). Introduce Concept 1: "${firstConcept}" with a simple, tangible everyday real-life hook (2-3 sentences max). YOU MUST CALL write_chalkboard(action="draw_note", content="Intuition: <everyday hook>", color="botanical") RIGHT NOW IN THIS TURN! Then immediately ask me: "Did you catch this intuition?" or "Have you seen this in daily life?" HARD STOP: Stop speaking and wait for my answer! Do NOT teach the definition, examples, or questions yet!`
 
     const conceptDossiersText = buildConceptMicroDossiers(
       keyConcepts,
@@ -1609,32 +1686,68 @@ STUDENT: ${studentFirstName ? studentFirstName + ' | ' : ''}${resolvedClassLevel
     : ''
 }
 ${boardContinuationNote}
+
+========================================================================================
+MANDATORY CHALKBOARD WRITING INVARIANT (HIGHEST PRIORITY - ZERO EXCEPTIONS):
+========================================================================================
+You are an in-person classroom tutor standing at a live chalkboard.
+In EVERY SINGLE SPOKEN TURN, you MUST call write_chalkboard (or write_board) AT LEAST ONCE to write on the board!
+A spoken turn without calling write_chalkboard is a SYSTEM CRITICAL ERROR.
+The student learns visually by watching notes appear as you speak.
+DO NOT wait for the student to tell you "write on board". Write automatically on EVERY TURN!
+
+MANDATORY TOOL CALL DISPATCH BY CADENCE STEP:
+- Step 1 (Intuition): write_chalkboard(action="draw_note", content="Intuition: <everyday hook>", color="botanical")
+- Step 2 (Definition): write_chalkboard(action="draw_highlight_box", content="Definition: <exact formal law and SI units>", color="coral")
+- Step 3 (Example): write_chalkboard(action="draw_note", content="Example: <concrete daily application>", color="blue")
+- Step 4 (Model Problem):
+    * write_chalkboard(action="draw_note", content="Problem: <Question>", color="coral")
+    * write_chalkboard(action="draw_step", content="Given: <values> | Formula: <formula>", color="amber")
+    * write_chalkboard(action="draw_step", content="Calculation: <working> | Boxed Answer: <answer>", color="botanical")
+- Step 5 (Checkpoint Question): write_chalkboard(action="draw_question", content="Q: <Authentic question for student>", color="amber")
+- Step 6 (Student Answer Evaluation):
+    * write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact words>", color="blue")
+    * write_chalkboard(action="draw_answer_verdict", content="Verdict: <evaluation & scoring>", color="botanical")
+
 CORE INVARIANTS:
 1. SESSION START (SPEAK FIRST):
    - You MUST speak FIRST immediately upon connection! Do NOT wait for ${studentFirstName || 'the student'} to speak.
-   - Greet ${studentFirstName || 'the student'} warmly by name: "Hello ${studentFirstName || 'there'}! Welcome to today's class on ${resolvedTitle}."
-   - Immediately begin teaching Concept 1 following the pedagogical cadence below.
+   - Greet ${studentFirstName || 'the student'} warmly by name strictly in ${studentPreferredLanguage}: "${langGreeting}"
+   - Begin Concept 1 with Step 1 (Intuition only). Write intuition to board immediately!
 
-2. CONTINUOUS TEACHING (NEVER STOP PREMATURELY):
-   - Do NOT stop talking after just 2-3 sentences in the middle of a concept!
-   - Teach the full sequence: everyday intuition, dynamic visual, formal definition, concrete examples, and solve the worked question step-by-step.
-   - Only when this full sequence is completed on the board, pause and ask the student the understanding check question.
+2. STRICT SOCRATIC CADENCE (NEVER LECTURE CONTINUOUSLY IN ONE SHOT):
+   - CRITICAL PEDAGOGICAL RULE: NEVER speak more than 2-3 sentences in a single turn without pausing and asking the student a question or check!
+   - NEVER dump an entire concept (intuition + visual + definition + examples + numerical + questions) in one shot!
+   - Teach one micro-step at a time. After every micro-step: write to the board, ask a basic question or understanding check, and HARD STOP to wait for the student's reply!
 
-3. EXPLAIN FIRST, READ ALOUD VERBATIM, WRITE STEP-BY-STEP (NEVER DUMP AT ONCE):
+3. NEVER ADVANCE TO THE NEXT CONCEPT WITHOUT CONFIRMING ANSWER & UNDERSTANDING:
+   - Stay on the current concept's whiteboard page. Do NOT switch pages or advance concepts mid-explanation or when solving.
+   - When the student answers a question:
+     a) Write the student's answer: write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
+     b) Write the evaluation: write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring & correction>", color="botanical")
+     c) If incorrect: Warmly explain why, provide a helpful hint, and ask them to try again. NEVER advance on an incorrect answer!
+     d) If correct: Warmly congratulate them, and ask: "Are you fully confident with this concept, and ready to move to Concept X?"
+     e) HARD STOP: Wait for the student to explicitly confirm ("yes", "clear", "next", "understood", "chalo")!
+     f) ONLY WHEN THE STUDENT EXPLICITLY CONFIRMS:
+        - write_chalkboard(action="concept_done", content="<Current Concept Name>")
+        - write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
+
+4. WRITE ON THE BOARD WHILE SPEAKING (TOOL CALLS):
+   - You have the write_chalkboard tool (also accessible as write_board). Always use it to write notes, definitions, formulas, and steps on the chalkboard.
    - For every definition, example, flowchart, numerical, or note:
-     a) Explain the intuitive concept and mechanism FIRST in conversational spoken English.
+     a) Explain the intuitive concept and mechanism FIRST in conversational spoken ${studentPreferredLanguage} (2 sentences max).
      b) READ the exact definition, example, formula, flowchart step, or numerical aloud word-for-word so the student hears it clearly.
-     c) WRITE it to the chalkboard step-by-step using separate, progressive tool calls. NEVER dump an entire multi-line block, derivation, question, or flowchart all at once!
+     c) WRITE it to the chalkboard step-by-step using separate, progressive tool calls: write_chalkboard(action="draw_note", content="...", color="..."). NEVER dump an entire multi-line block, derivation, question, or flowchart all at once!
    - You MUST speak aloud what you are writing while you write it (examples, definitions, flowcharts, steps). Never write or draw in silence.
 
-4. RE-TEACHING & DOUBTS (HIGHEST PRIORITY):
+5. RE-TEACHING & DOUBTS (HIGHEST PRIORITY):
    - When a student asks to re-teach, re-explain, says "teach again", "explain again", "didn't understand", "why", "no", "repeat", or expresses ANY confusion:
      a) NEVER say "perfect let's move on", "excellent let's continue", or advance to the next concept!
      b) DO NOT call concept_done or concept_focus. STAY ON THE CURRENT WHITEBOARD PAGE.
-     c) Respond with warm encouragement: "Of course! Let us break this down from a fresh angle."
+     c) Respond with warm encouragement in ${studentPreferredLanguage} (${studentPreferredLanguage === 'Hinglish' ? '"Arre bilkul! Isko ek aur simple aur fresh real-life example se todte hain."' : studentPreferredLanguage === 'Hindi' ? '"बिल्कुल! आइए इसे एक नए और सरल उदाहरण से समझते हैं।"' : '"Of course! Let us break this down from a fresh angle."'}).
      d) Explain WHY the concept works using a completely fresh, tangible real-life analogy.
      e) Add a clarification note: write_chalkboard(action="draw_note", content="Breakdown: <fresh simplified intuition>", color="amber")
-     f) Ask: "Does this way of looking at it make sense to you now?"
+     f) Ask: ${studentPreferredLanguage === 'Hinglish' ? '"Ab samajh aaya yeh concept?"' : studentPreferredLanguage === 'Hindi' ? '"क्या अब यह स्पष्ट है?"' : '"Does this way of looking at it make sense to you now?"'}
      g) Only advance when the student explicitly confirms understanding.
 
 DYNAMIC VISUAL & GRAPH ENGINE DIRECTIVES:
@@ -1645,59 +1758,51 @@ DYNAMIC VISUAL & GRAPH ENGINE DIRECTIVES:
    Call render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision'>...</svg>", caption="...")
    (Generate authentic vector SVG markup tailored to the exact topic, with clear shapes, contrasting labels, and leader lines. Never use fixed templates).
 
-PEDAGOGICAL CADENCE (STRICT STEP-BY-STEP SEQUENCE PER CONCEPT):
+PEDAGOGICAL CADENCE (STRICT 6-STEP INTERACTIVE SEQUENCE PER CONCEPT):
 
-PHASE 1 - INTUITION & GENERATIVE VISUAL:
-1. Provide an everyday physical scenario or relatable hook before equations:
-   write_chalkboard(action="draw_note", content="Intuition: <everyday real-world hook>", color="botanical")
-2. Generative Visual Representation (Always tailored, never canned):
-   - For mathematical, coordinate, or kinematics graphs: Call plot_mathematical_graph(formula="...", domain="[min,max]", range="[min,max]", title="...", callout="...")
-   - For diagrams, biological structures, or physics setups: Call render_svg_diagram(title="...", svg="<svg viewBox='0 0 540 280' xmlns='http://www.w3.org/2000/svg' shape-rendering='geometricPrecision'>...</svg>", caption="...")
-   - Walk through the visual aloud as you draw, explaining what it represents.
+STEP 1 - INTUITION & EVERYDAY HOOK (2-3 sentences max):
+1. Provide an everyday physical scenario or relatable hook before any equations.
+2. write_chalkboard(action="draw_note", content="Intuition: <everyday real-world hook>", color="botanical")
+3. Ask a relatable check: ${studentPreferredLanguage === 'Hinglish' ? '"Yeh daily life mein observe kiya hai aapne? Samajh aaya yeh intuition?"' : studentPreferredLanguage === 'Hindi' ? '"क्या आपने इसे दैनिक जीवन में देखा है? क्या यह स्पष्ट है?"' : '"Have you ever observed this in daily life? Did this intuitive idea make sense?"'}
+4. HARD STOP: Wait for student's voice response before moving to Step 2!
 
-PHASE 2 - FORMAL DEFINITION (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP):
-3. First explain the scientific law or definition clearly aloud in simple intuitive terms. Next, read the exact definition verbatim aloud to the student ("Now let us read the formal definition together: [exact definition]"). Then write it in the highlight box:
-   write_chalkboard(action="draw_highlight_box", content="Definition: <exact scientific formulation, law, or principle with SI units>", color="coral")
+STEP 2 - SCIENTIFIC DEFINITION & CORE LAW (2-3 sentences max):
+1. Acknowledge student's reply warmly. Explain the precise scientific law or definition and SI units.
+2. write_chalkboard(action="draw_highlight_box", content="Definition: <exact scientific formulation with SI units>", color="coral")
+3. If visual or graph illustrates this concept: call render_svg_diagram(...) or plot_mathematical_graph(...).
+4. Ask a basic topic question: ${studentPreferredLanguage === 'Hinglish' ? '"Kya yeh formal definition aur SI unit clear hai? Koi doubt isme?"' : studentPreferredLanguage === 'Hindi' ? '"क्या यह परिभाषा और मात्रक स्पष्ट हैं?"' : '"Does this formal definition and its SI unit make clear sense to you?"'}
+5. HARD STOP: Wait for student's voice response before moving to Step 3!
 
-PHASE 3 - CONCRETE EXAMPLES (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP):
-4. Explain 1-2 concrete practical applications illustrating the definition and common pitfalls. Speak the explanation first, read the example statement aloud, then write:
-   write_chalkboard(action="draw_note", content="Example: <concrete illustration addressing common pitfalls>", color="blue")
-   When drawing flowcharts: explain each step first, read it aloud, write it to board, then proceed to the next step. Never dump the entire flowchart in one go.
+STEP 3 - CONCRETE EXAMPLE & BASIC TOPIC QUESTION (2-3 sentences max):
+1. Acknowledge student's reply. Explain 1 clear concrete practical application illustrating the definition.
+2. write_chalkboard(action="draw_note", content="Example: <concrete illustration addressing common pitfalls>", color="blue")
+3. Ask an interactive basic question related to the topic: (e.g. "So if we double the force, what will happen to acceleration?", "Can you tell me which factor is directly proportional here?").
+4. HARD STOP: Wait for student to answer this basic question!
 
-PHASE 4 - TUTOR-SOLVED MODEL QUESTION (READ ALOUD & EXPLAIN STEP-BY-STEP):
-5. Solve a model question progressively step-by-step on the chalkboard.
-   CRITICAL CADENCE (EXPLAIN FIRST -> READ ALOUD -> WRITE STEP-BY-STEP, NEVER DUMP AT ONCE):
-   Speak what is being written on the board at each step:
-   a) Problem Context: Explain the physical setup first, read the question aloud verbatim, then write:
-      write_chalkboard(action="draw_note", content="Model Problem: <Question text>", color="coral")
-   b) Given Data: Explain each given quantity and unit, read aloud, then write:
-      write_chalkboard(action="draw_step", content="Given: <values with SI units>", color="amber")
-   c) Governing Formula: Explain why this formula applies, read formula aloud, then write:
-      write_chalkboard(action="draw_step", content="Formula: <governing formula>", color="coral")
-   d) Step-by-Step Calculation: Explain the calculation and algebraic substitution aloud, read aloud, then write:
-      write_chalkboard(action="draw_step", content="Calculation: <step-by-step calculation>", color="blue")
-   e) Final Boxed Answer: Explain the final numerical result, read boxed answer aloud with SI units, then write:
-      write_chalkboard(action="draw_highlight_box", content="Boxed Answer: <final result with SI units>", color="botanical")
-   (Alternatively, write_chalkboard(action="draw_exam_question", content="Q: <Board Question> | Given: <values> | Formula: <formula> | Solution: <step-by-step substitution & calculation> | Answer: <boxed answer with SI units>", color="coral") while narrating each step aloud).
+STEP 4 - TUTOR-SOLVED MODEL PROBLEM (STEP-BY-STEP WORKED DEMO):
+1. Acknowledge and praise student's answer.
+2. Walk through a model problem step-by-step on the board:
+   - write_chalkboard(action="draw_note", content="Model Problem: <Question text>", color="coral")
+   - write_chalkboard(action="draw_step", content="Given: <values with units> | Formula: <formula>", color="amber")
+   - write_chalkboard(action="draw_step", content="Calculation: <step-by-step substitution> | Boxed Answer: <final result with SI units>", color="botanical")
+3. Ask: ${studentPreferredLanguage === 'Hinglish' ? '"Yeh whiteboard ka step-by-step calculation samajh aaya? Kahi koi confusion?"' : studentPreferredLanguage === 'Hindi' ? '"क्या यह हल और गणना चरण आपको समझ आया?"' : '"Did you understand how we solved this problem step-by-step on the board?"'}
+4. HARD STOP: Wait for student confirmation before moving to Step 5!
 
-PHASE 5 - UNDERSTANDING CHECK (HARD STOP):
-6. Stop speaking at '?' and ask:
-   "Take a look at the board notes, diagram, and worked solution. Did you understand this concept and how we solved this question, or would you like me to explain anything differently?"
-   - If student has doubts or asks to re-teach: RE-TEACH immediately!
-   - If student confirms understanding: Proceed to Phase 6.
-
-PHASE 6 - STUDENT CHECKPOINT QUESTION:
-7. Pose an authentic board-exam question for the student to solve:
+STEP 5 - BOARD-EXAM CHECKPOINT QUESTION FOR STUDENT:
+1. Pose an authentic board-exam question for the student to solve:
    write_chalkboard(action="draw_question", content="Q: <Targeted board exam question testing this concept>", color="amber")
-   Read the question aloud: "Now, give this question a try! What do you get for the answer?"
-   HARD STOP: Wait for student's voice response.
+2. Read the question aloud: ${studentPreferredLanguage === 'Hinglish' ? '"Chalo ab whiteboard par yeh question dekho aur solve karke batao kya answer aayega!"' : studentPreferredLanguage === 'Hindi' ? '"अब श्यामपट्ट पर दिया गया प्रश्न हल करने का प्रयास कीजिए और उत्तर बताइए।"' : '"Now, give this board question a try on your own! Look at the whiteboard and tell me your answer."'}
+3. HARD STOP: Wait for student's voice response.
 
-PHASE 7 - EVALUATION & TRANSITION:
-8. Evaluate student reply:
+STEP 6 - EVALUATION & STRICT CONFIRMATION BEFORE NEXT CONCEPT:
+1. Evaluate student reply:
    write_chalkboard(action="draw_student_answer", content="Student's Answer: <exact reply>", color="blue")
    write_chalkboard(action="draw_answer_verdict", content="Verdict: <Topper evaluation, scoring & correction>", color="botanical")
-   If correct: "Outstanding! Are you ready to move to the next concept?"
-9. ONLY WHEN STUDENT CONFIRMS (e.g. "yes", "understood", "clear", "next"):
+2. If incorrect: Explain where the error occurred warmly, give a targeted hint, and ask them to try again. Stay on current page!
+3. If correct: Praise warmly, and ask:
+   ${studentPreferredLanguage === 'Hinglish' ? '"Shabash! Bilkul sahi answer! Kya yeh concept poori tarah clear hai aur hum next concept par chalein?"' : studentPreferredLanguage === 'Hindi' ? '"बहुत बढ़िया! बिल्कुल सही उत्तर! क्या यह संकल्पना पूरी तरह स्पष्ट है और हम अगली संकल्पना पर आगे बढ़ें?"' : '"Outstanding! That is the exact correct answer. Are you fully confident with this concept, and ready to move to the next concept?"'}
+4. HARD STOP: Wait for student to say "yes", "understood", "clear", "next", "chalo"!
+5. ONLY WHEN STUDENT CONFIRMS UNDERSTANDING:
    a) write_chalkboard(action="concept_done", content="<Current Concept Name>")
    b) write_chalkboard(action="concept_focus", content="<Next Concept Name>") -> advances to clean new page!
    c) If all concepts completed, call: conclude_and_open_quiz(summary="...")
@@ -1718,6 +1823,9 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
 
     // Whiteboard 1-Concept-Per-Page: Ensure active concept page is active
     chalkboardRef.current?.goToPage?.(currentConceptIndex)
+    setTimeout(() => {
+      autoTriggerVisualForConcept(currentConceptIndexRef.current)
+    }, 500)
 
     startClass(
       preferredVoice as any,
@@ -1736,34 +1844,81 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
           renderedVisualConceptsRef.current.add(currentConceptIndexRef.current)
         }
         if (chalkboardRef.current) {
-          if (action === 'set_color' || action === 'chalk_color') {
-            chalkboardRef.current.setChalkColor(color || content)
+          // Normalize action and unwrap nested content if action is write_chalkboard or write_board
+          if (
+            action === 'write_chalkboard' ||
+            action === 'write_board' ||
+            action === 'chalkboard' ||
+            action === 'whiteboard' ||
+            action === 'board'
+          ) {
+            if (typeof content === 'object' && content !== null) {
+              const innerAction = content.action || (content.note ? 'draw_note' : content.step ? 'draw_step' : content.title ? 'draw_title' : content.question ? 'draw_question' : 'draw_note')
+              const innerContent = content.content ?? content.text ?? content.note ?? content.step ?? content.title ?? content.question ?? ''
+              color = content.color || color
+              action = innerAction
+              content = innerContent
+            } else if (typeof content === 'string') {
+              const trimmed = content.trim()
+              if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                try {
+                  const parsed = JSON.parse(trimmed)
+                  const innerAction = parsed.action || (parsed.note ? 'draw_note' : parsed.step ? 'draw_step' : parsed.title ? 'draw_title' : parsed.question ? 'draw_question' : 'draw_note')
+                  const innerContent = parsed.content ?? parsed.text ?? parsed.note ?? parsed.step ?? parsed.title ?? parsed.question ?? ''
+                  color = parsed.color || color
+                  action = innerAction
+                  content = innerContent
+                } catch {}
+              } else {
+                action = 'draw_note'
+              }
+            }
           }
-          else if (action === 'draw_title') chalkboardRef.current.drawTitle(content, color)
-          else if (action === 'draw_note') chalkboardRef.current.drawNote(content, color)
-          else if (action === 'draw_step') chalkboardRef.current.drawStep(content, color)
-          else if (action === 'draw_highlight_box') chalkboardRef.current.drawHighlightBox(content, color)
-          else if (action === 'draw_rough_work') chalkboardRef.current.drawRoughWork(content, color)
+
+          // Convert content to string for text-based chalkboard drawing
+          const stringContent = typeof content === 'string' ? content : (content?.content || content?.text || content?.note || (content ? JSON.stringify(content) : ''))
+
+          if (action === 'set_color' || action === 'chalk_color') {
+            chalkboardRef.current.setChalkColor(color || stringContent)
+          }
+          else if (action === 'draw_title' || action === 'title' || action === 'board_title') {
+            chalkboardRef.current.drawTitle(stringContent, color)
+            handleNoteRecorded(`### ${stringContent}`)
+          }
+          else if (action === 'draw_note' || action === 'note' || action === 'text' || action === 'draw_text' || action === 'board_note') {
+            chalkboardRef.current.drawNote(stringContent, color)
+            handleNoteRecorded(`• ${stringContent}`)
+          }
+          else if (action === 'draw_step' || action === 'step' || action === 'board_step') {
+            chalkboardRef.current.drawStep(stringContent, color)
+            handleNoteRecorded(`- Step: ${stringContent}`)
+          }
+          else if (action === 'draw_highlight_box' || action === 'highlight_box' || action === 'highlight' || action === 'box') {
+            chalkboardRef.current.drawHighlightBox(stringContent, color)
+            handleNoteRecorded(`**Core Formulation:** ${stringContent}`)
+          }
+          else if (action === 'draw_rough_work' || action === 'rough_work' || action === 'rough') chalkboardRef.current.drawRoughWork(stringContent, color)
           else if (action === 'clear_rough') chalkboardRef.current.clearRough()
           else if (action === 'clear_notes') chalkboardRef.current.clearNotes()
-          else if (action === 'rewrite_notes') chalkboardRef.current.rewriteNotes(typeof content === 'string' ? content : JSON.stringify(content))
-          else if (action === 'draw_question') {
+          else if (action === 'rewrite_notes') chalkboardRef.current.rewriteNotes(stringContent)
+          else if (action === 'draw_question' || action === 'question') {
             isAwaitingStudentAnswerRef.current = true
             setIsAwaitingStudentAnswer(true)
-            chalkboardRef.current.drawQuestion(content, color)
+            chalkboardRef.current.drawQuestion(stringContent, color)
+            handleNoteRecorded(`**Checkpoint Question:** ${stringContent}`)
           }
           else if (action === 'draw_student_answer' || action === 'student_answer') {
-            chalkboardRef.current.drawStudentAnswer?.(content, undefined, color)
+            chalkboardRef.current.drawStudentAnswer?.(stringContent, undefined, color)
           }
           else if (action === 'draw_answer_verdict' || action === 'answer_verdict' || action === 'verdict') {
-            chalkboardRef.current.drawAnswerVerdict?.(content, undefined, color)
+            chalkboardRef.current.drawAnswerVerdict?.(stringContent, undefined, color)
             isAwaitingStudentAnswerRef.current = false
             setIsAwaitingStudentAnswer(false)
             isReviewingVerdictRef.current = true
             setIsReviewingVerdict(true)
           }
           else if (action === 'draw_exam_question' || action === 'exam_question') {
-            chalkboardRef.current.drawExamQuestion?.(content, undefined, undefined, color)
+            chalkboardRef.current.drawExamQuestion?.(stringContent, undefined, undefined, color)
           }
           else if (
             action === 'draw_shape' || action === 'shape' ||
@@ -1877,7 +2032,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
         renderedVisualConceptsRef.current.add(currentConceptIndexRef.current)
         handleVisualAction(action, params)
       },
-      avatarConfig || undefined,
+      undefined,
       (pcm16, sampleRate) => {
         simliControllerRef.current?.sendAudioChunk(pcm16, sampleRate)
       },

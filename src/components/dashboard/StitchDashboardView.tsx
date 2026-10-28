@@ -380,7 +380,7 @@ export function StitchDashboardView({
             </div>
             <div>
               <h1 className="font-headline-md text-headline-md text-ink-primary tracking-tight leading-none">
-                AI Tutor
+                Anaxly
               </h1>
               <p className="font-label-micro text-label-micro text-ink-muted mt-1 uppercase tracking-wider">
                 Scholar's Edition
@@ -1107,7 +1107,7 @@ export function StitchDashboardView({
                           Complete {activeModule.title}
                         </h4>
                         <p className="font-body-md text-body-md text-ink-secondary text-sm mt-0.5">
-                          {activeModule.description || 'Core instructional module review with your AI tutor.'}
+                          {activeModule.description || 'Core instructional module review with Anaxly.'}
                         </p>
                       </div>
                     </div>
@@ -1378,7 +1378,7 @@ export function StitchDashboardView({
         <footer className="border-t border-border-subtle bg-canvas px-6 md:px-10 py-8 text-center text-ink-muted font-label-micro text-label-micro max-w-7xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-secondary text-lg">eco</span>
-            <span>AI Tutor Scholar's Edition · Botanical Intelligence Design System</span>
+            <span>Anaxly Scholar's Edition · Classical Intelligence</span>
           </div>
           <div>
             <span>Curriculum aligned with College Board AP® standards</span>
@@ -1411,10 +1411,10 @@ export function StitchDashboardView({
               </h3>
               <p className="font-body-md text-body-md text-ink-secondary text-sm">
                 {memories.length > 0
-                  ? `Your AI tutor has synthesized your recent sessions: "${memories[0].memory_text.slice(0, 110)}..."`
+                  ? `Anaxly has synthesized your recent sessions: "${memories[0].memory_text.slice(0, 110)}..."`
                   : activeModule?.description
                   ? `Beginning with ${activeModule.title}. Reviewing foundational concepts and interactive socratic problems.`
-                  : 'Your AI tutor is ready for interactive dialogue, concept clarification, and deliberate practice.'}
+                  : 'Anaxly is ready for interactive dialogue, concept clarification, and deliberate practice.'}
               </p>
             </div>
 
@@ -1523,7 +1523,7 @@ export function StitchDashboardView({
               Student Preferences
             </DialogTitle>
             <DialogDescription className="font-body-md text-ink-secondary text-sm">
-              Tune your AI tutor voice, pedagogical model, and pacing.
+              Tune your Anaxly voice, pedagogical model, and pacing.
             </DialogDescription>
           </DialogHeader>
 

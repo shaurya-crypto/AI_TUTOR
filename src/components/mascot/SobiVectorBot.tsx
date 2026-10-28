@@ -46,6 +46,11 @@ export function SobiVectorBot({
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const clickReactionTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [isClickReacting, setIsClickReacting] = useState(false)
+  const latestExpressionRef = useRef(expression)
+
+  useEffect(() => {
+    latestExpressionRef.current = expression
+  }, [expression])
 
   // Safe expression and animation triggers
   const triggerExpression = useCallback((expr: string) => {
@@ -66,7 +71,18 @@ export function SobiVectorBot({
 
   // 1. Audio Question Pronunciation Playback
   useEffect(() => {
-    if (!audioSrc || isMuted) {
+    if (!audioSrc) {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
+      setIsPlayingAudio(false)
+      return
+    }
+
+    setAudioAvailable(true)
+
+    if (isMuted) {
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current.currentTime = 0
@@ -85,17 +101,17 @@ export function SobiVectorBot({
     }
     audio.onended = () => {
       setIsPlayingAudio(false)
-      triggerExpression(expression || 'neutral')
+      triggerExpression(latestExpressionRef.current || 'neutral')
     }
-    audio.onerror = () => {
-      // Audio file not yet dropped in public folder - degrade silently without errors
-      setAudioAvailable(false)
+    audio.onerror = (e) => {
+      console.warn('Audio resource could not be played:', audioSrc, e)
       setIsPlayingAudio(false)
     }
 
     const playPromise = audio.play()
     if (playPromise !== undefined) {
       playPromise.catch(() => {
+        // Autoplay policy deferred until user interaction
         setIsPlayingAudio(false)
       })
     }
@@ -104,7 +120,7 @@ export function SobiVectorBot({
       audio.pause()
       audio.currentTime = 0
     }
-  }, [audioSrc, isMuted, expression, triggerAnimation, triggerExpression])
+  }, [audioSrc, isMuted, triggerAnimation, triggerExpression])
 
   // 2. React to expression & animation props
   useEffect(() => {
@@ -213,17 +229,37 @@ export function SobiVectorBot({
   }
 
   const toggleManualAudio = () => {
-    if (onToggleMute) {
-      onToggleMute()
-      return
+    if (!audioSrc) return
+
+    if (!audioRef.current) {
+      const audio = new Audio(audioSrc)
+      audioRef.current = audio
+      audio.onplay = () => {
+        setIsPlayingAudio(true)
+        triggerAnimation('listening')
+        triggerExpression('attentive-left')
+      }
+      audio.onended = () => {
+        setIsPlayingAudio(false)
+        triggerExpression(latestExpressionRef.current || 'neutral')
+      }
     }
-    if (!audioRef.current) return
+
     if (isPlayingAudio) {
       audioRef.current.pause()
       setIsPlayingAudio(false)
-      triggerExpression(expression || 'neutral')
+      triggerExpression(latestExpressionRef.current || 'neutral')
     } else {
-      audioRef.current.play().catch(() => {})
+      audioRef.current.currentTime = 0
+      audioRef.current
+        .play()
+        .then(() => {
+          setIsPlayingAudio(true)
+          if (isMuted && onToggleMute) {
+            onToggleMute()
+          }
+        })
+        .catch((e) => console.warn('Manual audio play blocked:', e))
     }
   }
 
@@ -251,18 +287,20 @@ export function SobiVectorBot({
                 </span>
               )}
             </div>
-            {audioSrc && audioAvailable && (
+            {audioSrc && (
               <button
                 type="button"
                 onClick={toggleManualAudio}
-                className="ml-1 rounded-full p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus:outline-none"
-                title={isPlayingAudio ? 'Mute voice' : 'Play voice'}
+                className="ml-1 rounded-full p-1.5 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus:outline-none"
+                title={isPlayingAudio ? 'Pause voice' : 'Play voice question'}
                 aria-label="Voice question"
               >
                 {isPlayingAudio ? (
                   <Volume2 className="h-4 w-4 text-emerald-600 animate-pulse" />
+                ) : isMuted ? (
+                  <VolumeX className="h-4 w-4 text-neutral-400" />
                 ) : (
-                  <VolumeX className="h-4 w-4" />
+                  <Volume2 className="h-4 w-4 text-neutral-500 hover:text-neutral-800" />
                 )}
               </button>
             )}
@@ -310,18 +348,20 @@ export function SobiVectorBot({
                 </span>
               )}
             </div>
-            {audioSrc && audioAvailable && (
+            {audioSrc && (
               <button
                 type="button"
                 onClick={toggleManualAudio}
-                className="ml-1 rounded-full p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus:outline-none"
-                title={isPlayingAudio ? 'Mute voice' : 'Play voice'}
+                className="ml-1 rounded-full p-1.5 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus:outline-none"
+                title={isPlayingAudio ? 'Pause voice' : 'Play voice question'}
                 aria-label="Voice question"
               >
                 {isPlayingAudio ? (
                   <Volume2 className="h-4 w-4 text-emerald-600 animate-pulse" />
+                ) : isMuted ? (
+                  <VolumeX className="h-4 w-4 text-neutral-400" />
                 ) : (
-                  <VolumeX className="h-4 w-4" />
+                  <Volume2 className="h-4 w-4 text-neutral-500 hover:text-neutral-800" />
                 )}
               </button>
             )}

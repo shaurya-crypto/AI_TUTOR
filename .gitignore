@@ -1,7 +1,8 @@
-# Environment variables
+# Environment variables & secrets
 .env*.local
 .env
 .env.production
+.env.staging
 
 # Dependencies
 /node_modules
@@ -14,45 +15,73 @@
 /tests/
 __tests__/
 /public/test-screenshots/
+/playwright-report/
+/test-results/
+/.playwright/
+/blob-report/
 
 # Agent skills, workflows & IDE tooling
 /.agents/
 skills-lock.json
 
-# Scratch & temporary dumps
+# Scratch, temporary dumps & backups
 /scratch/
 *.tmp
+*.bak
+*.orig
+*~
+scratch_curriculums.json
 
-# Next.js
+# Next.js & Build outputs
 /.next/
 /out/
-
-# Production
 /build
-
-# Misc
-.DS_Store
-*.pem
-
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Local env files
 .vercel
 *.tsbuildinfo
 next-env.d.ts
 
-# Sensitive files & session cookies
+# Operating System files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.Spotlight-V100
+.Trashes
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Logs & debugging
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Sensitive files, certificates & session cookies
 cookies.txt
 *.cookie
 *.cookies
+*.pem
+*.key
+*.cert
 
 # Large archives & bundles
 *.zip
 *.tar.gz
 *.rar
+*.7z
 public/*.zip
 
 # Codebase memory & indexes
@@ -60,8 +89,9 @@ public/*.zip
 
 # Supabase temp & scratch
 supabase/.temp/
-scratch_curriculums.json
 
+# Audio temp dumps
+public/audio/
 
 # Playwright CLI temp files
 .playwright-cli/

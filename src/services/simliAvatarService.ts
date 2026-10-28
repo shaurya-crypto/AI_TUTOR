@@ -48,7 +48,10 @@ export class SimliAvatarController {
   private audioChunkAccumulator: Uint8Array[] = []
   private accumulatedByteLength: number = 0
   private flushTimer: any = null
-  private static readonly TARGET_CHUNK_BYTES = 6000 // ~187.5ms of 16kHz 16-bit mono PCM for smooth lip-sync
+  private currentStartPromise: Promise<boolean> | null = null
+  private isStopping: boolean = false
+  private activeFaceId: string | null = null
+  private static readonly TARGET_CHUNK_BYTES = 2000 // ~62.5ms of 16kHz 16-bit mono PCM for ultra-smooth real-time playback
 
   constructor(onStatusChange?: (status: SimliStatus, error?: string) => void) {
     this.onStatusChange = onStatusChange
@@ -65,78 +68,131 @@ export class SimliAvatarController {
 
   /**
    * Initializes and connects the Simli WebRTC avatar stream.
-   * On failure, automatically triggers fallback to Google Avatar.
+   * Handles re-entrance, React StrictMode rapid mount/unmount cycles,
+   * and suppresses benign WebRTC disconnection cancellations.
    */
   public async start(options: {
     videoElement: HTMLVideoElement
     audioElement: HTMLAudioElement
     faceId?: string
   }): Promise<boolean> {
-    if (this.client) {
-      await this.stop()
-    }
+    const targetFaceId = options.faceId || '80459b57-2d66-4ca7-8682-59e1c649bc53'
 
-    this.videoEl = options.videoElement
-    this.audioEl = options.audioElement
-    this.setStatus('connecting')
-
-    try {
-      // 1. Fetch ephemeral session token from secure server broker
-      const res = await fetch('/api/avatar/simli', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ faceId: options.faceId }),
-      })
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}))
-        throw new Error(errJson.error || `HTTP ${res.status}: Failed to broker Simli session`)
-      }
-
-      const data = await res.json()
-      if (!data.success || !data.sessionToken) {
-        throw new Error(data.error || 'Invalid session credentials received from Simli broker')
-      }
-
-      // 2. Initialize SimliClient with DOM video and audio elements
-      const client = new SimliClient(
-        data.sessionToken,
-        options.videoElement,
-        options.audioElement,
-        data.iceServers || null,
-        LogLevel.CRITICAL,
-        'livekit',
-        'websockets'
-      )
-
-      client.on('start', () => {
-        console.log('[SimliAvatar] WebRTC stream connected successfully')
-        this.setStatus('connected')
-      })
-
-      client.on('stop', () => {
-        console.warn('[SimliAvatar] Stream stopped, falling back to Google Avatar')
-        this.setStatus('fallback', 'Simli stream stopped')
-      })
-
-      client.on('error', (detail: string) => {
-        console.error('[SimliAvatar] WebRTC connection error, falling back to Google Avatar:', detail)
-        this.setStatus('fallback', detail || 'Simli connection error')
-      })
-
-      client.on('startup_error', (message: string) => {
-        console.error('[SimliAvatar] Simli startup error, falling back to Google Avatar:', message)
-        this.setStatus('fallback', message || 'Simli startup error')
-      })
-
-      this.client = client
-      await client.start()
+    // If already fully connected to the same face ID, reuse connection
+    if (this.status === 'connected' && this.client && this.activeFaceId === targetFaceId) {
       return true
-    } catch (err: any) {
-      console.warn('[SimliAvatar] Start error, falling back to Google Avatar:', err?.message || err)
-      this.setStatus('fallback', err?.message)
-      return false
     }
+
+    // If a connection attempt is actively in progress, await it
+    if (this.currentStartPromise) {
+      return this.currentStartPromise
+    }
+
+    this.isStopping = false
+
+    this.currentStartPromise = (async () => {
+      try {
+        if (this.client) {
+          await this.stopInternal()
+        }
+
+        this.videoEl = options.videoElement
+        this.audioEl = options.audioElement
+        this.activeFaceId = targetFaceId
+        this.setStatus('connecting')
+
+        // 1. Fetch ephemeral session token from secure server broker
+        const res = await fetch('/api/avatar/simli', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ faceId: targetFaceId }),
+        })
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}))
+          throw new Error(errJson.error || `HTTP ${res.status}: Failed to broker Simli session`)
+        }
+
+        const data = await res.json()
+        if (!data.success || !data.sessionToken) {
+          throw new Error(data.error || 'Invalid session credentials received from Simli broker')
+        }
+
+        // Abort if stop was requested while fetching session token
+        if (this.isStopping) {
+          return false
+        }
+
+        // 2. Initialize SimliClient with DOM video and audio elements
+        const client = new SimliClient(
+          data.sessionToken,
+          options.videoElement,
+          options.audioElement,
+          data.iceServers || null,
+          LogLevel.CRITICAL,
+          'livekit',
+          'websockets'
+        )
+
+        client.on('start', () => {
+          if (!this.isStopping) {
+            console.log('[SimliAvatar] WebRTC stream connected successfully')
+            this.setStatus('connected')
+          }
+        })
+
+        client.on('stop', () => {
+          if (!this.isStopping) {
+            console.warn('[SimliAvatar] Stream stopped')
+            this.setStatus('idle')
+          }
+        })
+
+        client.on('error', (detail: string) => {
+          if (!this.isStopping) {
+            const isBenignDisconnect =
+              detail?.includes('Client initiated disconnect') ||
+              detail?.includes('Called Disconnect Before A Connecction succeeded')
+            if (!isBenignDisconnect) {
+              console.warn('[SimliAvatar] WebRTC connection warning:', detail)
+            }
+          }
+        })
+
+        client.on('startup_error', (message: string) => {
+          if (!this.isStopping) {
+            const isBenignDisconnect =
+              message?.includes('Client initiated disconnect') ||
+              message?.includes('Called Disconnect Before A Connecction succeeded')
+            if (!isBenignDisconnect) {
+              console.warn('[SimliAvatar] Simli startup error:', message)
+            }
+          }
+        })
+
+        this.client = client
+        await client.start()
+        return true
+      } catch (err: any) {
+        const errorMsg = String(err?.message || err)
+        const isBenignDisconnect =
+          errorMsg.includes('Client initiated disconnect') ||
+          errorMsg.includes('Called Disconnect Before A Connecction succeeded')
+
+        if (isBenignDisconnect) {
+          console.debug('[SimliAvatar] Graceful connection cancellation:', errorMsg)
+          return false
+        }
+
+        console.warn('[SimliAvatar] Start error:', errorMsg)
+        this.setStatus('error', err?.message)
+        return false
+      } finally {
+        this.currentStartPromise = null
+      }
+    })()
+
+    return this.currentStartPromise
   }
 
   /**
@@ -196,7 +252,7 @@ export class SimliAvatarController {
       } else if (!this.flushTimer) {
         this.flushTimer = setTimeout(() => {
           this.flushAccumulatedAudio()
-        }, 60)
+        }, 25)
       }
     } catch (e) {
       console.warn('[SimliAvatar] Error sending audio chunk:', e)
@@ -223,9 +279,22 @@ export class SimliAvatarController {
   }
 
   /**
-   * Safely stops and disconnects Simli WebRTC connection.
+   * Safely stops and disconnects Simli WebRTC connection without leaking
+   * unhandled promise rejections or triggering race conditions.
    */
   public async stop() {
+    this.isStopping = true
+
+    if (this.currentStartPromise) {
+      try {
+        await this.currentStartPromise
+      } catch {}
+    }
+
+    await this.stopInternal()
+  }
+
+  private async stopInternal() {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer)
       this.flushTimer = null
@@ -239,11 +308,10 @@ export class SimliAvatarController {
       try {
         await clientToStop.stop()
       } catch (e: any) {
-        if (!String(e?.message || e).includes('Client initiated disconnect')) {
-          console.debug('[SimliAvatar] Graceful disconnect:', e)
-        }
+        // Silently swallow disconnect noise
       }
     }
+
     if (this.videoEl) {
       try {
         this.videoEl.srcObject = null
@@ -256,6 +324,8 @@ export class SimliAvatarController {
       } catch {}
       this.audioEl = null
     }
+
+    this.activeFaceId = null
     this.setStatus('idle')
   }
 }

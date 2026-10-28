@@ -116,7 +116,7 @@ export function StudentDashboardView({
             
             <p className="text-ink-secondary text-base md:text-lg mt-3 max-w-xl leading-relaxed">
               {curriculum 
-                ? `You're currently mastering ${curriculum.title}. Your AI tutor is primed with your cognitive profile.`
+                ? `You're currently mastering ${curriculum.title}. Anaxly is primed with your cognitive profile.`
                 : 'Select a curriculum to launch your live conversational tutoring sessions.'}
             </p>
           </div>
@@ -167,7 +167,7 @@ export function StudentDashboardView({
               <p className="text-ink-secondary text-base leading-relaxed mb-6 max-w-xl">
                 {nextModule?.description 
                   ? nextModule.description 
-                  : 'Your AI tutor adapts to your pace, challenges assumptions, and explains difficult concepts with real-time audio interaction.'}
+                  : 'Anaxly adapts to your pace, challenges assumptions, and explains difficult concepts with real-time audio interaction.'}
               </p>
 
               {/* Key Concept Pills */}

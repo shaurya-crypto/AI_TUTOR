@@ -1,33 +1,44 @@
-# Glass & Material System
+# Aristotle Material & Elevation System
 
-Glass is a supporting material in the AI Tutor design language, NOT the entire visual identity. It is used to create subtle depth without becoming a distraction.
+Materials in Aristotle AI Tutor are modeled after fine parchment, pressed book covers, and soft ambient daylight, rather than the cold, glossy plastic of 2020 glassmorphism.
 
-## Principles
-*   **No Heavy Glassmorphism:** Avoid massive blurred cards everywhere. The main authentication panel should feel like a premium physical surface (`bg-white`), not a stereotypical glass UI.
-*   **Warm Neutrals:** Borders and backgrounds should use warm ivory/white tones, not cold blue/grey.
+---
 
-## Material Levels
+## 1. Material Philosophy: Tactile Paper Surfaces
+*   **Opaque Tactility Over Translucency:** Main interactive cards, dialogs, and speech bubbles are solid pure white (`#FFFFFF`) or warm parchment (`#FAF9F5`).
+*   **Restrained Atmospheric Blur:** Translucency is reserved exclusively for fixed navigational headers and floating companion toolbars that pass over scrollable content.
 
-### Glass Level 0 (Base Surface)
-*   **Usage:** Standard cards, main auth container, primary content areas.
-*   **Specs:** `bg-white`, solid, `border border-[#E5E3DB]`. No blur.
+---
 
-### Glass Level 1 (Subtle Translucency)
-*   **Usage:** Sticky headers, subtle floating action bars that scroll over content.
-*   **Specs:** 
-    *   Background: `bg-white/80` (or `bg-[#F8F6F0]/80`)
-    *   Blur: `backdrop-blur-md` (12px blur)
-    *   Border: `border-b border-[#E5E3DB]/50`
+## 2. Elevation Levels
 
-### Glass Level 2 (Floating Overlays)
-*   **Usage:** Dropdown menus, tooltips, small floating UI elements (like the mic status indicator).
-*   **Specs:**
-    *   Background: `bg-white/90`
-    *   Blur: `backdrop-blur-lg` (16px blur)
-    *   Border: `border border-[#E5E3DB]`
-    *   Shadow: Soft diffused shadow (see Design Principles).
+### Level 0: The Base Parchment Canvas
+*   **Background:** `#FAF9F5` (or `#FAF8F5`).
+*   **Texture:** 24px Cartesian grid in `#E7E5E0` at 40% opacity.
+*   **Usage:** Base page background for all authentication, onboarding, and classroom layouts.
 
-## Anti-Patterns
-*   No glowing borders on glass.
-*   No rainbow or neon glass.
-*   Do not stack Glass Level 1 on top of Glass Level 2 (legibility collapses).
+### Level 1: Grounded White Surface
+*   **Background:** `#FFFFFF`.
+*   **Border:** `1px solid #E5E3DB` (or `border-neutral-200/90`).
+*   **Shadow:** None or micro-shadow `shadow-[0_2px_8px_rgba(0,0,0,0.02)]`.
+*   **Usage:** Text inputs, discrete OTP digit cells, option cards, and buttons.
+
+### Level 2: Elevated Editorial Cards & Bubbles
+*   **Background:** `#FFFFFF`.
+*   **Border:** `1px solid #E5E3DB`.
+*   **Shadow:** `box-shadow: 0 4px 20px rgba(31, 28, 24, 0.04)` (diffused warm ambient shadow, never pitch black).
+*   **Radius:** `rounded-2xl` (16px) or `rounded-3xl` (24px).
+*   **Usage:** Auth container cards, Sobi companion speech bubbles, and modal dialogs.
+
+### Level 3: Frosted Ambient Glass (Headers & Floating Bars)
+*   **Background:** `#FAF9F5` at 85% opacity (`bg-[#FAF9F5]/85` or `bg-white/80`).
+*   **Backdrop Blur:** `backdrop-blur-md` (12px blur).
+*   **Border:** Hairline bottom separator `border-b border-[#E5E3DB]/80`.
+*   **Usage:** Sticky top navigation bar, floating mute/skip toolbar, and whiteboard tool palettes.
+
+---
+
+## 3. Anti-Patterns
+*   No glowing neon borders.
+*   No chromatic or rainbow gradients.
+*   No deep saturated blurs that obscure underlying educational diagrams.

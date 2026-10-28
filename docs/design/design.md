@@ -1,39 +1,40 @@
-# Design Principles
+# Aristotle Design Principles
 
-The overall design language for the AI Tutor.
+The overarching design philosophy for the Aristotle AI Tutor platform.
 
-## Principle 1: Editorial Hierarchy
-Large, confident typography (`Instrument Serif`) creates the hierarchy. We rely on text size and weight before relying on cards, gradients, or decoration.
+---
 
-## Principle 2: Warm Minimalism
-The UI feels warm through the use of the ivory background (`#F8F6F0`), deep ink typography, and subtle coral accents. It is minimal but not sterile. Do NOT use excessive beige/brown.
+## Principle 1: Socratic & Scholarly Dignity
+The interface is designed for school students (Classes 6 to 12 CBSE, ICSE, IB) and their parents. It avoids noisy gamification, juvenile cartoon clutter, or cold enterprise SaaS monotony. It feels like an authentic personal tutor guiding the student through deep concepts.
 
-## Principle 3: Color Has Meaning
-*   **Coral** = Primary Action / Brand.
-*   **Green** = Live / Connected / Success.
-Do not randomly decorate the UI with colors. If it's Coral, it means the user should click it or it's a major brand moment.
+## Principle 2: Warm Classical Paper Canvas
+Every view lives on a warm alabaster paper canvas (`#FAF9F5`), structured by a hairline 24px Cartesian grid and framed with warm paper borders (`#E5E3DB`). The student feels like they are opening a beautifully typeset mathematical manuscript.
 
-## Principle 4: White Space is a Feature
-Use generous padding (e.g., `p-8` to `p-12` on desktop). Never fill empty areas simply because they are available. Allow the layout to breathe.
+## Principle 3: Intentional Color Semantics
+*   **Deep Walnut & Espresso Ink (`#1F1C18`, `#2C241E`):** Carries the structural weight: confident typography, primary buttons, and focused borders.
+*   **Botanical Green (`#52715D`, `#F0F7F1`):** Signifies security, verification, understanding, and live tutor presence.
+*   **Terracotta Coral (`#C85A43`, `#FFF8F6`):** Highlights brand moments, crucial calls to action, and alerts.
+*   Colors are never applied decoratively; every hue communicates meaning.
 
-## Principle 5: Soft Geometry (Radius)
-Use restrained corner radii. 
-*   **Small (Inputs, Badges):** 8px (`rounded-lg`)
-*   **Medium (Cards):** 16px (`rounded-2xl`)
-*   **Large (Major Containers):** 24px (`rounded-3xl`)
-Avoid making everything a giant pill. Buttons should feel tactile (`rounded-xl` or `rounded-lg`), not aggressively circular unless they are icon-only.
+## Principle 4: Physical Tactility & Soft Geometry
+*   **Small (Badges, OTP Cells, Micro Buttons):** `rounded-xl` (12px)
+*   **Medium (Pill Buttons, Text Inputs):** `rounded-2xl` (16px)
+*   **Large (Cards, Speech Bubbles, Dialogs):** `rounded-3xl` (24px)
+*   Buttons and inputs have subtle physical elevation (`shadow-[0_2px_8px_rgba(0,0,0,0.03)]`) that responds with micro-scale feedback (`active:scale-[0.99]`).
 
-## Principle 6: Subtle Depth (Shadows)
-Shadows should feel soft, natural, and barely noticeable. 
-*   Avoid heavy black drop shadows.
-*   Use shadows only for elevated controls (dropdowns, floating panels, auth card).
-*   *Example:* `box-shadow: 0 10px 40px -10px rgba(23, 24, 23, 0.08);`
+## Principle 5: Discrete Security & Frictionless Flow
+*   Authentication favors 6-digit one-time codes over passwords to reduce student friction.
+*   The 6-digit OTP entry utilizes discrete interactive cells with auto-advance, backspace navigation, paste distribution, and instant auto-submit.
+*   Rate limiting, brute-force lockout, and disposable email rejection are enforced silently server-side.
 
-## Principle 7: No Generic AI Aesthetics
-Never use purple-blue gradients, glowing neural networks, floating AI particles, or futuristic grid backgrounds. The product should feel like a premium education tool, not a cyberpunk hacker dashboard.
+## Principle 6: Animated Companion Integration
+*   Sobi, the vector companion bot, provides empathetic spatial grounding during onboarding and class sessions.
+*   Speech bubbles feature crisp white paper cards with downward or side-pointing tails, real-time voice pronunciation buttons, and dynamic facial expressions (`attentive-left`, `joyful-wide`, `downward-gaze`).
 
-## Principle 8: Motion Choreography
-Animations should be smooth, quiet, and intentional.
-*   Use custom cubic-beziers (e.g., `cubic-bezier(0.32, 0.72, 0, 1)`).
-*   Avoid bouncing or excessive spring physics.
-*   Fade elements in with a slight vertical translation (`translate-y-4 opacity-0` to `translate-y-0 opacity-100`).
+## Principle 7: Zero Emojis Invariant
+*   No unicode emojis are permitted anywhere in code, copy, templates, or database records.
+*   All visual cues use precise Lucide SVG iconography or classical typographical bullets (`&bull;`).
+
+## Principle 8: Restrained Motion Choreography
+*   Transitions use smooth ease-out curves (`motion/react` with durations between 0.2s and 0.35s).
+*   Avoid jarring bounce effects or distracting particle bursts.

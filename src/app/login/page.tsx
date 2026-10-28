@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, Suspense } from 'react'
+import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -8,7 +8,155 @@ import { motion, AnimatePresence } from 'motion/react'
 import { createClient } from '@/utils/supabase/client'
 import { sendEmailCode, verifyEmailCode, loginWithPassword } from './actions'
 import { completeOnboardingAction } from '@/app/onboarding/actions'
-import { Loader2, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Loader2, ArrowLeft, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react'
+
+interface SixDigitOtpInputProps {
+  value: string
+  onChange: (val: string) => void
+  onComplete?: (val: string) => void
+  disabled?: boolean
+  autoFocus?: boolean
+  hasError?: boolean
+}
+
+/**
+ * Classical 6-Digit Discrete OTP Input Group
+ * Supports auto-advance, backspace backward navigation, full paste distribution, and mobile autofill.
+ */
+function SixDigitOtpInput({
+  value,
+  onChange,
+  onComplete,
+  disabled = false,
+  autoFocus = true,
+  hasError = false,
+}: SixDigitOtpInputProps) {
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  const digits = useMemo(() => {
+    const cleaned = value.replace(/\D/g, '').slice(0, 6)
+    return Array.from({ length: 6 }, (_, i) => cleaned[i] || '')
+  }, [value])
+
+  useEffect(() => {
+    if (autoFocus && inputRefs.current[0]) {
+      inputRefs.current[0]?.focus()
+    }
+  }, [autoFocus])
+
+  const handlePastedString = (pasted: string, startIndex: number = 0) => {
+    const cleaned = pasted.replace(/\D/g, '').slice(0, 6)
+    if (!cleaned) return
+
+    const newDigits = [...digits]
+    for (let i = 0; i < cleaned.length && startIndex + i < 6; i++) {
+      newDigits[startIndex + i] = cleaned[i]
+    }
+    const updated = newDigits.join('')
+    onChange(updated)
+
+    const nextIndex = Math.min(5, startIndex + cleaned.length)
+    inputRefs.current[nextIndex]?.focus()
+
+    if (updated.length === 6 && onComplete) {
+      onComplete(updated)
+    }
+  }
+
+  const handleInputChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, '')
+
+    // Handle full paste or multi-char autofill
+    if (rawVal.length > 1) {
+      handlePastedString(rawVal, index)
+      return
+    }
+
+    if (!rawVal) {
+      // Cleared current box
+      const newDigits = [...digits]
+      newDigits[index] = ''
+      onChange(newDigits.join(''))
+      return
+    }
+
+    const digit = rawVal[rawVal.length - 1]
+    const newDigits = [...digits]
+    newDigits[index] = digit
+    const updated = newDigits.join('')
+    onChange(updated)
+
+    // Advance focus to next cell
+    if (index < 5) {
+      inputRefs.current[index + 1]?.focus()
+    }
+
+    if (updated.length === 6 && onComplete) {
+      onComplete(updated)
+    }
+  }
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      if (!digits[index] && index > 0) {
+        // Backspace on empty cell moves to previous and clears it
+        const newDigits = [...digits]
+        newDigits[index - 1] = ''
+        onChange(newDigits.join(''))
+        inputRefs.current[index - 1]?.focus()
+        e.preventDefault()
+      } else if (digits[index]) {
+        const newDigits = [...digits]
+        newDigits[index] = ''
+        onChange(newDigits.join(''))
+        e.preventDefault()
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      inputRefs.current[index - 1]?.focus()
+      e.preventDefault()
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      inputRefs.current[index + 1]?.focus()
+      e.preventDefault()
+    }
+  }
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text')
+    handlePastedString(pasted, 0)
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 sm:gap-2.5 my-3">
+      {digits.map((digit, idx) => (
+        <input
+          key={idx}
+          ref={(el) => {
+            inputRefs.current[idx] = el
+          }}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={idx === 0 ? 6 : 1}
+          autoComplete={idx === 0 ? 'one-time-code' : 'off'}
+          value={digit}
+          disabled={disabled}
+          onChange={(e) => handleInputChange(idx, e)}
+          onKeyDown={(e) => handleKeyDown(idx, e)}
+          onPaste={handlePaste}
+          onFocus={(e) => e.target.select()}
+          className={`w-11 h-14 sm:w-12 sm:h-14 rounded-xl border text-center font-mono text-2xl font-bold transition-all shadow-[0_2px_8px_rgba(0,0,0,0.02)] outline-none ${
+            hasError
+              ? 'border-rose-300 bg-rose-50/20 text-rose-900 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
+              : digit
+              ? 'border-[#52715D] bg-white text-[#1F1C18] focus:border-[#52715D] focus:ring-2 focus:ring-[#52715D]/20'
+              : 'border-[#E5E3DB] bg-white text-[#1F1C18] focus:border-[#1F1C18] focus:ring-2 focus:ring-neutral-900/10'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        />
+      ))}
+    </div>
+  )
+}
 
 function LoginForm() {
   const router = useRouter()
@@ -21,6 +169,7 @@ function LoginForm() {
   const [password, setPassword] = useState('')
   const [step, setStep] = useState<'email' | 'otp' | 'password'>('email')
   const [isLoading, setIsLoading] = useState(false)
+  const isSubmitting = isLoading // Alias for submission guard assertions
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [infoMsg, setInfoMsg] = useState<string | null>(null)
   const [resendCooldown, setResendCooldown] = useState(0)
@@ -98,8 +247,8 @@ function LoginForm() {
   }
 
   // Handle Send Sign-in Code
-  const handleSendCode = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSendCode = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if (!email || !email.includes('@')) {
       setErrorMsg('Please enter a valid email address.')
       return
@@ -116,23 +265,25 @@ function LoginForm() {
       setErrorMsg(res.error)
     } else {
       setStep('otp')
+      setCode('')
       setResendCooldown(60)
       setInfoMsg(`We sent a 6-digit sign-in code to ${email}.`)
     }
   }
 
   // Handle Verify OTP
-  const handleVerifyCode = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!code || code.trim().length < 6) {
-      setErrorMsg('Please enter the full 6-digit code.')
+  const triggerVerifyCode = async (verificationCode: string) => {
+    const cleanCode = verificationCode.replace(/\D/g, '')
+    if (cleanCode.length !== 6) {
+      setErrorMsg('Please enter the complete 6-digit verification code.')
       return
     }
 
+    if (isLoading) return
     setIsLoading(true)
     setErrorMsg(null)
 
-    const res = await verifyEmailCode(email, code)
+    const res = await verifyEmailCode(email, cleanCode)
     setIsLoading(false)
 
     if (res.error) {
@@ -144,6 +295,11 @@ function LoginForm() {
         router.push('/onboarding')
       }
     }
+  }
+
+  const handleVerifyCodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    triggerVerifyCode(code)
   }
 
   // Handle Password Sign-in fallback
@@ -182,12 +338,12 @@ function LoginForm() {
         {/* Brand Header */}
         <div className="flex items-center justify-between">
           <Link href="/" className="font-serif text-2xl font-normal tracking-tight text-[#1F1C18]">
-            AI Tutor
+            Anaxly
           </Link>
         </div>
 
         {/* Central Content Box */}
-        <div className="mx-auto my-auto w-full max-w-[380px] py-8">
+        <div className="mx-auto my-auto w-full max-w-[390px] py-8">
           <AnimatePresence mode="wait">
             {step === 'email' && (
               <motion.div
@@ -263,10 +419,10 @@ function LoginForm() {
 
                   <button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isSubmitting}
                     className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#2C241E] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#1E1712] active:scale-[0.99] disabled:opacity-50"
                   >
-                    {isLoading ? (
+                    {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       'Continue with email'
@@ -322,35 +478,46 @@ function LoginForm() {
                   <span className="font-medium text-neutral-800">{email}</span>.
                 </p>
 
-                <form onSubmit={handleVerifyCode} className="mt-6">
+                <form onSubmit={handleVerifyCodeSubmit} className="mt-6">
                   <div>
-                    <label
-                      htmlFor="code"
-                      className="block text-xs font-medium text-neutral-600 mb-1.5"
-                    >
-                      6-digit code
-                    </label>
-                    <input
-                      id="code"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={6}
-                      autoFocus
-                      required
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label
+                        htmlFor="six-digit-otp"
+                        className="block text-xs font-medium text-neutral-600"
+                      >
+                        6-digit verification code
+                      </label>
+                      <span className="text-[11px] text-neutral-400">
+                        Auto-submits on entry
+                      </span>
+                    </div>
+
+                    <SixDigitOtpInput
                       value={code}
-                      onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                      placeholder="123456"
-                      className="w-full rounded-2xl border border-neutral-200/90 bg-white px-4 py-3.5 text-center text-xl tracking-[0.35em] font-medium text-neutral-900 placeholder:tracking-normal placeholder:text-sm placeholder:text-neutral-400 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-colors focus:border-neutral-900 focus:outline-none"
+                      onChange={(newCode) => {
+                        setCode(newCode)
+                        setErrorMsg(null)
+                      }}
+                      onComplete={(completeCode) => {
+                        triggerVerifyCode(completeCode)
+                      }}
+                      disabled={isSubmitting}
+                      hasError={Boolean(errorMsg)}
                     />
+                  </div>
+
+                  {/* Security Validity Badge */}
+                  <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-neutral-500">
+                    <ShieldCheck className="h-3.5 w-3.5 text-[#52715D]" />
+                    <span>Valid for 10 minutes &bull; Single-use only</span>
                   </div>
 
                   <button
                     type="submit"
-                    disabled={isLoading || code.length < 6}
-                    className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#2C241E] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#1E1712] active:scale-[0.99] disabled:opacity-50"
+                    disabled={isSubmitting || code.length < 6}
+                    className="mt-5 flex w-full items-center justify-center rounded-2xl bg-[#2C241E] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#1E1712] active:scale-[0.99] disabled:opacity-50"
                   >
-                    {isLoading ? (
+                    {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       'Verify and continue'
@@ -366,8 +533,8 @@ function LoginForm() {
                   ) : (
                     <button
                       type="button"
-                      onClick={handleSendCode}
-                      disabled={isLoading}
+                      onClick={() => handleSendCode()}
+                      disabled={isSubmitting}
                       className="text-xs text-neutral-600 hover:text-neutral-900 underline decoration-neutral-300 underline-offset-4 transition-colors"
                     >
                       Resend code
@@ -443,10 +610,10 @@ function LoginForm() {
 
                   <button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isSubmitting}
                     className="mt-4 flex w-full items-center justify-center rounded-2xl bg-[#2C241E] py-3.5 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#1E1712] active:scale-[0.99] disabled:opacity-50"
                   >
-                    {isLoading ? (
+                    {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       'Sign in'

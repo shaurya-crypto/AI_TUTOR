@@ -28,6 +28,10 @@ interface GeneratedModule {
   worked_examples?: WorkedExample[]
   common_misconceptions?: string[]
   ai_system_prompt_context: string
+  visual_ideas?: string
+  diagram_type?: string
+  what_to_make?: string
+  diagram_svg?: string
   visual_lesson_plan?: any
 }
 
@@ -93,7 +97,8 @@ export async function GET() {
           worked_examples,
           common_misconceptions,
           subtopics,
-          key_concepts
+          key_concepts,
+          visual_lesson_plan
         )
       `)
       .order('board', { ascending: true })
@@ -109,7 +114,17 @@ export async function GET() {
     const formatted = (curriculums || []).map((c: any) => {
       const modules = (c.syllabus_modules || []).sort(
         (a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0)
-      )
+      ).map((m: any) => {
+        const vPlan = m.visual_lesson_plan || {}
+        return {
+          ...m,
+          visual_ideas: vPlan.diagram_idea || vPlan.visual_ideas || '',
+          diagram_type: vPlan.diagram_type || '',
+          what_to_make: vPlan.what_to_make || vPlan.diagram_description || '',
+          diagram_svg: vPlan.diagram_svg || '',
+          visual_lesson_plan: vPlan,
+        }
+      })
       const hasNotes = Boolean(
         (c.raw_chapter_notes && c.raw_chapter_notes.trim().length > 0) ||
         c.notes_source_filename
@@ -442,6 +457,10 @@ REQUIREMENTS FOR ULTRA-DETAILED TOPIC CAPSULES (4 to 8 capsules total, covering 
    ]
 9. "common_misconceptions": Array of 3-5 specific mistakes students frequently make in board exams on this topic.
 10. "ai_system_prompt_context": Socratic teaching cadence cues, real-life intuitive hook, guided questions, and chalkboard formatting directives.
+11. "visual_ideas": Comprehensive visual and image generation ideas explaining what visual schematics, apparatus setups, or interactive diagrams best reinforce this specific capsule.
+12. "diagram_type": The exact type of diagram to render on the chalkboard (e.g. "vector_svg_diagram", "mafs_kinematics_graph", "flowchart", "circuit_schematic", "ray_optics", "chemical_apparatus", "anatomical_structure").
+13. "what_to_make": Detailed blueprint of "what to make in this" diagram: list the exact components, geometric shapes, coordinate axes, labeled arrows, numerical values, and pedagogical highlights to draw.
+14. "diagram_svg": Complete, production-ready, clean vector SVG markup (<svg viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" xmlns="http://www.w3.org/2000/svg">...</svg>) with contrasting stroke colors, dark background compatibility, and clear text labels.
 
 OUTPUT FORMAT:
 Respond with ONLY a valid JSON object matching this schema (do NOT include conversational prose outside JSON):
@@ -468,7 +487,11 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
         }
       ],
       "common_misconceptions": ["string"],
-      "ai_system_prompt_context": "string"
+      "ai_system_prompt_context": "string",
+      "visual_ideas": "string (visual and image generation idea)",
+      "diagram_type": "string (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)",
+      "what_to_make": "string (detailed breakdown of what to make and draw in this diagram)",
+      "diagram_svg": "string (<svg viewBox='0 0 540 280' ...>...</svg>)"
     }
   ]
 }`
@@ -541,6 +564,18 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
               }
             )
 
+            const enhancedVisualPlan = {
+              ...visualPlan,
+              diagram_idea: cap.visual_ideas || (cap as any).diagram_idea || '',
+              diagram_type: cap.diagram_type || 'vector_svg_diagram',
+              what_to_make: cap.what_to_make || (cap as any).diagram_description || '',
+              diagram_svg: cap.diagram_svg || '',
+            }
+
+            const diagramDirective = cap.what_to_make || cap.visual_ideas
+              ? `\n\nBOARD DIAGRAM SPECIFICATION (WHAT TO MAKE ON BOARD):\n- Diagram Idea: ${cap.visual_ideas || (cap as any).diagram_idea || 'Scientific Vector Diagram'}\n- Diagram Type: ${cap.diagram_type || 'vector_svg_diagram'}\n- What to Make: ${cap.what_to_make || (cap as any).diagram_description || ''}\n`
+              : ''
+
             await adminSupabase.from('syllabus_modules').insert({
               curriculum_id: targetCurrId,
               order_index: cap.order_index,
@@ -554,8 +589,8 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
               chapter_notes: cap.chapter_notes || '',
               worked_examples: cap.worked_examples || [],
               common_misconceptions: cap.common_misconceptions || [],
-              ai_system_prompt_context: cap.ai_system_prompt_context || '',
-              visual_lesson_plan: visualPlan,
+              ai_system_prompt_context: `${cap.ai_system_prompt_context || ''}${diagramDirective}`,
+              visual_lesson_plan: enhancedVisualPlan,
               estimated_minutes: 15,
             })
           }
@@ -565,13 +600,24 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
           for (let idx = 0; idx < existingModules.length; idx++) {
             const exMod = existingModules[idx]
             const matchingCap = capsules[idx] || capsules[0]
+            const enhancedVisualPlan = {
+              ...(exMod.visual_lesson_plan || {}),
+              diagram_idea: matchingCap.visual_ideas || (matchingCap as any).diagram_idea || '',
+              diagram_type: matchingCap.diagram_type || 'vector_svg_diagram',
+              what_to_make: matchingCap.what_to_make || (matchingCap as any).diagram_description || '',
+              diagram_svg: matchingCap.diagram_svg || '',
+            }
+            const diagramDirective = matchingCap.what_to_make || matchingCap.visual_ideas
+              ? `\n\nBOARD DIAGRAM SPECIFICATION (WHAT TO MAKE ON BOARD):\n- Diagram Idea: ${matchingCap.visual_ideas || (matchingCap as any).diagram_idea || 'Scientific Vector Diagram'}\n- Diagram Type: ${matchingCap.diagram_type || 'vector_svg_diagram'}\n- What to Make: ${matchingCap.what_to_make || (matchingCap as any).diagram_description || ''}\n`
+              : ''
             await adminSupabase
               .from('syllabus_modules')
               .update({
                 chapter_notes: matchingCap.chapter_notes || '',
                 worked_examples: matchingCap.worked_examples || [],
                 common_misconceptions: matchingCap.common_misconceptions || [],
-                ai_system_prompt_context: matchingCap.ai_system_prompt_context || exMod.ai_system_prompt_context,
+                ai_system_prompt_context: `${matchingCap.ai_system_prompt_context || exMod.ai_system_prompt_context || ''}${diagramDirective}`,
+                visual_lesson_plan: enhancedVisualPlan,
               })
               .eq('id', exMod.id)
           }
@@ -623,6 +669,18 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
             }
           )
 
+          const enhancedVisualPlan = {
+            ...visualPlan,
+            diagram_idea: cap.visual_ideas || (cap as any).diagram_idea || '',
+            diagram_type: cap.diagram_type || 'vector_svg_diagram',
+            what_to_make: cap.what_to_make || (cap as any).diagram_description || '',
+            diagram_svg: cap.diagram_svg || '',
+          }
+
+          const diagramDirective = cap.what_to_make || cap.visual_ideas
+            ? `\n\nBOARD DIAGRAM SPECIFICATION (WHAT TO MAKE ON BOARD):\n- Diagram Idea: ${cap.visual_ideas || (cap as any).diagram_idea || 'Scientific Vector Diagram'}\n- Diagram Type: ${cap.diagram_type || 'vector_svg_diagram'}\n- What to Make: ${cap.what_to_make || (cap as any).diagram_description || ''}\n`
+            : ''
+
           await adminSupabase.from('syllabus_modules').insert({
             curriculum_id: targetCurrId,
             order_index: cap.order_index,
@@ -636,8 +694,8 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
             chapter_notes: cap.chapter_notes || '',
             worked_examples: cap.worked_examples || [],
             common_misconceptions: cap.common_misconceptions || [],
-            ai_system_prompt_context: cap.ai_system_prompt_context || '',
-            visual_lesson_plan: visualPlan,
+            ai_system_prompt_context: `${cap.ai_system_prompt_context || ''}${diagramDirective}`,
+            visual_lesson_plan: enhancedVisualPlan,
             estimated_minutes: 15,
           })
         }
@@ -723,6 +781,10 @@ REQUIREMENTS FOR ULTRA-DETAILED CURRICULUM DECOMPOSITION:
    - success_criteria: A verifiable test problem or numerical the student must solve to demonstrate board mastery
    - chapter_notes: Structured, comprehensive notes (800-1400 words) with definitions, formulas, and step-by-step proofs
    - ai_system_prompt_context: Detailed pedagogical context, everyday physical analogies, step-by-step whiteboard layout, common student pitfalls, and Socratic voice-teaching cues for the AI tutor.
+   - visual_ideas: Comprehensive visual and image generation ideas explaining what visual schematics, apparatus setups, or interactive diagrams best reinforce this capsule.
+   - diagram_type: The exact diagram type (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)
+   - what_to_make: Detailed blueprint of "what to make in this" diagram: list the exact components, geometric shapes, coordinate axes, labeled arrows, numerical values, and pedagogical highlights to draw.
+   - diagram_svg: Complete, production-ready, clean vector SVG markup (<svg viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" xmlns="http://www.w3.org/2000/svg">...</svg>)
 
 OUTPUT FORMAT:
 Respond with ONLY a valid JSON object matching this schema (do NOT include conversational prose outside the JSON):
@@ -744,7 +806,11 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
           "key_concepts": ["string"],
           "success_criteria": "string",
           "chapter_notes": "string",
-          "ai_system_prompt_context": "string"
+          "ai_system_prompt_context": "string",
+          "visual_ideas": "string (visual and image generation idea)",
+          "diagram_type": "string (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)",
+          "what_to_make": "string (detailed breakdown of what to make and draw in this diagram)",
+          "diagram_svg": "string (<svg viewBox='0 0 540 280' ...>...</svg>)"
         }
       ]
     }
@@ -916,6 +982,18 @@ async function commitCurriculumsToDatabase({
         }
       )
 
+      const enhancedVisualPlan = {
+        ...visualPlan,
+        diagram_idea: mod.visual_ideas || (mod as any).diagram_idea || '',
+        diagram_type: mod.diagram_type || 'vector_svg_diagram',
+        what_to_make: mod.what_to_make || (mod as any).diagram_description || '',
+        diagram_svg: mod.diagram_svg || '',
+      }
+
+      const diagramDirective = mod.what_to_make || mod.visual_ideas
+        ? `\n\nBOARD DIAGRAM SPECIFICATION (WHAT TO MAKE ON BOARD):\n- Diagram Idea: ${mod.visual_ideas || (mod as any).diagram_idea || 'Scientific Vector Diagram'}\n- Diagram Type: ${mod.diagram_type || 'vector_svg_diagram'}\n- What to Make: ${mod.what_to_make || (mod as any).diagram_description || ''}\n`
+        : ''
+
       const { error: modErr } = await adminSupabase.from('syllabus_modules').insert({
         curriculum_id: insertedCurr.id,
         order_index: modOrder,
@@ -929,8 +1007,8 @@ async function commitCurriculumsToDatabase({
         chapter_notes: mod.chapter_notes || '',
         worked_examples: mod.worked_examples || [],
         common_misconceptions: mod.common_misconceptions || [],
-        ai_system_prompt_context: mod.ai_system_prompt_context || '',
-        visual_lesson_plan: visualPlan,
+        ai_system_prompt_context: `${mod.ai_system_prompt_context || ''}${diagramDirective}`,
+        visual_lesson_plan: enhancedVisualPlan,
         estimated_minutes: 15,
       })
 

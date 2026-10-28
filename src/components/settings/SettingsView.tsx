@@ -332,7 +332,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
               Settings & Preferences
             </h1>
             <p className="text-xs text-[#78716C] hidden sm:block">
-              Select your real-time Simli Face ID avatar persona, voice, and syllabus track.
+              Select your real-time Face ID avatar persona, voice, and syllabus track.
             </p>
           </div>
         </div>
@@ -486,7 +486,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                       Academic Face ID Avatars
                     </h3>
                     <p className="text-xs text-[#78716C]">
-                      Select from our collection of verified real-time Simli Trinity avatars.
+                      Select from our collection of verified real-time academic avatars.
                     </p>
                   </div>
                   <button
@@ -580,7 +580,7 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                 <Shield className="w-4 h-4 text-[#78716C] mt-0.5 shrink-0" />
                 <div className="text-xs text-[#57534E] space-y-1">
                   <p className="font-semibold text-[#2D2A26]">
-                    Direct Simli Face ID WebRTC Pipeline
+                    Direct Face ID WebRTC Pipeline
                   </p>
                   <p className="leading-relaxed">
                     The classroom streams directly using the chosen Face ID over WebRTC. The avatar mouth movements

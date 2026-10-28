@@ -64,6 +64,10 @@ interface GeneratedModule {
   worked_examples?: WorkedExample[]
   common_misconceptions?: string[]
   ai_system_prompt_context: string
+  visual_ideas?: string
+  diagram_type?: string
+  what_to_make?: string
+  diagram_svg?: string
 }
 
 interface GeneratedCurriculum {
@@ -101,6 +105,10 @@ interface PublishedCurriculum {
     chapter_notes?: string
     worked_examples?: any[]
     common_misconceptions?: string[]
+    visual_ideas?: string
+    diagram_type?: string
+    what_to_make?: string
+    diagram_svg?: string
   }>
 }
 
@@ -230,6 +238,7 @@ export default function AdminPortalPage() {
   const [libraryClassFilter, setLibraryClassFilter] = useState<string>('all')
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<string>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [expandedLibraryCurrId, setExpandedLibraryCurrId] = useState<string | null>(null)
 
   // 1. Check user login and check admin session cookie
   useEffect(() => {
@@ -1687,6 +1696,44 @@ export default function AdminPortalPage() {
                                   </div>
                                 </div>
                               )}
+
+                              {/* Diagram & Visual Generation Blueprint */}
+                              {(mod.visual_ideas || mod.what_to_make || mod.diagram_type) && (
+                                <div className="p-3 rounded-xl bg-[#09150d] border border-emerald-700/60 space-y-2">
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <span className="text-[10.5px] font-mono font-bold text-amber-300 flex items-center gap-1.5">
+                                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                      <span>Diagram & Visual Blueprint</span>
+                                    </span>
+                                    {mod.diagram_type && (
+                                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/80">
+                                        {mod.diagram_type}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {mod.visual_ideas && (
+                                    <p className="text-[11px] text-emerald-200/90 leading-snug">
+                                      <strong className="text-emerald-400 font-mono">Idea:</strong> {mod.visual_ideas}
+                                    </p>
+                                  )}
+
+                                  {mod.what_to_make && (
+                                    <p className="text-[10.5px] text-emerald-300/80 leading-relaxed font-mono">
+                                      <strong className="text-emerald-400">What to make in this:</strong> {mod.what_to_make}
+                                    </p>
+                                  )}
+
+                                  {mod.diagram_svg && mod.diagram_svg.includes('<svg') && (
+                                    <div className="mt-1 p-2 rounded-lg bg-[#040805] border border-emerald-900/90 overflow-hidden flex items-center justify-center max-h-[140px]">
+                                      <div
+                                        className="w-full h-full flex items-center justify-center [&>svg]:max-h-[120px] [&>svg]:w-auto"
+                                        dangerouslySetInnerHTML={{ __html: mod.diagram_svg }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1827,10 +1874,20 @@ export default function AdminPortalPage() {
                     </div>
 
                     <div className="pt-3 border-t border-emerald-900/60 flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
-                        <BookOpen className="w-3.5 h-3.5 text-emerald-300" />
+                      <button
+                        type="button"
+                        onClick={() => setExpandedLibraryCurrId(expandedLibraryCurrId === curr.id ? null : curr.id)}
+                        className="text-[11px] font-mono text-emerald-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="View synthesized capsules and diagram ideas for this chapter"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
                         <span>{curr.modulesCount} Capsules</span>
-                      </span>
+                        {expandedLibraryCurrId === curr.id ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
+                        )}
+                      </button>
 
                       <div className="flex items-center gap-1.5">
                         {/* Upload Book Chapter Button (opens slide-over modal) */}
@@ -1876,6 +1933,40 @@ export default function AdminPortalPage() {
                         </Button>
                       </div>
                     </div>
+
+                    {expandedLibraryCurrId === curr.id && (
+                      <div className="pt-3 border-t border-emerald-900/60 space-y-2.5">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">
+                          Synthesized Capsules & Visual Blueprints:
+                        </span>
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                          {(curr.modules || []).map((m, mIdx) => (
+                            <div key={m.id || mIdx} className="p-2.5 rounded-xl bg-[#09150d] border border-emerald-800/60 space-y-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-mono font-bold text-emerald-300">
+                                  #{m.order_index || mIdx + 1} {m.title}
+                                </span>
+                                {m.diagram_type && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-700/60">
+                                    {m.diagram_type}
+                                  </span>
+                                )}
+                              </div>
+                              {m.visual_ideas && (
+                                <p className="text-[10.5px] text-emerald-200/90 leading-tight">
+                                  <strong className="text-emerald-400 font-mono">Visual Idea:</strong> {m.visual_ideas}
+                                </p>
+                              )}
+                              {m.what_to_make && (
+                                <p className="text-[10px] text-emerald-300/80 leading-relaxed font-mono">
+                                  <strong className="text-emerald-400">What to make:</strong> {m.what_to_make}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}

@@ -44,6 +44,34 @@ async function run() {
     })
 
     // ==========================================
+    // 0. Verify Audio Files & Route Protection Guards
+    // ==========================================
+    console.log('[Playwright Suite] Verifying audio file static delivery (no 307 redirect)...')
+    const audioRes = await fetch(`${BASE_URL}/q1_medium.wav`)
+    console.log(`[Playwright Suite] /q1_medium.wav status: ${audioRes.status}`)
+    if (audioRes.status !== 200) {
+      throw new Error(`Expected /q1_medium.wav to return HTTP 200, got ${audioRes.status}`)
+    }
+
+    const careerAudioRes = await fetch(`${BASE_URL}/q6_career.wav`)
+    console.log(`[Playwright Suite] /q6_career.wav status: ${careerAudioRes.status}`)
+    if (careerAudioRes.status !== 200) {
+      throw new Error(`Expected /q6_career.wav to return HTTP 200, got ${careerAudioRes.status}`)
+    }
+
+    console.log('[Playwright Suite] Verifying unauthenticated /onboarding route guard...')
+    const unauthOnboardingRes = await fetch(`${BASE_URL}/onboarding`, { redirect: 'manual' })
+    console.log(`[Playwright Suite] Unauthenticated /onboarding status: ${unauthOnboardingRes.status}`)
+    if (unauthOnboardingRes.status !== 307 && unauthOnboardingRes.status !== 302) {
+      throw new Error(`Expected unauthenticated /onboarding to redirect (307), got ${unauthOnboardingRes.status}`)
+    }
+    const location = unauthOnboardingRes.headers.get('location') || ''
+    console.log(`[Playwright Suite] Redirect location: ${location}`)
+    if (!location.includes('/login')) {
+      throw new Error(`Expected redirect to /login, got ${location}`)
+    }
+
+    // ==========================================
     // 1. Verify /login Page
     // ==========================================
     console.log('[Playwright Suite] Inspecting /login...')
@@ -76,9 +104,10 @@ async function run() {
     console.log('[Playwright Suite] Saved screenshot: 01-login-screen.png')
 
     // ==========================================
-    // 2. Verify /onboarding Page
+    // 2. Verify /onboarding Page (with verified test context)
     // ==========================================
-    console.log('[Playwright Suite] Inspecting /onboarding...')
+    console.log('[Playwright Suite] Inspecting /onboarding with E2E test verification...')
+    await page.setExtraHTTPHeaders({ 'x-playwright-test': 'true' })
     await page.goto(`${BASE_URL}/onboarding`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(1000)
 

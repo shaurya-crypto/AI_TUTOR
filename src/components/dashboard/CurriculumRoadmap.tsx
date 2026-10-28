@@ -75,7 +75,7 @@ export function CurriculumRoadmap({
           No Active Curriculum
         </h3>
         <p className="text-sm text-ink-secondary max-w-md mb-6 leading-relaxed">
-          Select or enroll in a syllabus to unlock your personalized real-time learning path with the AI Tutor.
+          Select or enroll in a syllabus to unlock your personalized real-time learning path with Anaxly.
         </p>
         <Button className="rounded-full bg-coral hover:bg-coral-dark text-white px-7 py-3 font-medium text-sm">
           Browse Learning Paths
@@ -302,7 +302,7 @@ export function CurriculumRoadmap({
               </Button>
               <Link href={`/dashboard/${userId}/class`} className="w-full sm:w-auto">
                 <Button className="w-full rounded-xl bg-coral hover:bg-coral-dark text-white font-medium px-6 gap-2">
-                  Launch Lesson with AI Tutor
+                  Launch Lesson with Anaxly
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>

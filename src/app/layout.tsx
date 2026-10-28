@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Mascot } from "@/components/mascot/Mascot";
 
-
 export const metadata: Metadata = {
   title: "AI Tutor - Personalized Learning",
   description: "Real-time, low-latency live AI tutor",
@@ -39,6 +38,40 @@ export default function RootLayout({
         <link
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
           rel="stylesheet"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                if (typeof window === 'undefined') return;
+                function isIgnorableError(err) {
+                  if (!err) return false;
+                  var msg = String(err.message || err.reason || err || '');
+                  var name = String(err.name || (err.constructor && err.constructor.name) || '');
+                  return (
+                    msg.indexOf('Client initiated disconnect') !== -1 ||
+                    msg.indexOf('Called Disconnect Before A Connecction succeeded') !== -1 ||
+                    msg.indexOf('ConnectionError') !== -1 ||
+                    name === 'ConnectionError'
+                  );
+                }
+                window.addEventListener('unhandledrejection', function(event) {
+                  if (isIgnorableError(event.reason)) {
+                    event.preventDefault();
+                    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+                    if (event.stopPropagation) event.stopPropagation();
+                  }
+                }, true);
+                window.addEventListener('error', function(event) {
+                  if (isIgnorableError(event.error)) {
+                    event.preventDefault();
+                    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+                    if (event.stopPropagation) event.stopPropagation();
+                  }
+                }, true);
+              })();
+            `,
+          }}
         />
       </head>
       <body

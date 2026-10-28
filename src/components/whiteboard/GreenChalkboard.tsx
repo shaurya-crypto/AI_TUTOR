@@ -72,6 +72,7 @@ export interface GreenChalkboardRef {
   getActiveQuestion?: () => { text: string; y: number; height: number; pageIndex: number } | null
   getNextY?: () => number
   getCurrentPageIndex?: () => number
+  restoreBoardState?: (pages: WhiteboardPage[], files?: Record<string, any>) => void
 }
 
 interface WhiteboardPage {
@@ -284,7 +285,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       return (excalidrawAPI?.getSceneElements() || []) as any[]
     }
 
-    // Inspect board elements and history to guarantee zero duplicate writes
+    // Inspect board elements to guarantee zero duplicate writes on current page
     const isAlreadyOnBoard = (text: string): boolean => {
       if (!text || !text.trim()) return false
       const clean = text
@@ -292,9 +293,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         .replace(/^(note|step|breakdown|intuition|definition|q\d?|verdict|ans)[:\s\-]*/i, '')
         .replace(/[^a-z0-9]/g, '')
         .trim()
-      if (clean.length < 8) return false
-
-      if (executedTextHistoryRef.current.has(clean)) return true
+      if (clean.length < 5) return false
 
       const currentEls = getCurrentElements()
       for (const el of currentEls) {
@@ -304,10 +303,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             .replace(/^(note|step|breakdown|intuition|definition|q\d?|verdict|ans)[:\s\-]*/i, '')
             .replace(/[^a-z0-9]/g, '')
             .trim()
-          if (
-            elClean === clean ||
-            (elClean.length > 20 && clean.length > 20 && (elClean.includes(clean) || clean.includes(elClean)))
-          ) {
+          if (elClean === clean) {
             return true
           }
         }
@@ -998,9 +994,8 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             savedPages.some((p) => Array.isArray(p.elements) && p.elements.length > 0)
 
           if (hasValidElements && savedPages) {
-            // Prune any saved pages beyond reached concepts so unreached concepts are not pre-rendered
-            const reachedSavedPages = savedPages.slice(0, reachedPagesCount)
-            reachedSavedPages.forEach((p, idx) => {
+            // Restore ALL saved pages across reload (never slice or truncate user notes)
+            savedPages.forEach((p, idx) => {
               if (!p.elements || p.elements.length === 0) {
                 const pageConcept = keyConcepts && keyConcepts[idx] ? keyConcepts[idx] : undefined
                 const skeleton = createHeaderSkeleton(idx + 1, pageConcept)
@@ -1009,10 +1004,10 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
                 p.roughY = 140
               }
             })
-            pagesRef.current = reachedSavedPages
-            setPages(reachedSavedPages)
-            const targetPage = reachedSavedPages[initialTargetIdx] || reachedSavedPages[0]
-            currentPageIndexRef.current = initialTargetIdx < reachedSavedPages.length ? initialTargetIdx : 0
+            pagesRef.current = savedPages
+            setPages(savedPages)
+            const targetPage = savedPages[initialTargetIdx] || savedPages[0]
+            currentPageIndexRef.current = initialTargetIdx < savedPages.length ? initialTargetIdx : 0
             setCurrentPageIndex(currentPageIndexRef.current)
             boardElementsRef.current = targetPage.elements || []
             nextYRef.current = targetPage.nextY || 140
@@ -1120,9 +1115,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     }
 
     // Draw Section Title with Botanical Accent Underline (rendered once per page)
-    const drawTitle = async (title: string, color?: string) => {
-      if (!excalidrawAPI || !title?.trim()) return
-      const clean = title
+    const drawTitle = async (title: any, color?: string) => {
+      if (!excalidrawAPI) return
+      const raw = typeof title === 'string' ? title : (title?.content || title?.text || title?.title || (title ? JSON.stringify(title) : ''))
+      if (!raw?.trim()) return
+      const clean = raw
         .replace(/^focus:\s*/i, '')
         .replace(/^concept\s*\d*:\s*/i, '')
         .replace(/[\(\)\[\]\{\}\"]/g, '')
@@ -1197,13 +1194,13 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     }
 
     // Draw Note with botanical indicator
-    const drawNote = async (noteText: string, color?: string) => {
-      if (!excalidrawAPI || !noteText?.trim()) return
-      const clean = noteText.trim()
+    const drawNote = async (noteText: any, color?: string) => {
+      if (!excalidrawAPI) return
+      const raw = typeof noteText === 'string' ? noteText : (noteText?.content || noteText?.text || noteText?.note || (noteText ? JSON.stringify(noteText) : ''))
+      if (!raw?.trim()) return
+      const clean = raw.trim()
       if (checkIsRedundant(clean)) return
       if (shouldSkipDuplicate('draw_note', clean)) return
-      if (executedTextHistoryRef.current.has(clean.toLowerCase())) return
-      executedTextHistoryRef.current.add(clean.toLowerCase())
 
       const lines = wrapText(clean, 64)
       const lineHeight = 22
@@ -1252,9 +1249,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     }
 
     // Draw Step / Derivation Line
-    const drawStep = async (stepText: string, color?: string) => {
-      if (!excalidrawAPI || !stepText?.trim()) return
-      const clean = stepText.trim()
+    const drawStep = async (stepText: any, color?: string) => {
+      if (!excalidrawAPI) return
+      const raw = typeof stepText === 'string' ? stepText : (stepText?.content || stepText?.text || stepText?.step || (stepText ? JSON.stringify(stepText) : ''))
+      if (!raw?.trim()) return
+      const clean = raw.trim()
       if (checkIsRedundant(clean)) return
       if (shouldSkipDuplicate('draw_step', clean)) return
       const lines = wrapText(clean, 60)
@@ -1293,9 +1292,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     }
 
     // Draw Highlight Box / Governed Law / Formula in Coral Accent
-    const drawHighlightBox = async (text: string, color?: string) => {
-      if (!excalidrawAPI || !text?.trim()) return
-      const clean = text.trim()
+    const drawHighlightBox = async (text: any, color?: string) => {
+      if (!excalidrawAPI) return
+      const raw = typeof text === 'string' ? text : (text?.content || text?.text || text?.box || (text ? JSON.stringify(text) : ''))
+      if (!raw?.trim()) return
+      const clean = raw.trim()
       if (checkIsRedundant(clean)) return
       if (shouldSkipDuplicate('draw_highlight_box', clean)) return
       const lines = wrapText(clean, 60)
@@ -1350,9 +1351,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     }
 
     // Draw Exam / Checkpoint Question Callout (Full Width, Crisp Layout)
-    const drawQuestion = async (questionText: string, color?: string) => {
-      if (!excalidrawAPI || !questionText?.trim()) return
-      const clean = questionText.trim()
+    const drawQuestion = async (questionText: any, color?: string) => {
+      if (!excalidrawAPI) return
+      const raw = typeof questionText === 'string' ? questionText : (questionText?.content || questionText?.text || questionText?.question || (questionText ? JSON.stringify(questionText) : ''))
+      if (!raw?.trim()) return
+      const clean = raw.trim()
       if (shouldSkipDuplicate('draw_question', clean)) return
       const lines = wrapText(clean, 64)
       const lineHeight = 22
@@ -2342,9 +2345,11 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
     }
 
     // Draw Working Calculations in unified board flow
-    const drawRoughWork = async (workText: string, color?: string) => {
-      if (!excalidrawAPI || !workText?.trim()) return
-      const clean = workText.trim()
+    const drawRoughWork = async (workText: any, color?: string) => {
+      if (!excalidrawAPI) return
+      const raw = typeof workText === 'string' ? workText : (workText?.content || workText?.text || workText?.work || (workText ? JSON.stringify(workText) : ''))
+      if (!raw?.trim()) return
+      const clean = raw.trim()
       await checkAutoPageOverflow(46)
       try {
         const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw')
@@ -3416,7 +3421,16 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
               const [titleText, color] = cleanPayload.includes('|') ? cleanPayload.split('|').map((s) => s.trim()) : [cleanPayload, undefined]
               await drawTitle(titleText, color)
             }
-          } else if (tagType === 'BOARD_NOTE' || tagType === 'NOTE') {
+          } else if (
+            tagType === 'BOARD_NOTE' ||
+            tagType === 'NOTE' ||
+            tagType === 'WRITE_BOARD' ||
+            tagType === 'WRITE_CHALKBOARD' ||
+            tagType === 'CHALKBOARD' ||
+            tagType === 'BOARD' ||
+            tagType === 'DRAW_NOTE' ||
+            tagType === 'TEXT'
+          ) {
             if (payload && !checkIsRedundant(payload)) {
               const [noteText, color] = payload.includes('|') ? payload.split('|').map((s) => s.trim()) : [payload, undefined]
               await drawNote(noteText, color)
@@ -3584,6 +3598,48 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       }
     }
 
+    const restoreBoardState = (savedPages: WhiteboardPage[], files?: Record<string, any>) => {
+      if (!savedPages || !Array.isArray(savedPages) || savedPages.length === 0) return
+      try {
+        if (files && excalidrawAPI?.addFiles) {
+          const filesArr = Object.values(files) as any[]
+          if (filesArr.length > 0) {
+            excalidrawAPI.addFiles(filesArr)
+          }
+        }
+        pagesRef.current = savedPages
+        setPages(savedPages)
+        const targetPage = savedPages[currentPageIndexRef.current] || savedPages[0]
+        boardElementsRef.current = targetPage.elements || []
+        nextYRef.current = targetPage.nextY || 140
+        roughYRef.current = targetPage.roughY || 140
+
+        if (excalidrawAPI) {
+          excalidrawAPI.updateScene({
+            elements: targetPage.elements || [],
+            appState: {
+              viewBackgroundColor: CANVAS_BG,
+              currentItemStrokeColor: INK_PRIMARY,
+              currentItemFontFamily: 1,
+              currentItemRoughness: 0,
+              zoom: { value: 0.7 },
+              scrollX: 0,
+              scrollY: 0,
+            },
+          })
+        }
+
+        if (storageKey && typeof window !== 'undefined') {
+          localStorage.setItem(storageKey, JSON.stringify(savedPages))
+          if (files) {
+            localStorage.setItem(`${storageKey}_files`, JSON.stringify(files))
+          }
+        }
+      } catch (err) {
+        console.warn('[GreenChalkboard] Error restoring board state:', err)
+      }
+    }
+
     // Expose imperative API
     useImperativeHandle(ref, () => ({
       drawText,
@@ -3618,6 +3674,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       getActiveQuestion: () => activeQuestionRef.current,
       getNextY: () => nextYRef.current,
       getCurrentPageIndex: () => currentPageIndexRef.current,
+      restoreBoardState,
     }))
 
     return (

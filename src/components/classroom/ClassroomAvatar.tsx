@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ConnectionState, TranscriptItem } from '@/types/liveSession'
@@ -30,24 +30,17 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
   userVolume = 0,
   isMuted,
   latestTranscript,
-  latestVideoFrame,
-  videoMimeType = 'image/jpeg',
-  onCustomAvatarChange,
   onSimliControllerReady,
   onSimliActiveChange,
-  preferredProvider = 'simli',
 }) => {
   const params = useParams()
   const studentId = (params?.id as string) || ''
 
   // Selected Face ID: default to 80459b57-2d66-4ca7-8682-59e1c649bc53
   const [selectedFaceId, setSelectedFaceId] = useState<string>('80459b57-2d66-4ca7-8682-59e1c649bc53')
-  const [activeProvider, setActiveProvider] = useState<AvatarProvider>(preferredProvider)
   const [simliStatus, setSimliStatus] = useState<SimliStatus>('idle')
-  const [fallbackReason, setFallbackReason] = useState<string | null>(null)
   const [isMounted, setIsMounted] = useState(false)
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const simliVideoRef = useRef<HTMLVideoElement | null>(null)
   const simliAudioRef = useRef<HTMLAudioElement | null>(null)
   const simliControllerRef = useRef<SimliAvatarController | null>(null)
@@ -57,11 +50,7 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
   const isConnecting = state === 'CONNECTING'
   const isCallActive = state !== 'IDLE' && state !== 'DISCONNECTED' && state !== 'ERROR'
   const isUserTalking = !isSpeaking && !isMuted && userVolume > 0.04
-  const hasLiveGoogleVideo = Boolean(latestVideoFrame)
-  const isSimliActive = activeProvider === 'simli' && simliStatus === 'connected'
-
-  const onCustomAvatarChangeRef = useRef(onCustomAvatarChange)
-  onCustomAvatarChangeRef.current = onCustomAvatarChange
+  const isSimliActive = simliStatus === 'connected'
 
   const onSimliActiveChangeRef = useRef(onSimliActiveChange)
   onSimliActiveChangeRef.current = onSimliActiveChange
@@ -78,12 +67,6 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
       onSimliActiveChangeRef.current?.(isSimliActive)
     }
   }, [isSimliActive])
-
-  useEffect(() => {
-    return () => {
-      onSimliActiveChangeRef.current?.(false)
-    }
-  }, [])
 
   // Restore saved faceId from localStorage on mount and sync on storage events
   useEffect(() => {
@@ -109,102 +92,50 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
     return () => window.removeEventListener('storage', handleStorageUpdate)
   }, [])
 
-  // Initialize Simli controller with auto-fallback to Google Avatar (strictly once on mount)
+  // Initialize controller once
   useEffect(() => {
-    const controller = new SimliAvatarController((status, err) => {
+    const controller = new SimliAvatarController((status) => {
       setSimliStatus(status)
-      if (status === 'fallback' || status === 'error') {
-        console.warn('[ClassroomAvatar] Simli fallback triggered, switching to Google Avatar:', err)
-        setFallbackReason(err || 'Connection interrupted')
-        setActiveProvider('google')
-      }
     })
 
     simliControllerRef.current = controller
     onSimliControllerReadyRef.current?.(controller)
 
-    // Intercept benign LiveKit disconnect cancellations and Simli transport shutdown noise
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reason = event.reason
-      const isConnectionCancellation =
-        (reason?.name === 'ConnectionError' ||
-          reason?.constructor?.name === 'ConnectionError' ||
-          String(reason).includes('ConnectionError')) &&
-        (String(reason?.message || reason).includes('Client initiated disconnect') ||
-          String(reason?.message || reason).includes('cancelled'))
-
-      if (isConnectionCancellation) {
-        event.preventDefault()
-      }
-    }
-
-    window.addEventListener('unhandledrejection', handleUnhandledRejection)
-
     return () => {
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
       controller.stop()
       simliControllerRef.current = null
       onSimliControllerReadyRef.current?.(null)
+      onSimliActiveChangeRef.current?.(false)
     }
   }, [])
 
-  // Start or stop Simli based on call active state and preferred provider
+  // Manage Simli WebRTC connection lifecycle based on classroom call state
   useEffect(() => {
+    if (!isMounted) return
+
+    if (!isCallActive) {
+      simliControllerRef.current?.stop()
+      return
+    }
+
+    if (!simliVideoRef.current || !simliAudioRef.current) return
+
     const controller = simliControllerRef.current
     if (!controller) return
 
-    if (isCallActive && activeProvider === 'simli') {
-      if (simliVideoRef.current && simliAudioRef.current && simliStatus === 'idle') {
-        const faceIdToStart = selectedFaceId || '80459b57-2d66-4ca7-8682-59e1c649bc53'
-        controller
-          .start({
-            videoElement: simliVideoRef.current,
-            audioElement: simliAudioRef.current,
-            faceId: faceIdToStart,
-          })
-          .then((success) => {
-            if (!success) {
-              setActiveProvider('google')
-            }
-          })
-      }
-    } else if (!isCallActive && simliStatus !== 'idle') {
-      controller.stop()
-    }
-  }, [isCallActive, activeProvider, simliStatus, selectedFaceId])
-
-  // Draw incoming native 24 FPS video frames streamed from Google Gemini 3.8 Live Avatar (Fallback)
-  useEffect(() => {
-    if (activeProvider !== 'google' && isSimliActive) return
-    if (!latestVideoFrame || !canvasRef.current) return
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const img = new Image()
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-    }
-    img.src = `data:${videoMimeType || 'image/jpeg'};base64,${latestVideoFrame}`
-  }, [latestVideoFrame, videoMimeType, activeProvider, isSimliActive])
-
-  // Toggle between Simli (Primary) and Google Avatar (Fallback)
-  const toggleProvider = () => {
-    if (activeProvider === 'simli') {
-      simliControllerRef.current?.stop()
-      setActiveProvider('google')
-    } else {
-      setFallbackReason(null)
-      setActiveProvider('simli')
-    }
-  }
+    controller.start({
+      videoElement: simliVideoRef.current,
+      audioElement: simliAudioRef.current,
+      faceId: selectedFaceId,
+    })
+  }, [isMounted, isCallActive, selectedFaceId])
 
   // Audio-reactive visual dynamics for ambient stage
   const reactiveScale = isSpeaking ? 1 + teacherVolume * 0.04 : isUserTalking ? 1 + userVolume * 0.03 : 1
   const ringScale1 = isSpeaking ? 1 + teacherVolume * 0.35 : isUserTalking ? 1 + userVolume * 0.25 : 1.02
   const ringScale2 = isSpeaking ? 1 + teacherVolume * 0.65 : isUserTalking ? 1 + userVolume * 0.45 : 1.04
 
-  // Subtle natural breathing motion (guarded by isMounted to guarantee identical SSR & client hydration output)
+  // Subtle natural breathing motion
   const breathingOffset = isMounted ? Math.sin(Date.now() / 1400) * 1.2 : 0
 
   // Filter out internal directives from caption display
@@ -233,11 +164,7 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
           />
           <span className="text-[11px] font-mono uppercase tracking-wider text-ink-secondary">
             {isSpeaking
-              ? isSimliActive
-                ? 'Simli Live Avatar Speaking'
-                : hasLiveGoogleVideo
-                ? 'Gemini Live Avatar Speaking'
-                : 'AI Teacher Speaking'
+              ? 'Anaxly Speaking'
               : isUserTalking
               ? 'Hearing Student'
               : isListening
@@ -250,33 +177,12 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
           </span>
         </div>
 
-        {/* Avatar Provider Mode Badge & Settings Link */}
+        {/* Settings Link */}
         <div className="flex items-center gap-1.5">
-          <button
-            onClick={toggleProvider}
-            className="text-[10px] font-mono px-2 py-0.5 rounded-md border flex items-center gap-1 transition-colors cursor-pointer bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100"
-            title={
-              activeProvider === 'simli'
-                ? 'Simli Live is Primary. Click to test Google Avatar fallback.'
-                : 'Google Live Avatar is active (Fallback). Click to switch to Simli.'
-            }
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                activeProvider === 'simli'
-                  ? simliStatus === 'connected'
-                    ? 'bg-emerald-500'
-                    : 'bg-amber-500 animate-pulse'
-                  : 'bg-blue-500'
-              }`}
-            />
-            <span>{activeProvider === 'simli' ? 'Simli (Primary)' : 'Google (Fallback)'}</span>
-          </button>
-
           {studentId && (
             <Link
               href={`/dashboard/${studentId}/settings?tab=avatars`}
-              className="text-[10px] text-ink-muted hover:text-ink-primary flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-stone-100 transition-colors cursor-pointer"
+              className="text-[10px] text-ink-muted hover:text-ink-primary flex items-center gap-1 px-2.5 py-1 rounded-md hover:bg-stone-100 border border-stone-200/80 transition-colors cursor-pointer"
               title="Configure Classroom Avatars & Settings"
             >
               <Settings className="w-3.5 h-3.5" />
@@ -322,40 +228,31 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
             transform: `scale(${reactiveScale}) translateY(${breathingOffset}px)`,
           }}
         >
-          {/* Primary: Video element for Simli Live WebRTC Avatar (No display:none to allow requestVideoFrameCallback) */}
+          {/* Primary: Video element for Simli Live WebRTC Avatar */}
           <video
             ref={simliVideoRef}
             autoPlay
             playsInline
-            className={`absolute inset-0 w-full h-full object-cover rounded-full bg-stone-900 transition-opacity duration-200 ${
+            muted
+            className={`absolute inset-0 w-full h-full object-cover rounded-full bg-stone-900 transition-opacity duration-300 ${
               isSimliActive ? 'opacity-100 z-10' : 'opacity-0 pointer-events-none z-0'
             }`}
           />
           {/* Audio element bound to Simli WebRTC stream */}
           <audio ref={simliAudioRef} autoPlay />
 
-          {/* Fallback: Canvas for native Gemini 3.8 Live Avatar video stream */}
-          <canvas
-            ref={canvasRef}
-            width={480}
-            height={480}
-            className={`absolute inset-0 w-full h-full object-cover rounded-full bg-stone-900 transition-opacity duration-200 ${
-              !isSimliActive && hasLiveGoogleVideo ? 'opacity-100 z-10' : 'opacity-0 pointer-events-none z-0'
-            }`}
-          />
-
-          {/* Real Face ID avatar image when live video stream is waiting to connect or in standby */}
+          {/* Real Face ID avatar image when stream is in standby / connecting */}
           <div
-            className={`absolute inset-0 w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-stone-100 transition-opacity duration-200 ${
-              !isSimliActive && !hasLiveGoogleVideo ? 'opacity-100 z-5' : 'opacity-0 pointer-events-none z-0'
+            className={`absolute inset-0 w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-stone-100 transition-opacity duration-300 ${
+              !isSimliActive ? 'opacity-100 z-5' : 'opacity-0 pointer-events-none z-0'
             }`}
           >
             <img
               src={avatarImageUrl}
-              alt="Real Face ID Avatar Portrait"
+              alt="Avatar Portrait"
               className="w-full h-full object-cover rounded-full"
               onError={(e) => {
-                // Fallback to Simli app CDN directly if local asset is loading
+                // Fallback to CDN portrait if local asset is loading
                 (e.currentTarget as HTMLImageElement).src = `https://app.simli.com/characters/trinity2/${selectedFaceId}.jpg`
               }}
             />
@@ -363,10 +260,7 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
             {/* Natural studio lighting vignette */}
             <div className="absolute inset-0 rounded-full pointer-events-none bg-gradient-to-t from-black/35 via-transparent to-white/10" />
 
-            {/* Subtle status badge */}
-            <div className="absolute bottom-2.5 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-xs text-[9px] font-mono text-white/90 uppercase tracking-widest border border-white/20">
-              {activeProvider === 'simli' ? 'Simli Scholar' : 'Google Scholar'}
-            </div>
+            {/* ZERO TEXT ON AVATAR: As per user instruction, no badges or labels are overlaid on the portrait */}
           </div>
         </div>
       </div>
@@ -381,17 +275,13 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
           ) : isSpeaking ? (
             <div className="flex items-center gap-1.5 text-stone-400 text-xs font-mono">
               <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-spin" />
-              <span>Synthesizing voice and speech visemes...</span>
+              <span>Anaxly speaking...</span>
             </div>
           ) : isUserTalking ? (
             <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span>Listening to student answer...</span>
             </div>
-          ) : fallbackReason ? (
-            <p className="text-[10px] text-amber-700 font-mono">
-              Using Google Live Fallback ({fallbackReason})
-            </p>
           ) : null}
         </div>
       </div>

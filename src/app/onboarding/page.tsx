@@ -53,7 +53,7 @@ const QUESTIONS: QuestionConfig[] = [
     subtitle: 'Language of talking & spoken conversation during class',
     sobiExpression: 'attentive-left',
     type: 'select',
-    audioFile: '/audio/onboarding/q0_language.mp3',
+    audioFile: '/q0_language.wav',
     options: [
       { value: 'English', label: 'English (Academic & Conversational English)' },
       { value: 'Hinglish', label: 'Hinglish (Conversational English + Hindi)' },
@@ -69,7 +69,7 @@ const QUESTIONS: QuestionConfig[] = [
     subtitle: 'Language for whiteboard chalkboard notes and formal teaching',
     sobiExpression: 'curious-left',
     type: 'select',
-    audioFile: '/audio/onboarding/q0_medium.mp3',
+    audioFile: '/q1_medium.wav',
     options: [
       { value: 'English', label: 'English Medium (Notes & whiteboard in English)' },
       { value: 'Hindi', label: 'Hindi Medium (हिंदी माध्यम — Notes & whiteboard in Hindi)' },
@@ -84,7 +84,7 @@ const QUESTIONS: QuestionConfig[] = [
     sobiExpression: 'joyful-wide',
     type: 'text',
     placeholder: 'Type your name...',
-    audioFile: '/audio/onboarding/q1_name.mp3',
+    audioFile: '/q2_name.wav',
   },
   {
     id: 'age',
@@ -93,7 +93,7 @@ const QUESTIONS: QuestionConfig[] = [
     sobiExpression: 'curious-left',
     type: 'number',
     placeholder: 'Type your age (e.g. 15)...',
-    audioFile: '/audio/onboarding/q2_age.mp3',
+    audioFile: '/q3_age.wav',
   },
   {
     id: 'classLevel',
@@ -101,7 +101,7 @@ const QUESTIONS: QuestionConfig[] = [
     subtitle: 'Loads your authentic board syllabus from Classes 6 to 12',
     sobiExpression: 'small-attentive',
     type: 'select',
-    audioFile: '/audio/onboarding/q3_grade.mp3',
+    audioFile: '/q4_class.wav',
     options: [
       { value: 'Class 6', label: '6th grade' },
       { value: 'Class 7', label: '7th grade' },
@@ -118,7 +118,7 @@ const QUESTIONS: QuestionConfig[] = [
     subtitle: 'Selects authentic curriculum format, definitions, and grading rubrics',
     sobiExpression: 'attentive-left',
     type: 'select',
-    audioFile: '/audio/onboarding/q4_board.mp3',
+    audioFile: '/q5_board.wav',
     options: [
       { value: 'CBSE', label: 'CBSE (NCERT & Competency-Based Application)' },
       { value: 'ICSE', label: 'ICSE / ISC (Concise Formulations & Deep Precision)' },
@@ -132,7 +132,7 @@ const QUESTIONS: QuestionConfig[] = [
     sobiExpression: 'upward-side-glance',
     type: 'text',
     placeholder: 'e.g. Aerospace Engineer, Doctor, AI Researcher, Astrophysicist...',
-    audioFile: '/audio/onboarding/q5_aspiration.mp3',
+    audioFile: '/q6_career.wav',
   },
   {
     id: 'learningPace',
@@ -140,7 +140,7 @@ const QUESTIONS: QuestionConfig[] = [
     subtitle: 'Determines pause frequencies and question checkpoints',
     sobiExpression: 'curious-left',
     type: 'select',
-    audioFile: '/audio/onboarding/q6_pacing.mp3',
+    audioFile: '/q7_pace.wav',
     options: [
       { value: 'fast_and_curious', label: 'Fast & curious — give me challenging problems quickly' },
       { value: 'steady_and_balanced', label: 'Steady & balanced — balance concepts with step-by-step examples' },
@@ -153,7 +153,7 @@ const QUESTIONS: QuestionConfig[] = [
     subtitle: 'Highlights your strongest academic foundation',
     sobiExpression: 'joyful-wide',
     type: 'select',
-    audioFile: '/audio/onboarding/q7_strong_subject.mp3',
+    audioFile: '/q8_favorite.wav',
     options: [
       { value: 'Physics', label: 'Physics — motion, forces, electricity, and the universe' },
       { value: 'Chemistry', label: 'Chemistry — elements, reactions, and molecular structures' },
@@ -167,7 +167,7 @@ const QUESTIONS: QuestionConfig[] = [
     subtitle: 'Sobi provides extra patience and visual co-solving here',
     sobiExpression: 'gentle-downward-gaze',
     type: 'select',
-    audioFile: '/audio/onboarding/q8_weak_area.mp3',
+    audioFile: '/q9_weakness.wav',
     options: [
       { value: 'formula_derivations', label: 'Deriving complex formulas and mathematical proofs' },
       { value: 'numerical_application', label: 'Solving numerical problems under time pressure' },
@@ -177,26 +177,12 @@ const QUESTIONS: QuestionConfig[] = [
     ],
   },
   {
-    id: 'learningStyle',
-    title: 'How would you like your AI tutor to teach you?',
-    subtitle: 'Shapes the chalkboard style and dialogue structure',
-    sobiExpression: 'attentive-left',
-    type: 'select',
-    audioFile: '/audio/onboarding/q9_learning_style.mp3',
-    options: [
-      { value: 'socratic', label: 'Socratic Guidance — prompt me with questions so I deduce answers' },
-      { value: 'visual', label: 'Visual & Intuitive — explain with live dynamic diagrams and sketches' },
-      { value: 'board_numerical', label: 'Step-by-Step Derivations — write out clean chalk equations on board' },
-      { value: 'storytelling', label: 'Real-Life Analogies — ground concepts in daily physical objects' },
-    ],
-  },
-  {
     id: 'preferredVoice',
     title: "Pick your personal AI tutor's voice persona",
     subtitle: 'Select the voice tone that best motivates your daily study sessions',
     sobiExpression: 'attentive-left',
     type: 'select',
-    audioFile: '/audio/onboarding/q10_voice.mp3',
+    audioFile: '/q10_voice.wav',
     options: [
       { value: 'Leda', label: 'Leda — Warm, youthful, natural Indian inflection (Recommended)' },
       { value: 'Puck', label: 'Puck — Upbeat, lively, energetic Indian inflection (Recommended)' },

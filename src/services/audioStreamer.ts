@@ -166,8 +166,8 @@ export class AudioStreamer {
       }
 
       // Calibrated voice detection threshold for normal conversational speaking voice
-      const BARGE_IN_THRESHOLD = Math.max(0.026, this.noiseFloor * 2.0);
-      const requiredFrames = this.workletNode ? 3 : 2;
+      const BARGE_IN_THRESHOLD = Math.max(0.088, this.noiseFloor * 3.8);
+      const requiredFrames = this.workletNode ? 6 : 5;
 
       if (rms >= BARGE_IN_THRESHOLD) {
         this.consecutiveBargeInFrames++;

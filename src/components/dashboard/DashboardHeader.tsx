@@ -101,10 +101,10 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
               </div>
               <div className="flex flex-col">
                 <span className="font-serif text-xl tracking-tight text-ink-primary font-medium leading-none">
-                  AI Tutor
+                  Anaxly
                 </span>
                 <span className="text-[10px] tracking-wider uppercase text-ink-muted mt-0.5 font-medium">
-                  Botanical
+                  Classical Intelligence
                 </span>
               </div>
             </Link>
@@ -202,7 +202,7 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
               <Settings className="w-5 h-5" />
             </div>
             <DialogTitle className="font-serif text-2xl tracking-tight text-ink-primary">
-              AI Tutor Intelligence Settings
+              Anaxly Intelligence Settings
             </DialogTitle>
             <DialogDescription className="text-sm text-ink-secondary">
               Tune how your AI teacher reasons, structures lessons, and converses in real time.

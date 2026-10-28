@@ -78,7 +78,7 @@ export class GeminiLiveClient {
     this.avatarConfig = options?.avatarConfig;
     this.systemInstruction =
       options?.systemInstruction ||
-      "You are an inspiring, patient Senior Academic Tutor conducting an engaging 1-on-1 spoken tutoring session with a live chalkboard. Explain concepts simply using tangible real-world intuition. Explain first, read definitions, examples, and flowcharts aloud word-for-word, and write notes to the chalkboard step-by-step rather than all at once. Always end turns with a clear checkpoint question.";
+      "You are an inspiring, patient Senior Academic Tutor conducting an engaging 1-on-1 spoken tutoring session with a live chalkboard. MANDATORY: On EVERY turn, you MUST call write_chalkboard (or write_board) to write on the board. Teach step-by-step in small bites of 2-3 sentences. Never lecture continuously in one shot. Pause after every step to ask basic questions and check understanding. Never advance to the next concept without confirming the student's answer and understanding.";
     this.ai = new GoogleGenAI({
       apiKey: this.apiKey,
       httpOptions: { apiVersion: "v1alpha" },
@@ -88,8 +88,8 @@ export class GeminiLiveClient {
   private extractAndExecuteEmbeddedToolCalls(rawText: string): string {
     if (!rawText) return rawText;
 
-    // 1. Match pseudo-code: write_chalkboard(action="...", content="...", color="...")
-    const chalkboardRegex = /write_chalkboard\s*\(\s*(?:action\s*=\s*)?["']?([a-zA-Z0-9_\-]+)["']?\s*(?:,\s*(?:content\s*=\s*)?(?:["']([^"']*)["']|([^"',\)]*)))?(?:\s*,\s*(?:color\s*=\s*)?["']?([a-zA-Z0-9_#]+)["']?)?\s*\)/gi;
+    // 1. Match pseudo-code: write_chalkboard(...) or write_board(action="...", content="...", color="...")
+    const chalkboardRegex = /(?:write_chalkboard|write_board|draw_board|chalkboard)\s*\(\s*(?:action\s*=\s*)?["']?([a-zA-Z0-9_\-]+)["']?\s*(?:,\s*(?:content\s*=\s*)?(?:["']([^"']*)["']|([^"',\)]*)))?(?:\s*,\s*(?:color\s*=\s*)?["']?([a-zA-Z0-9_#]+)["']?)?\s*\)/gi;
     let m;
     while ((m = chalkboardRegex.exec(rawText)) !== null) {
       const action = m[1]?.trim() || "";
@@ -97,6 +97,32 @@ export class GeminiLiveClient {
       const color = m[4]?.trim() || undefined;
       if (action) {
         this.handleSingleToolCall("write_chalkboard", { action, content, color });
+      }
+    }
+
+    // 1b. Match bracket directives: [NOTE: ...], [STEP: ...], [DEFINITION: ...], [HIGHLIGHT: ...], etc.
+    const bracketRegex = /\[(NOTE|INTUITION|INSIGHT|DEFINITION|LAW|FORMULA|HIGHLIGHT|EXAMPLE|ILLUSTRATION|STEP|DERIVATION|CALCULATION|QUESTION|CHECKPOINT_QUESTION|BOARD_QUESTION|STUDENT_ANSWER|STUDENT|VERDICT|ANSWER_VERDICT|CORRECTION|ROUGH_WORK|ROUGH):\s*([^\]]+)\]/gi;
+    let bm;
+    while ((bm = bracketRegex.exec(rawText)) !== null) {
+      const type = bm[1]?.toUpperCase() || "";
+      const content = bm[2]?.trim() || "";
+      if (!content) continue;
+      if (type === "NOTE" || type === "INTUITION" || type === "INSIGHT") {
+        this.handleSingleToolCall("write_chalkboard", { action: "draw_note", content: type === "INTUITION" ? `Intuition: ${content}` : content, color: "botanical" });
+      } else if (type === "DEFINITION" || type === "LAW" || type === "FORMULA" || type === "HIGHLIGHT") {
+        this.handleSingleToolCall("write_chalkboard", { action: "draw_highlight_box", content: content, color: "coral" });
+      } else if (type === "EXAMPLE" || type === "ILLUSTRATION") {
+        this.handleSingleToolCall("write_chalkboard", { action: "draw_note", content: `Example: ${content}`, color: "blue" });
+      } else if (type === "STEP" || type === "DERIVATION" || type === "CALCULATION") {
+        this.handleSingleToolCall("write_chalkboard", { action: "draw_step", content: content, color: "amber" });
+      } else if (type === "QUESTION" || type === "CHECKPOINT_QUESTION" || type === "BOARD_QUESTION") {
+        this.handleSingleToolCall("write_chalkboard", { action: "draw_question", content: content, color: "amber" });
+      } else if (type === "STUDENT_ANSWER" || type === "STUDENT") {
+        this.handleSingleToolCall("write_chalkboard", { action: "draw_student_answer", content: content, color: "blue" });
+      } else if (type === "VERDICT" || type === "ANSWER_VERDICT" || type === "CORRECTION") {
+        this.handleSingleToolCall("write_chalkboard", { action: "draw_answer_verdict", content: content, color: "botanical" });
+      } else if (type === "ROUGH_WORK" || type === "ROUGH") {
+        this.handleSingleToolCall("write_chalkboard", { action: "draw_rough_work", content: content, color: "white" });
       }
     }
 
@@ -206,6 +232,9 @@ export class GeminiLiveClient {
     const stripCall = (name: string) => new RegExp(`${name}\\s*\\((?:'[^']*'|"[^"]*"|[^()]*|\\([^()]*\\))*\\)`, "gi");
     return rawText
       .replace(stripCall("write_chalkboard"), "")
+      .replace(stripCall("write_board"), "")
+      .replace(stripCall("draw_board"), "")
+      .replace(stripCall("chalkboard"), "")
       .replace(stripCall("execute_visual_action"), "")
       .replace(stripCall("plot_mathematical_graph"), "")
       .replace(stripCall("open_interactive_simulation"), "")
@@ -245,10 +274,31 @@ export class GeminiLiveClient {
         if (now - t > 60000) this.lastExecutedToolCalls.delete(k);
       }
     }
-    if (name === "write_chalkboard") {
-      const action = args.action || "";
-      const textContent = args.content || args.text || "";
-      const color = args.color || "";
+    if (
+      name === "write_chalkboard" ||
+      name === "write_board" ||
+      name === "chalkboard" ||
+      name === "whiteboard" ||
+      name === "draw_chalkboard" ||
+      name === "draw_board"
+    ) {
+      let action = args.action || "";
+      let textContent = args.content ?? args.text ?? args.note ?? args.step ?? args.title ?? args.question ?? "";
+      let color = args.color || "";
+
+      if (!action) {
+        if (args.note) action = "draw_note";
+        else if (args.step) action = "draw_step";
+        else if (args.title) action = "draw_title";
+        else if (args.question) { action = "draw_question"; textContent = args.question; }
+        else if (args.highlight) { action = "draw_highlight_box"; textContent = args.highlight; }
+        else if (args.formula) { action = "draw_step"; textContent = args.formula; }
+        else {
+          action = "draw_note";
+          if (typeof args === "string") textContent = args;
+        }
+      }
+
       this.callbacks.onChalkboardToolCall?.(action, textContent, color);
     } else if (name === "execute_visual_action") {
       const action = args.action || "";
@@ -301,11 +351,9 @@ export class GeminiLiveClient {
     }
 
     try {
-      console.log(`[GeminiLive] Connecting session with model: ${this.model}, voice: ${this.voiceName}, enableFunctionCalling: ${this.enableFunctionCalling}, avatarEnabled: ${!!this.avatarConfig}`);
+      console.log(`[GeminiLive] Connecting session with model: ${this.model}, voice: ${this.voiceName}, enableFunctionCalling: ${this.enableFunctionCalling}`);
 
-      const responseModalities = this.avatarConfig
-        ? ["VIDEO" as any, "AUDIO" as any]
-        : ["AUDIO" as any];
+      const responseModalities = ["AUDIO" as any];
 
       const liveConfig: any = {
         responseModalities,
@@ -316,9 +364,6 @@ export class GeminiLiveClient {
               voiceName: this.voiceName,
             },
           },
-          languageCode: this.languageCode,
-          supportedLanguages: this.supportedLanguages,
-          supportedLanguageCodes: this.supportedLanguages,
         },
         inputAudioTranscription: {
           languageCodes: this.supportedLanguages,
@@ -328,17 +373,13 @@ export class GeminiLiveClient {
         },
       };
 
-      if (this.avatarConfig) {
-        liveConfig.avatarConfig = this.avatarConfig;
-      }
-
       if (this.enableFunctionCalling) {
         liveConfig.tools = [
           {
             functionDeclarations: [
               {
                 name: "write_chalkboard",
-                description: "Draw or write notes, titles, formulas, steps, rough scratch work, math equations, tables, flowcharts, or set chalk colors on the student's live whiteboard.",
+                description: "MANDATORY CHALKBOARD TOOL: You MUST invoke this tool in EVERY spoken turn to write notes, definitions, steps, formulas, worked examples, and questions on the student's live chalkboard. Speaking without calling this tool is strictly prohibited.",
                 behavior: Behavior.NON_BLOCKING,
                 parameters: {
                   type: Type.OBJECT,
@@ -386,6 +427,61 @@ export class GeminiLiveClient {
                         "rose",
                       ],
                       description: "Optional chalk color to write with (botanical, coral, amber, blue, purple, white). Use botanical/green for biology/definitions, coral/red for laws & boxed formulas, blue for physics/derivations, amber/yellow for SI units/highlights, purple for terms, white for standard text.",
+                    },
+                  },
+                  required: ["action"],
+                },
+              },
+              {
+                name: "write_board",
+                description: "MANDATORY CHALKBOARD TOOL: You MUST invoke this tool in EVERY spoken turn to write notes, definitions, steps, formulas, worked examples, and questions on the student's live chalkboard. Speaking without calling this tool is strictly prohibited.",
+                behavior: Behavior.NON_BLOCKING,
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    action: {
+                      type: Type.STRING,
+                      enum: [
+                        "draw_title",
+                        "draw_note",
+                        "draw_step",
+                        "draw_highlight_box",
+                        "draw_question",
+                        "draw_student_answer",
+                        "draw_answer_verdict",
+                        "draw_exam_question",
+                        "draw_flowchart",
+                        "draw_table",
+                        "draw_rough_work",
+                        "concept_done",
+                        "concept_focus",
+                        "set_color",
+                        "new_page",
+                      ],
+                      description: "The chalkboard action to perform (e.g. draw_note, draw_step, draw_highlight_box, draw_question, draw_student_answer, draw_answer_verdict, draw_exam_question, draw_flowchart, draw_table, draw_rough_work, concept_done, concept_focus, set_color, new_page)",
+                    },
+                    content: {
+                      type: Type.STRING,
+                      description: "The text to write, equation, table markup, flowchart text, or color name to apply to the chalkboard.",
+                    },
+                    color: {
+                      type: Type.STRING,
+                      enum: [
+                        "white",
+                        "primary",
+                        "botanical",
+                        "green",
+                        "coral",
+                        "red",
+                        "amber",
+                        "yellow",
+                        "blue",
+                        "cyan",
+                        "purple",
+                        "lavender",
+                        "rose",
+                      ],
+                      description: "Optional chalk color to write with (botanical, coral, amber, blue, purple, white).",
                     },
                   },
                   required: ["action"],
@@ -767,6 +863,7 @@ export class GeminiLiveClient {
         onclose: (event: any) => {
           this.isConnected = false;
           this.hasSentKickoff = false;
+          console.log(`[GeminiLive] WebSocket closed: code=${event?.code}, reason=${event?.reason || '(none)'}, wasClean=${event?.wasClean}`);
           if (!this.isManuallyClosed) {
              this.callbacks.onClose(event as CloseEvent);
           }

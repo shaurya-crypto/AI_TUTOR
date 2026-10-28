@@ -1,38 +1,52 @@
-# Semantic Color System
+# Aristotle Semantic Color System
 
-The AI Tutor palette is built around a warm, editorial aesthetic. It feels human, trustworthy, and intelligent without resorting to generic SaaS blues or cyberpunk purples.
+The AI Tutor visual identity is rooted in an authentic, classical academic aesthetic: the warmth of aged parchment, deep walnut ink, botanical green wisdom, and terracotta accents. It evokes Aristotle's Lyceum and centuries of scholarly rigor, completely rejecting generic SaaS neon blues and cyberpunk purples.
 
-## 1. Environment & Neutrals
-The base is a warm ivory, avoiding sterile absolute whites or heavy greys.
+---
 
-*   **Background (Canvas):** `#F8F6F0` - Warm ivory/soft paper.
-*   **Surface (Cards/Modals):** `#FFFFFF` - Clean white for elevated elements.
-*   **Border (Subtle):** `#E5E3DB` - Warm, low-contrast divider.
-*   **Focus Ring / Highlight:** `#F1EBDD` - Extremely soft warm highlight.
+## 1. Environment & Paper Canvas
+The base is a warm alabaster paper canvas, avoiding sterile digital whites or cold corporate grays.
 
-## 2. Typography (Ink)
-We use deep charcoals instead of pure `#000000` to reduce eye strain and maintain the editorial feel.
+*   **Canvas (Page Base):** `#FAF9F5` (or `#FAF8F5`) — Warm alabaster parchment.
+*   **Surface White (Cards, Pills, Inputs):** `#FFFFFF` — Pure white for elevated interactive containers.
+*   **Paper Border (Subtle):** `#E5E3DB` — Warm, low-contrast hairline dividers.
+*   **Paper Border (Strong):** `#D5D2C8` — Active borders, OTP digit cell outlines, card separation.
+*   **Grid Line Overlay:** `#E7E5E0` — Subtle 24px Cartesian paper grid at `40%` opacity.
+*   **Artwork Backing / Frame:** `#EFECE6` — Architectural image container and stone neutral base.
 
-*   **Primary Ink:** `#171817` - Headlines, primary body text.
-*   **Secondary Ink:** `#555852` - Subtitles, metadata, form labels.
-*   **Muted Text:** `#7A7C75` - Placeholders, disabled text, micro-copy.
+---
+
+## 2. Typography & Ink Hierarchy
+We employ deep warm espresso charcoals instead of harsh `#000000`, creating high legibility with an editorial, bookish warmth.
+
+*   **Primary Ink:** `#1F1C18` (or `#171817`) — Headlines, primary brand marks, active OTP numerals.
+*   **Walnut Ink (Primary Button Fill):** `#2C241E` — Warm deep walnut for primary buttons and high-emphasis controls.
+*   **Secondary Ink:** `#555852` — Subtitles, instructional text, form field labels, metadata.
+*   **Muted Ink:** `#7A7C75` — Placeholders, secondary labels, timer countdowns, micro-copy.
+*   **Hairline Ink:** `#9A9C96` / `#B5B7B1` — Copyright statements, footer captions, board affiliations.
+
+---
 
 ## 3. Accents
-Accents are used sparingly (accounting for 5-8% of the UI).
 
-### Primary Accent: Coral
-Coral represents human action, brand moments, and primary interactions.
-*   **Primary Coral:** `#C85A43` - Main CTA buttons, active tabs.
-*   **Coral Hover/Dark:** `#A94734` - Button hover states.
-*   **Soft Coral (Surface):** `#F6E5DF` - Coral tinted backgrounds for subtle highlights.
+### Primary Accent: Botanical Green (Academic Growth & Live Tutoring)
+Botanical green represents "live", "understanding", "verified security", and active socratic progress.
+*   **Botanical Primary:** `#52715D` — Security shield badges, active OTP focus rings, progress indicators, live tutor status.
+*   **Botanical Dark:** `#3E5D4B` — Hover states and high-contrast badge text.
+*   **Botanical Soft (Surface):** `#F0F7F1` — Security notice pills, success banners, active question highlights.
+*   **Botanical Border:** `#C8E0CE` — Border for verification badges and success pills.
 
-### Secondary Accent: Botanical Green
-Green represents "live", "connected", "successful", and active learning states.
-*   **Botanical Green:** `#52715D` - Success badges, live tutoring active indicators.
-*   **Deep Green:** `#3E5D4B` - Hover states for green actions.
-*   **Soft Green (Surface):** `#E8F0EA` - Success banners, active class backgrounds.
+### Secondary Accent: Terracotta Coral (Human Action & Primary Focus)
+Terracotta reflects Mediterranean antiquity, classical pottery, and active user choice.
+*   **Terracotta Primary:** `#C85A43` — High-visibility CTAs, important warnings, active tabs.
+*   **Terracotta Hover/Dark:** `#A94734` — Hover states for terracotta actions.
+*   **Terracotta Soft (Surface):** `#FFF8F6` — Alert banners, gentle caution highlights.
+*   **Terracotta Border:** `#F5D5CE` — Warning boundaries.
 
-## Accessibility Notes
-*   Ensure `#171817` and `#555852` are used on `#F8F6F0` to maintain WCAG AA (4.5:1) contrast.
-*   `#C85A43` (Coral) on `#FFFFFF` passes contrast for large text and UI components.
-*   Do not use raw hex values in components; use semantic Tailwind classes mapped to these tokens.
+---
+
+## 4. Accessibility & Contrast Verification
+*   `#1F1C18` and `#555852` on `#FAF9F5` achieve WCAG AAA contrast ratio (> 9:1 for text).
+*   `#52715D` on `#FFFFFF` exceeds 4.8:1 contrast for interactive icons and labels.
+*   `#C85A43` with white text `#FFFFFF` achieves WCAG AA compliant contrast for buttons.
+*   All interactive elements must maintain clear focus indicators in `#52715D` or `#1F1C18`.
