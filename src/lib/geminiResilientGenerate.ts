@@ -7,34 +7,38 @@ export interface ResilientGenerateOptions {
     temperature?: number
     maxOutputTokens?: number
     systemInstruction?: any
+    thinkingConfig?: {
+      thinkingBudget?: number
+    }
     [key: string]: any
   }
   preferredModels?: string[]
   maxRounds?: number
   label?: string
+  timeoutMs?: number
 }
 
 /**
- * Verified high-availability models for curriculum decomposition and notes synthesis.
+ * Verified high-availability models for curriculum decomposition, diagram generation, and notes synthesis.
  * Priority order:
- * 1. gemini-2.5-flash: high reasoning, NCERT-structured accuracy
- * 2. gemini-3.5-flash: high-capacity modern flagship
- * 3. gemini-2.5-flash-lite: ultra-low latency fallback
- * 4. gemini-3.5-flash-lite: next-gen lightweight fallback
+ * 1. gemini-3.8-flash: Primary flagship with extended thinking reasoning
+ * 2. gemini-3.1-pro-preview: Frontier Gemini 3.1 Pro fallback
+ * 3. gemini-3.5-flash: High-capacity modern flagship intermediate fallback
+ * 4. gemini-2.5-flash: Reliable NCERT-structured thinking fallback
+ * 5. gemini-2.5-flash-lite: Ultra-low latency safety net
  */
 const DEFAULT_MODEL_CASCADE = [
+  'gemini-3.8-flash',
   'gemini-3.1-pro-preview',
   'gemini-3.5-flash',
   'gemini-2.5-flash',
-  'gemini-3.5-flash-lite',
   'gemini-2.5-flash-lite',
 ]
 
 /**
- * Instant-Failover Multi-Model Generator without artificial client-side timeouts.
- * Let Gemini complete full PDF analysis and synthesis naturally.
- * If a model returns an API error (503 High Demand, 429 Rate Limit, etc.),
- * it IMMEDIATELY cascades to the next available model in 0 milliseconds.
+ * Instant-Failover Multi-Model Generator with resilient per-model timeout and thinking reasoning.
+ * Automatically tries primary gemini-3.8-flash (with thinking), cascading to gemini-3.1-pro-preview,
+ * gemini-3.5-flash, and gemini-2.5-flash if upstream demand spikes (503/429) occur.
  */
 export async function resilientGenerateContent(
   ai: GoogleGenAI,
@@ -47,6 +51,13 @@ export async function resilientGenerateContent(
   const maxRounds = options.maxRounds || 2
   const label = options.label || 'Gemini API'
   const errorsCollected: string[] = []
+  const perModelTimeout = options.timeoutMs || 45000
+
+  // Ensure thinking budget is active by default for high-level reasoning across all models
+  const baseConfig = {
+    thinkingConfig: { thinkingBudget: 2048 },
+    ...(options.config || {}),
+  }
 
   for (let round = 1; round <= maxRounds; round++) {
     for (let i = 0; i < models.length; i++) {
@@ -56,17 +67,29 @@ export async function resilientGenerateContent(
       try {
         console.log(`[${label}] Requesting generation via ${model} (Round ${round}/${maxRounds})...`)
 
-        // Allow natural execution to complete without artificial client timeout
-        const response = await ai.models.generateContent({
+        let timer: NodeJS.Timeout | null = null
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`Timeout: ${model} exceeded ${perModelTimeout / 1000}s response limit`))
+          }, perModelTimeout)
+        })
+
+        const generatePromise = ai.models.generateContent({
           model,
           contents: options.contents,
-          ...(options.config ? { config: options.config } : {}),
+          config: baseConfig,
+        })
+
+        const response: any = await Promise.race([generatePromise, timeoutPromise]).finally(() => {
+          if (timer) clearTimeout(timer)
         })
 
         const rawText = response?.text?.trim() || ''
         if (rawText.length > 0) {
           if (round > 1 || model !== models[0]) {
             console.log(`[${label}] Successfully completed generation using failover model "${model}".`)
+          } else {
+            console.log(`[${label}] Successfully completed generation using primary model "${model}".`)
           }
           return { text: rawText, modelUsed: model }
         }
@@ -79,7 +102,7 @@ export async function resilientGenerateContent(
 
         if (nextModel) {
           console.warn(
-            `[${label}] ${model} unavailable (${errMsg.includes('503') ? '503 High Demand' : errMsg.substring(0, 80)}). Instantly failing over to ${nextModel}...`
+            `[${label}] ${model} unavailable (${errMsg.includes('503') ? '503 High Demand' : errMsg.includes('429') ? '429 Quota' : errMsg.substring(0, 80)}). Instantly failing over to ${nextModel}...`
           )
         } else {
           console.warn(`[${label}] ${model} failed: ${errMsg.substring(0, 100)}`)

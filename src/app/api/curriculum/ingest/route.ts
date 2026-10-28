@@ -453,14 +453,14 @@ export async function POST(req: Request) {
 
         if (cacheParts.length > 0) {
           const tokenResp = await ai.models.countTokens({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.8-flash',
             contents: [{ role: 'user', parts: cacheParts }],
           })
           const totalTokens = tokenResp?.totalTokens || 0
 
           if (totalTokens >= 32768) {
             const cache = await ai.caches.create({
-              model: 'gemini-2.5-flash',
+              model: 'gemini-3.8-flash',
               config: {
                 contents: [{ role: 'user', parts: cacheParts }],
                 displayName: `cache_${targetChapterTitle.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)}`,

@@ -89,10 +89,14 @@ export async function GET(req: Request) {
       throw new Error('Failed to mint valid ephemeral token name from Google API.')
     }
 
+    const url = new URL(req.url)
+    const useExtendedThinking = url.searchParams.get('extended') === 'true'
+    const liveModel = useExtendedThinking ? 'gemini-3.8-live-extended-thinking' : 'gemini-3.8-live'
+
     // ZERO API KEY EXPOSURE: Return only the temporary ephemeral token
     return NextResponse.json({
       token: token.name,
-      model: 'gemini-3.8-live',
+      model: liveModel,
       voiceName,
       preferredLanguage,
       supportedLanguages,
