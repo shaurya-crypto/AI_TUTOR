@@ -39,6 +39,14 @@ import {
   FileCode,
   Database,
   ArrowRight,
+  Users,
+  UserCheck,
+  UserX,
+  SlidersHorizontal,
+  ToggleLeft,
+  ToggleRight,
+  Gauge,
+  Search,
 } from 'lucide-react'
 
 export type EducationalBoard = 'CBSE' | 'ICSE' | 'IB'
@@ -210,8 +218,33 @@ export default function AdminPortalPage() {
   const [gateError, setGateError] = useState<string | null>(null)
   const [gateLoading, setGateLoading] = useState(false)
 
-  // Active Studio Mode: 'notes' | 'syllabus' | 'pyq'
-  const [activeStudioTab, setActiveStudioTab] = useState<'notes' | 'syllabus' | 'pyq'>('notes')
+  // Active Studio Mode: 'notes' | 'syllabus' | 'pyq' | 'users'
+  const [activeStudioTab, setActiveStudioTab] = useState<'notes' | 'syllabus' | 'pyq' | 'users'>('notes')
+
+  // User Accounts & Quota Limits Management State
+  interface AdminStudentUser {
+    id: string
+    email: string
+    full_name: string | null
+    class_level: string | null
+    target_board: string | null
+    is_avatar_enabled: boolean
+    limit_type: 'requests' | 'modules' | 'unlimited'
+    max_requests: number
+    used_requests: number
+    max_modules: number
+    used_modules: number
+    total_classes_taken: number
+    created_at: string
+    last_active_date: string | null
+  }
+
+  const [adminUsers, setAdminUsers] = useState<AdminStudentUser[]>([])
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false)
+  const [userSearchQuery, setUserSearchQuery] = useState('')
+  const [userGradeFilter, setUserGradeFilter] = useState('ALL')
+  const [savingUserId, setSavingUserId] = useState<string | null>(null)
+  const [userSaveSuccessId, setUserSaveSuccessId] = useState<string | null>(null)
 
   // Ingestion Form State (Syllabus Mode)
   const [selectedBoard, setSelectedBoard] = useState<EducationalBoard>('CBSE')
@@ -352,9 +385,73 @@ export default function AdminPortalPage() {
     }
   }
 
+  // 3. Fetch registered student users and their quota configurations
+  const fetchAdminUsers = async () => {
+    setIsLoadingUsers(true)
+    try {
+      const res = await fetch('/api/admin/users')
+      const json = await res.json()
+      if (json.success && Array.isArray(json.users)) {
+        setAdminUsers(
+          json.users.map((u: any) => ({
+            id: u.id,
+            email: u.email || 'No email',
+            full_name: u.full_name || 'Anonymous Student',
+            class_level: u.class_level || 'Class 10',
+            target_board: u.target_board || 'CBSE',
+            is_avatar_enabled: u.is_avatar_enabled !== false,
+            limit_type: u.limit_type || 'unlimited',
+            max_requests: u.max_requests || 100,
+            used_requests: u.used_requests || 0,
+            max_modules: u.max_modules || 5,
+            used_modules: u.used_modules || 0,
+            total_classes_taken: u.total_classes_taken || 0,
+            created_at: u.created_at || new Date().toISOString(),
+            last_active_date: u.last_active_date || null,
+          }))
+        )
+      }
+    } catch (err) {
+      console.error('Failed to load admin student users:', err)
+    } finally {
+      setIsLoadingUsers(false)
+    }
+  }
+
+  const handleSaveUserQuotaAndAvatar = async (u: AdminStudentUser) => {
+    setSavingUserId(u.id)
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: u.id,
+          is_avatar_enabled: u.is_avatar_enabled,
+          limit_type: u.limit_type,
+          max_requests: u.max_requests,
+          used_requests: u.used_requests,
+          max_modules: u.max_modules,
+          used_modules: u.used_modules,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        setUserSaveSuccessId(u.id)
+        setTimeout(() => setUserSaveSuccessId(null), 3000)
+      } else {
+        setErrorMsg(json.error || 'Failed to update user quota.')
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update user quota.')
+    } finally {
+      setSavingUserId(null)
+    }
+  }
+
   useEffect(() => {
     if (isAdminUnlocked) {
       fetchCurriculumsLibrary()
+      fetchAdminUsers()
     }
   }, [isAdminUnlocked])
 
@@ -1328,6 +1425,22 @@ export default function AdminPortalPage() {
             >
               <Sparkles className="w-4 h-4" />
               <span>Past Year Papers (PYQ) Studio</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveStudioTab('users')
+                fetchAdminUsers()
+              }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-semibold font-mono uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                activeStudioTab === 'users'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'bg-[#0c1610] text-emerald-400 hover:bg-emerald-950/80 border border-emerald-900/60'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>User Accounts &amp; Quotas</span>
             </button>
           </div>
 
@@ -2814,9 +2927,417 @@ export default function AdminPortalPage() {
         )}
 
         {/* ------------------------------------------------------------------- */}
+        {/* WORKFLOW 4: USER ACCOUNTS & QUOTA CONTROLS                          */}
+        {/* ------------------------------------------------------------------- */}
+        {activeStudioTab === 'users' && (
+          <section className="p-6 md:p-8 rounded-3xl bg-[#112017] border border-emerald-900/80 shadow-xl space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-emerald-900/60 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-800/80 border border-emerald-600/40 flex items-center justify-center text-white shadow-xs">
+                  <Users className="w-5 h-5 text-emerald-200" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white tracking-tight">
+                    User Accounts &amp; Quota Controls
+                  </h2>
+                  <p className="text-xs text-emerald-300/70 font-mono">
+                    Configure individual student usage limits (requests vs modules) and toggle classroom AI Video Avatar permissions
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchAdminUsers}
+                  disabled={isLoadingUsers}
+                  className="bg-[#0c1610] border-emerald-800 text-emerald-300 hover:bg-emerald-900/60 text-xs font-mono h-8 cursor-pointer flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingUsers ? 'animate-spin' : ''}`} />
+                  <span>Refresh Accounts</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-2xl bg-[#0c1610] border border-emerald-900/70 space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400/80 block">
+                  Total Students
+                </span>
+                <p className="text-xl font-bold font-mono text-white">
+                  {adminUsers.length}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-[#0c1610] border border-emerald-900/70 space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400/80 block">
+                  AI Video Avatar
+                </span>
+                <p className="text-xl font-bold font-mono text-emerald-300">
+                  {adminUsers.filter((u) => u.is_avatar_enabled).length}{' '}
+                  <span className="text-xs font-normal text-emerald-400/70 font-sans">
+                    / {adminUsers.length} active
+                  </span>
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-[#0c1610] border border-emerald-900/70 space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400/80 block">
+                  Limited Quotas
+                </span>
+                <p className="text-xl font-bold font-mono text-amber-300">
+                  {adminUsers.filter((u) => u.limit_type !== 'unlimited').length}{' '}
+                  <span className="text-xs font-normal text-emerald-400/70 font-sans">
+                    capped
+                  </span>
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-[#0c1610] border border-emerald-900/70 space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400/80 block">
+                  Unlimited Access
+                </span>
+                <p className="text-xl font-bold font-mono text-sky-300">
+                  {adminUsers.filter((u) => u.limit_type === 'unlimited').length}{' '}
+                  <span className="text-xs font-normal text-emerald-400/70 font-sans">
+                    students
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-emerald-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search students by name or email..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-[#0c1610] border border-emerald-900/80 text-xs text-emerald-100 placeholder:text-emerald-700/60 focus:outline-none focus:border-emerald-500 font-sans"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={userGradeFilter}
+                  onChange={(e) => setUserGradeFilter(e.target.value)}
+                  className="h-9 px-3 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-xs text-emerald-200 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer font-semibold"
+                >
+                  <option value="ALL">All Grades</option>
+                  <option value="Class 6">Class 6</option>
+                  <option value="Class 7">Class 7</option>
+                  <option value="Class 8">Class 8</option>
+                  <option value="Class 9">Class 9</option>
+                  <option value="Class 10">Class 10</option>
+                  <option value="Class 11">Class 11</option>
+                  <option value="Class 12">Class 12</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Students List */}
+            {isLoadingUsers ? (
+              <div className="p-12 text-center rounded-2xl bg-[#0c1610] border border-emerald-900/60 text-xs font-mono text-emerald-400/80 flex flex-col items-center justify-center gap-2">
+                <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
+                <span>Loading registered student profiles...</span>
+              </div>
+            ) : adminUsers.length === 0 ? (
+              <div className="p-8 text-center rounded-2xl bg-[#0c1610] border border-emerald-900/60 text-xs font-mono text-emerald-400/70">
+                No student profiles found in database.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {adminUsers
+                  .filter((u) => {
+                    const matchesQuery =
+                      !userSearchQuery.trim() ||
+                      u.full_name?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                      u.email?.toLowerCase().includes(userSearchQuery.toLowerCase())
+                    const matchesGrade =
+                      userGradeFilter === 'ALL' || u.class_level === userGradeFilter
+                    return matchesQuery && matchesGrade
+                  })
+                  .map((u) => {
+                    const isSaving = savingUserId === u.id
+                    const isSaved = userSaveSuccessId === u.id
+
+                    return (
+                      <div
+                        key={u.id}
+                        className="p-5 rounded-2xl bg-[#0c1610] border border-emerald-900/80 hover:border-emerald-700/80 transition-all space-y-4 shadow-sm"
+                      >
+                        {/* Student Identity Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-950 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-emerald-900/80 border border-emerald-700/60 flex items-center justify-center text-sm font-bold font-mono text-emerald-200">
+                              {(u.full_name || u.email || 'S').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-white">
+                                  {u.full_name || 'Anonymous Student'}
+                                </h3>
+                                <Badge className="bg-emerald-950 text-emerald-300 border-emerald-800 text-[10px] font-mono">
+                                  {u.target_board} {u.class_level}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-emerald-400/80 font-mono">
+                                {u.email}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[11px] font-mono text-emerald-400/70">
+                            <span>Classes: {u.total_classes_taken}</span>
+                            <span>•</span>
+                            <span>
+                              Joined: {new Date(u.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Controls Grid */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                          {/* 1. Classroom Avatar Toggle */}
+                          <div className="lg:col-span-4 p-3.5 rounded-xl bg-[#112017] border border-emerald-900/60 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-emerald-200">
+                                AI Video Avatar
+                              </span>
+                              <Badge
+                                className={`text-[10px] font-mono ${
+                                  u.is_avatar_enabled
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                    : 'bg-stone-800 text-stone-300 border-stone-700'
+                                }`}
+                              >
+                                {u.is_avatar_enabled ? 'Avatar Active' : 'Audio Only'}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAdminUsers((prev) =>
+                                    prev.map((item) =>
+                                      item.id === u.id
+                                        ? { ...item, is_avatar_enabled: true }
+                                        : item
+                                    )
+                                  )
+                                }}
+                                className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                                  u.is_avatar_enabled
+                                    ? 'bg-emerald-600 text-white font-semibold'
+                                    : 'bg-[#08110a] text-emerald-400 hover:bg-emerald-950/70 border border-emerald-900/60'
+                                }`}
+                              >
+                                <ToggleRight className="w-3.5 h-3.5" />
+                                <span>Enable Avatar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAdminUsers((prev) =>
+                                    prev.map((item) =>
+                                      item.id === u.id
+                                        ? { ...item, is_avatar_enabled: false }
+                                        : item
+                                    )
+                                  )
+                                }}
+                                className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                                  !u.is_avatar_enabled
+                                    ? 'bg-amber-600 text-white font-semibold'
+                                    : 'bg-[#08110a] text-emerald-400 hover:bg-emerald-950/70 border border-emerald-900/60'
+                                }`}
+                              >
+                                <ToggleLeft className="w-3.5 h-3.5" />
+                                <span>Disable (Audio)</span>
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-emerald-400/60">
+                              {u.is_avatar_enabled
+                                ? 'Shows live animated Simli WebRTC avatar video in class.'
+                                : 'Shows nothing in avatar; class operates in pure audio mode.'}
+                            </p>
+                          </div>
+
+                          {/* 2. Limit Type Selector */}
+                          <div className="lg:col-span-4 p-3.5 rounded-xl bg-[#112017] border border-emerald-900/60 space-y-2">
+                            <span className="text-xs font-semibold text-emerald-200 block">
+                              Limit Policy
+                            </span>
+                            <div className="grid grid-cols-3 gap-1">
+                              {(['requests', 'modules', 'unlimited'] as const).map((mode) => {
+                                const isCurrent = u.limit_type === mode
+                                return (
+                                  <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => {
+                                      setAdminUsers((prev) =>
+                                        prev.map((item) =>
+                                          item.id === u.id ? { ...item, limit_type: mode } : item
+                                        )
+                                      )
+                                    }}
+                                    className={`py-1.5 px-2 rounded-lg text-[11px] font-mono capitalize transition-all cursor-pointer ${
+                                      isCurrent
+                                        ? 'bg-emerald-600 text-white font-semibold shadow-xs'
+                                        : 'bg-[#08110a] text-emerald-400 hover:bg-emerald-950 border border-emerald-900/50'
+                                    }`}
+                                  >
+                                    {mode}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <p className="text-[10px] text-emerald-400/60">
+                              {u.limit_type === 'requests'
+                                ? 'Cap by total questions/prompts sent by student.'
+                                : u.limit_type === 'modules'
+                                ? 'Cap by total curriculum capsules the student can take.'
+                                : 'Full unrestricted access without limits.'}
+                            </p>
+                          </div>
+
+                          {/* 3. Allowance Values & Save */}
+                          <div className="lg:col-span-4 p-3.5 rounded-xl bg-[#112017] border border-emerald-900/60 space-y-2">
+                            {u.limit_type === 'requests' ? (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-emerald-200 font-medium">Max Requests:</span>
+                                  <span className="font-mono text-emerald-400">
+                                    Used: {u.used_requests} / {u.max_requests}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={u.max_requests}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value) || 1
+                                      setAdminUsers((prev) =>
+                                        prev.map((item) =>
+                                          item.id === u.id ? { ...item, max_requests: val } : item
+                                        )
+                                      )
+                                    }}
+                                    className="w-24 px-2.5 py-1 rounded-lg bg-[#08110a] border border-emerald-900 text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setAdminUsers((prev) =>
+                                        prev.map((item) =>
+                                          item.id === u.id ? { ...item, used_requests: 0 } : item
+                                        )
+                                      )
+                                    }}
+                                    className="h-7 text-[10px] font-mono text-amber-300 hover:text-amber-100 hover:bg-amber-950/60 px-2"
+                                    title="Reset used requests counter to 0"
+                                  >
+                                    Reset (0)
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : u.limit_type === 'modules' ? (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-emerald-200 font-medium">Max Modules:</span>
+                                  <span className="font-mono text-emerald-400">
+                                    Used: {u.used_modules} / {u.max_modules}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={u.max_modules}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value) || 1
+                                      setAdminUsers((prev) =>
+                                        prev.map((item) =>
+                                          item.id === u.id ? { ...item, max_modules: val } : item
+                                        )
+                                      )
+                                    }}
+                                    className="w-24 px-2.5 py-1 rounded-lg bg-[#08110a] border border-emerald-900 text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setAdminUsers((prev) =>
+                                        prev.map((item) =>
+                                          item.id === u.id ? { ...item, used_modules: 0 } : item
+                                        )
+                                      )
+                                    }}
+                                    className="h-7 text-[10px] font-mono text-amber-300 hover:text-amber-100 hover:bg-amber-950/60 px-2"
+                                    title="Reset used modules counter to 0"
+                                  >
+                                    Reset (0)
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="py-2 text-center text-xs text-emerald-300/80 font-mono">
+                                Unlimited Plan Active
+                              </div>
+                            )}
+
+                            {/* Save Button */}
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => handleSaveUserQuotaAndAvatar(u)}
+                              disabled={isSaving}
+                              className={`w-full h-8 text-xs font-medium cursor-pointer transition-all ${
+                                isSaved
+                                  ? 'bg-emerald-500 text-white'
+                                  : 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                              }`}
+                            >
+                              {isSaving ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                  <span>Saving...</span>
+                                </>
+                              ) : isSaved ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 mr-1.5 text-white" />
+                                  <span>Saved Settings!</span>
+                                </>
+                              ) : (
+                                <span>Save Settings</span>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ------------------------------------------------------------------- */}
         {/* SECTION 3: PUBLISHED CURRICULUMS & CHAPTERS LIBRARY */}
         {/* ------------------------------------------------------------------- */}
-        <section className="p-6 md:p-8 rounded-3xl bg-[#112017] border border-emerald-900/80 shadow-xl space-y-6">
+        {activeStudioTab !== 'users' && (
+          <section className="p-6 md:p-8 rounded-3xl bg-[#112017] border border-emerald-900/80 shadow-xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-emerald-900/60 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-emerald-800/80 border border-emerald-600/40 flex items-center justify-center text-white shadow-xs">
@@ -3040,6 +3561,7 @@ export default function AdminPortalPage() {
             </div>
           )}
         </section>
+        )}
       </main>
 
       {/* ------------------------------------------------------------------- */}

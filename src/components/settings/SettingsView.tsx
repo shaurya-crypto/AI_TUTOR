@@ -14,6 +14,11 @@ import {
   ArrowLeft,
   Shield,
   HelpCircle,
+  Gauge,
+  Video,
+  VideoOff,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
 import {
   updateAccountAction,
@@ -613,6 +618,144 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                   <span>{accountStatus.message}</span>
                 </div>
               )}
+
+              {/* Plan & Usage Quotas Card */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[var(--border-subtle)] shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)]/60 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-[#EEF5FA] border border-[#255D88]/20 flex items-center justify-center text-[#255D88]">
+                      <Gauge className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-serif font-bold text-[#2D2A26]">
+                        Classroom Plan &amp; Allowances
+                      </h3>
+                      <p className="text-xs text-[#78716C]">
+                        Your current student quota, usage limits, and classroom feature permissions.
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium font-mono border ${
+                    profile.limit_type === 'requests'
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : profile.limit_type === 'modules'
+                      ? 'bg-sky-50 text-sky-800 border-sky-200'
+                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  }`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                    <span className="capitalize">{profile.limit_type || 'Unlimited'} Plan</span>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  {/* Quota Usage Metric */}
+                  <div className="p-4 rounded-2xl bg-[#F5F2EB]/60 border border-[var(--border-subtle)] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#57534E]">
+                        {profile.limit_type === 'requests'
+                          ? 'AI Questions & Interactions'
+                          : profile.limit_type === 'modules'
+                          ? 'Curriculum Topic Modules'
+                          : 'Student Interaction Quota'}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-[#2D2A26]">
+                        {profile.limit_type === 'requests'
+                          ? `${profile.used_requests || 0} / ${profile.max_requests || 100} Used`
+                          : profile.limit_type === 'modules'
+                          ? `${profile.used_modules || 0} / ${profile.max_modules || 5} Taken`
+                          : 'Unlimited'}
+                      </span>
+                    </div>
+
+                    {profile.limit_type === 'requests' ? (
+                      <div className="space-y-1.5">
+                        <div className="w-full h-2 rounded-full bg-stone-200 overflow-hidden">
+                          <div
+                            className="h-full bg-[#255D88] rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                Math.round(((profile.used_requests || 0) / (profile.max_requests || 100)) * 100)
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-[#78716C] flex items-center justify-between">
+                          <span>
+                            {Math.max(0, (profile.max_requests || 100) - (profile.used_requests || 0))} requests remaining
+                          </span>
+                          <span>
+                            {Math.min(
+                              100,
+                              Math.round(((profile.used_requests || 0) / (profile.max_requests || 100)) * 100)
+                            )}%
+                          </span>
+                        </p>
+                      </div>
+                    ) : profile.limit_type === 'modules' ? (
+                      <div className="space-y-1.5">
+                        <div className="w-full h-2 rounded-full bg-stone-200 overflow-hidden">
+                          <div
+                            className="h-full bg-sky-600 rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                Math.round(((profile.used_modules || 0) / (profile.max_modules || 5)) * 100)
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-[#78716C] flex items-center justify-between">
+                          <span>
+                            {Math.max(0, (profile.max_modules || 5) - (profile.used_modules || 0))} modules remaining
+                          </span>
+                          <span>
+                            {Math.min(
+                              100,
+                              Math.round(((profile.used_modules || 0) / (profile.max_modules || 5)) * 100)
+                            )}%
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#57534E] leading-relaxed">
+                        Your account enjoys full unrestricted access to all chapters, exercise solvers, and spoken voice lessons.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* AI Video Avatar Permission */}
+                  <div className="p-4 rounded-2xl bg-[#F5F2EB]/60 border border-[var(--border-subtle)] space-y-2 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-[#57534E]">
+                          AI Video Avatar Permission
+                        </span>
+                        {profile.is_avatar_enabled !== false ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <Video className="w-3 h-3 text-emerald-700" />
+                            <span>Active</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-200 text-stone-700 border border-stone-300">
+                            <VideoOff className="w-3 h-3 text-stone-600" />
+                            <span>Audio Only</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#57534E] leading-relaxed">
+                        {profile.is_avatar_enabled !== false
+                          ? 'Your account is authorized to stream real-time facial animation and expressions via Simli WebRTC.'
+                          : 'Your account is currently set to audio-only mode by administrator. Chalkboard notes and voice continue without video avatar.'}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-[#A8A29E] font-mono">
+                      Managed by Platform Administrator
+                    </span>
+                  </div>
+                </div>
+              </div>
 
               {/* Personal Details Form */}
               <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[var(--border-subtle)] shadow-xs space-y-4">

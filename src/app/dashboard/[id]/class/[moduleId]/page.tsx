@@ -46,6 +46,7 @@ import {
   Layers,
   Check,
   RotateCcw,
+  AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/utils/supabase/client'
@@ -281,6 +282,24 @@ export default function ModuleClassroomPage() {
     }
   }, [])
 
+  // User Quota & Avatar configuration
+  const [isAvatarEnabled, setIsAvatarEnabled] = useState<boolean>(true)
+  const [userQuota, setUserQuota] = useState<{
+    limit_type: 'requests' | 'modules' | 'unlimited'
+    max_requests: number
+    used_requests: number
+    max_modules: number
+    used_modules: number
+  }>({
+    limit_type: 'unlimited',
+    max_requests: 100,
+    used_requests: 0,
+    max_modules: 5,
+    used_modules: 0,
+  })
+  const [quotaExceededModalOpen, setQuotaExceededModalOpen] = useState(false)
+  const [quotaExceededMessage, setQuotaExceededMessage] = useState('')
+
   // Google Gemini 3.8 Live Avatar configuration state
   const [avatarConfig, setAvatarConfig] = useState<LiveAvatarConfig | null>(null)
   const simliControllerRef = useRef<SimliAvatarController | null>(null)
@@ -348,8 +367,45 @@ export default function ModuleClassroomPage() {
   // Mafs.dev high-precision dynamic mathematical & scientific graph state
   const [activeGraph, setActiveGraph] = useState<MafsGraphCanvasProps | null>(null)
 
-  const handleStudentSubmitAnswer = (answer: string) => {
+  // Check and increment request quota
+  const checkAndRecordRequestQuota = useCallback(async (): Promise<boolean> => {
+    if (userQuota.limit_type !== 'requests') return true
+    if (userQuota.used_requests >= userQuota.max_requests) {
+      setQuotaExceededMessage(
+        `Request Limit Reached: You have reached the maximum allowance of ${userQuota.max_requests} AI interactions for this account. Please contact your administrator to add more requests.`
+      )
+      setQuotaExceededModalOpen(true)
+      return false
+    }
+
+    try {
+      const res = await fetch('/api/user/quota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'record_request' }),
+      })
+      const data = await res.json()
+      if (data?.allowed === false) {
+        setQuotaExceededMessage(
+          `Request Limit Reached: You have reached the maximum allowance of ${data.max_requests} AI interactions for this account. Please contact your administrator to add more requests.`
+        )
+        setQuotaExceededModalOpen(true)
+        return false
+      }
+      if (typeof data?.used_requests === 'number') {
+        setUserQuota((prev) => ({ ...prev, used_requests: data.used_requests }))
+      }
+      return true
+    } catch {
+      return true
+    }
+  }, [userQuota])
+
+  const handleStudentSubmitAnswer = async (answer: string) => {
     if (!answer?.trim()) return
+    const allowed = await checkAndRecordRequestQuota()
+    if (!allowed) return
+
     const cleanAnswer = answer.trim()
 
     // If student was reviewing verdict and sends a follow-up ("yes", "understood", "clear", "next"), unblock transition
@@ -371,8 +427,11 @@ export default function ModuleClassroomPage() {
     )
   }
 
-  const handleStudentVoiceAnswer = (answer: string) => {
+  const handleStudentVoiceAnswer = async (answer: string) => {
     if (!answer?.trim()) return
+    const allowed = await checkAndRecordRequestQuota()
+    if (!allowed) return
+
     const cleanAnswer = answer.trim()
 
     // If student was reviewing verdict and says "understood", "yes", "clear", "next", unblock transition
@@ -526,11 +585,11 @@ export default function ModuleClassroomPage() {
           return
         }
 
-        // Fetch student profile class_level, voice preference, name, language & medium
+        // Fetch student profile class_level, voice preference, name, language & medium, and quota settings
         let profile: any = null
         const { data: profData, error: profErr } = await supabase
           .from('profiles')
-          .select('class_level, target_board, preferred_teacher_voice, full_name, preferred_language, study_medium, learning_pace, learning_style, career_aspiration, favorite_subject, strong_subjects, weak_subjects')
+          .select('class_level, target_board, preferred_teacher_voice, full_name, preferred_language, study_medium, learning_pace, learning_style, career_aspiration, favorite_subject, strong_subjects, weak_subjects, is_avatar_enabled, limit_type, max_requests, used_requests, max_modules, used_modules')
           .eq('id', userId)
           .single()
 
@@ -543,7 +602,7 @@ export default function ModuleClassroomPage() {
           // Graceful fallback if study_medium column has not yet been applied on remote DB
           const { data: fallbackProf } = await supabase
             .from('profiles')
-            .select('class_level, target_board, preferred_teacher_voice, full_name, preferred_language, learning_pace, learning_style, career_aspiration, favorite_subject, strong_subjects, weak_subjects')
+            .select('class_level, target_board, preferred_teacher_voice, full_name, preferred_language, learning_pace, learning_style, career_aspiration, favorite_subject, strong_subjects, weak_subjects, is_avatar_enabled, limit_type, max_requests, used_requests, max_modules, used_modules')
             .eq('id', userId)
             .single()
           profile = fallbackProf
@@ -560,6 +619,41 @@ export default function ModuleClassroomPage() {
         if (profile?.favorite_subject) setStudentFavoriteSubject(profile.favorite_subject)
         if (Array.isArray(profile?.strong_subjects)) setStudentStrongSubjects(profile.strong_subjects)
         if (Array.isArray(profile?.weak_subjects)) setStudentWeakSubjects(profile.weak_subjects)
+
+        if (typeof profile?.is_avatar_enabled === 'boolean') {
+          setIsAvatarEnabled(profile.is_avatar_enabled)
+        }
+        if (profile?.limit_type) {
+          setUserQuota({
+            limit_type: profile.limit_type || 'unlimited',
+            max_requests: profile.max_requests || 100,
+            used_requests: profile.used_requests || 0,
+            max_modules: profile.max_modules || 5,
+            used_modules: profile.used_modules || 0,
+          })
+        }
+
+        // Module Quota Guard: Enforce limit if student is under 'modules' policy
+        if (profile?.limit_type === 'modules') {
+          try {
+            const quotaCheckRes = await fetch('/api/user/quota', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'record_module', moduleId }),
+            })
+            const quotaData = await quotaCheckRes.json()
+            if (quotaData?.allowed === false) {
+              setQuotaExceededMessage(
+                `Module Limit Reached: Your current plan allows access to ${quotaData.max_modules} topic capsules. You have already completed/accessed ${quotaData.used_modules} modules. Please contact your administrator to unlock additional modules.`
+              )
+              setQuotaExceededModalOpen(true)
+            } else if (quotaData?.used_modules) {
+              setUserQuota((prev) => ({ ...prev, used_modules: quotaData.used_modules }))
+            }
+          } catch (e) {
+            console.warn('[Classroom] Failed to check module quota:', e)
+          }
+        }
 
         let foundName = ''
         if (profile?.full_name?.trim()) {
@@ -2287,6 +2381,7 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             onCustomAvatarChange={handleCustomAvatarChange}
             onSimliControllerReady={handleSimliControllerReady}
             onSimliActiveChange={handleSimliActiveChange}
+            isAvatarEnabled={isAvatarEnabled}
           />
 
           {/* Call Controls or Start Call Bar */}
@@ -2689,6 +2784,44 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
 
       {/* Error Modal */}
       {errorMessage && <ErrorModal message={errorMessage} onRetry={resetToIdle} />}
+
+      {/* Quota Exceeded Blocking Modal */}
+      {quotaExceededModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-stone-200 space-y-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600">
+              <AlertCircle className="w-7 h-7" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl font-serif font-bold text-[#2D2A26]">
+                Classroom Quota Limit Reached
+              </h3>
+              <p className="text-xs sm:text-sm text-[#57534E] leading-relaxed">
+                {quotaExceededMessage || 'You have reached the interaction or module limit assigned to your student account.'}
+              </p>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+              <Button
+                type="button"
+                onClick={() => router.push(`/dashboard/${userId}`)}
+                className="flex-1 bg-[#255D88] hover:bg-[#1D4A6E] text-white rounded-xl py-2.5 text-xs font-semibold cursor-pointer"
+              >
+                Return to Dashboard
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setQuotaExceededModalOpen(false)}
+                className="border-stone-300 text-stone-700 hover:bg-stone-50 rounded-xl py-2.5 text-xs font-semibold cursor-pointer"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

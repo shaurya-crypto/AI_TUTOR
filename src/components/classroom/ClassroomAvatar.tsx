@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ConnectionState, TranscriptItem } from '@/types/liveSession'
-import { Sparkles, Settings } from 'lucide-react'
+import { Sparkles, Settings, Volume2, Video, VideoOff } from 'lucide-react'
 import { LiveAvatarConfig } from '@/services/geminiWebSocket'
 import { SimliAvatarController, SimliStatus } from '@/services/simliAvatarService'
 
@@ -22,6 +22,7 @@ interface ClassroomAvatarProps {
   onSimliControllerReady?: (controller: SimliAvatarController | null) => void
   onSimliActiveChange?: (isActive: boolean) => void
   preferredProvider?: AvatarProvider
+  isAvatarEnabled?: boolean
 }
 
 export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
@@ -32,6 +33,7 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
   latestTranscript,
   onSimliControllerReady,
   onSimliActiveChange,
+  isAvatarEnabled = true,
 }) => {
   const params = useParams()
   const studentId = (params?.id as string) || ''
@@ -113,7 +115,7 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
   useEffect(() => {
     if (!isMounted) return
 
-    if (!isCallActive) {
+    if (!isAvatarEnabled || !isCallActive) {
       simliControllerRef.current?.stop()
       return
     }
@@ -128,7 +130,7 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
       audioElement: simliAudioRef.current,
       faceId: selectedFaceId,
     })
-  }, [isMounted, isCallActive, selectedFaceId])
+  }, [isMounted, isCallActive, isAvatarEnabled, selectedFaceId])
 
   // Audio-reactive visual dynamics for ambient stage
   const reactiveScale = isSpeaking ? 1 + teacherVolume * 0.04 : isUserTalking ? 1 + userVolume * 0.03 : 1
@@ -179,6 +181,17 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
 
         {/* Settings Link */}
         <div className="flex items-center gap-1.5">
+          {isAvatarEnabled ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>{isSimliActive ? 'Live Avatar Active' : 'Avatar Ready'}</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+              <Volume2 className="w-3 h-3 text-stone-500" />
+              <span>Audio Only</span>
+            </span>
+          )}
           {studentId && (
             <Link
               href={`/dashboard/${studentId}/settings?tab=avatars`}
@@ -228,7 +241,9 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
             transform: `scale(${reactiveScale}) translateY(${breathingOffset}px)`,
           }}
         >
-          {/* Primary: Video element for Simli Live WebRTC Avatar */}
+          {isAvatarEnabled ? (
+            <>
+              {/* Primary: Video element for Simli Live WebRTC Avatar */}
           <video
             ref={simliVideoRef}
             autoPlay
@@ -262,6 +277,16 @@ export const ClassroomAvatar: React.FC<ClassroomAvatarProps> = ({
 
             {/* ZERO TEXT ON AVATAR: As per user instruction, no badges or labels are overlaid on the portrait */}
           </div>
+        </>
+      ) : (
+        <div className="absolute inset-0 w-full h-full rounded-full flex flex-col items-center justify-center bg-stone-100 text-[#78716C] p-3 text-center">
+          <div className="w-12 h-12 rounded-full bg-stone-200/80 flex items-center justify-center mb-1.5 shadow-inner">
+            <Volume2 className="w-6 h-6 text-[#57534E]" />
+          </div>
+          <span className="text-[11px] font-semibold text-[#2D2A26]">Audio Classroom</span>
+          <span className="text-[9px] text-[#A8A29E] mt-0.5">Avatar Disabled</span>
+        </div>
+      )}
         </div>
       </div>
 
