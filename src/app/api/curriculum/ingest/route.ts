@@ -709,7 +709,8 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
       }
       noteContents.push(synthesisPrompt)
 
-      const { text: rawResponseText } = await resilientGenerateContent(ai, {
+      const startTime = Date.now()
+    const { text: rawResponseText, modelUsed } = await resilientGenerateContent(ai, {
         contents: noteContents,
         config: {
           responseMimeType: 'application/json',
@@ -928,7 +929,7 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
 
     const isMathCategory = category?.toLowerCase().includes('math')
     const prompt = `You are a Principal Curriculum Architect and Academic Subject Expert for ${board}.
-Your task is to analyze the provided syllabus (document or text), identify the official curriculum chapters, and decompose EACH chapter into optimal, fully-detailed 15-minute teachable units called "Topic Capsules".
+Your task is to analyze the provided syllabus (document or text), identify all official curriculum chapters, and decompose EACH chapter into optimal, highly focused 15-minute teachable units called "Topic Capsules".
 
 TARGET ACADEMIC CONTEXT:
 - Educational Board: "${board}" (${boardDescription})
@@ -944,61 +945,23 @@ ${rawSyllabusText}
     : `Analyze the attached syllabus document to extract all chapters and topic contents aligned with ${board} standards.`
 }
 
-REQUIREMENTS FOR ULTRA-DETAILED CURRICULUM DECOMPOSITION:
-1. Decompose the syllabus into distinct, sequentially ordered Chapters conforming strictly to ${board} official textbooks.
+CURRICULUM DECOMPOSITION REQUIREMENTS:
+1. Identify all sequential Chapters conforming strictly to official ${board} textbooks.
    - Chapter order_index: (1, 2, 3...)
    - Chapter title: Official, complete chapter name (e.g., "Chapter 1: Number System", "Chapter 2: Polynomials")
    - Chapter difficulty_level: "beginner" | "intermediate" | "advanced"
-2. For EACH Chapter, break it down comprehensively into 4 to 8 granular, ultra-detailed 15-minute teachable units called "Topic Capsules" (modules).
-   - STRICT CAPSULE GRANULARITY: Never compress an entire chapter into 1 or 2 capsules! Each major law, theorem group, or syllabus unit MUST be its own dedicated capsule.
-   - Standard chapter: 4 to 6 granular capsules.
-   - Deep/Dense chapter: 6 to 8 granular capsules.
-
-${isMathCategory ? `
-SPECIAL MATHEMATICS PROTOCOL (CLASSES 6-12) - GAUTH-LEVEL RIGOR & ZERO OMISSION:
-1. MANDATORY MATHEMATICS DECOMPOSITION:
-   - For any Mathematics chapter (e.g. Number System, Polynomials, Coordinate Geometry, Triangles, Linear Equations, Real Numbers, Quadratic Equations, Trigonometry):
-     You MUST generate between 4 and 7 granular, deep Topic Capsules (NEVER 1 or 2).
-   - Example breakdown for Class 9 "Chapter 1: Number System":
-     * Capsule 1: Natural, Whole, Integers, Rational Numbers & Decimal Expansions (Terminating vs Non-Terminating Recurring)
-     * Capsule 2: Irrational Numbers, Density Property, and Contradiction Proofs of Irrationality (√2, √3)
-     * Capsule 3: Real Numbers on the Number Line, Successive Magnification & Square Root Spiral Construction (Theodorus)
-     * Capsule 4: Operations on Real Numbers, Radical Algebraic Identities & Rationalising the Denominator
-     * Capsule 5: Laws of Exponents for Real Numbers (Negative & Fractional Indices, Exponential Simplification)
-     * Capsule 6: Board Exam HOTS, Competency Numericals & Applied Problem Sets
-2. MULTIPLE HIGH-QUALITY DIAGRAMS PER CAPSULE (MANDATORY):
-   - Provide the primary capsule diagram in "diagram_svg", "what_to_make", and "visual_ideas".
-   - PLUS in "concept_visuals", provide 2 to 4 DISTINCT visual diagrams tailored specifically to EACH key concept with production-ready vector SVG markup:
-     * Square Root Spiral of Theodorus with origin O(0,0), unit steps, hypotenuses, right-angle markers, colored radical labels.
-     * Horizontal number lines with interval subdivisions and zoom callouts showing density of rational fractions.
-     * Real numbers classification Euler/Venn diagram (N ⊂ W ⊂ Z ⊂ Q ⊂ R).
-     * Geometric representation of √x with diameter (x+1), perpendicular chord of length √x, and radius arc.
-3. GAUTH-STYLE STEP-BY-STEP WORKED NUMERICALS:
-   - For every capsule, provide 2 to 4 fully solved textbook/board problems in "worked_examples":
-     * Given, Formula / Identity, Substitution, Complete line-by-line scratchpad calculation, Boxed final answer.
-4. TEXTBOOK EXERCISE CATALOGING:
-   - In "textbook_exercises", list the authentic exercises (e.g. Exercise 1.1, Exercise 1.2, Exercise 1.3) with question numbers (Q1, Q2, Q3...), problem text, and step-by-step solving methods.
-` : ''}
-
-3. For EACH Topic Capsule, provide exhaustive, topper-ready depth:
-   - order_index: Sequential number within the chapter (1, 2, 3...)
-   - title: Specific, precise topic name
-   - description: 1-sentence learning objective of the capsule
-   - subtopics: Array of 4-6 specific examination subtopics aligned with ${board} board exam question papers
-   - key_concepts: Array of 4-6 core mathematical formulas, principles, definitions with SI units, or scientific laws
-   - success_criteria: A verifiable test problem or numerical the student must solve to demonstrate board mastery
-   - chapter_notes: Structured conceptual summary notes (150-300 words) covering key definitions, formulas, and essential properties
-   - chapter_flowchart: Multi-level hierarchical flowchart or branch tree ("Root -> Branch A | Branch B; Branch A -> Sub 1 | Sub 2")
-   - textbook_definitions: Array of verbatim textbook definitions with formal laws and SI units
-   - textbook_examples: Array of concrete illustrative real-life examples from the syllabus
-   - textbook_exercises: Array of authentic textbook exercises and question breakdowns with solving methods
-   - worked_examples: Array of 2 to 4 fully solved textbook & board numerical exemplars (especially for Maths) with Given, Formula, Substitution, Line-by-line scratchpad calculations, and Boxed answer
-   - ai_system_prompt_context: Concise pedagogical teaching context, whiteboard layout, and Socratic voice-teaching cues for the AI tutor (2-4 sentences).
-   - visual_ideas: Focused visual description of the core concept.
-   - diagram_type: The exact diagram type (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)
-   - what_to_make: Detailed blueprint of components, geometric shapes, coordinate axes, labeled arrows, numerical values, and pedagogical highlights to draw.
-   - diagram_svg: Complete, production-ready, clean vector SVG markup (<svg viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" xmlns="http://www.w3.org/2000/svg">...</svg>)
-   - concept_visuals: Array of 2 to 3 distinct visual diagram blueprints for key concepts in the capsule with clean, valid vector SVG markup (<svg viewBox="0 0 540 280" ...>...</svg>)!
+   - Chapter description: Concise 1-2 sentence overview of what the chapter covers.
+2. For EACH Chapter, break it down comprehensively into 4 to 6 granular 15-minute Topic Capsules (modules).
+   - Each capsule must represent a distinct, teachable concept block.
+   - order_index: Sequential number within chapter (1, 2, 3...)
+   - title: Specific topic name (e.g., "Irrational Numbers & Proofs of Irrationality")
+   - description: 1-sentence learning objective
+   - subtopics: Array of 3 to 5 core examination subtopics aligned with ${board} board exams
+   - key_concepts: Array of 3 to 5 core formulas, principles, definitions, or laws
+   - success_criteria: A specific test question or problem type the student should be able to solve
+   - diagram_type: The most appropriate diagram type (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics)
+   - what_to_make: Blueprint description of the key visual or diagram to draw on the chalkboard
+   - visual_ideas: Real-life physical intuition or visual analogy for the AI tutor
 
 OUTPUT FORMAT:
 Respond with ONLY a valid JSON object matching this schema (do NOT include conversational prose outside the JSON):
@@ -1006,73 +969,22 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
   "curriculums": [
     {
       "order_index": 1,
-      "title": "string (Chapter title)",
+      "title": "Chapter 1: ...",
       "board": "${board}",
       "category": "${category}",
-      "description": "string",
-      "difficulty_level": "beginner" | "intermediate" | "advanced",
+      "description": "...",
+      "difficulty_level": "beginner",
       "modules": [
         {
           "order_index": 1,
-          "title": "string",
-          "description": "string",
-          "subtopics": ["string"],
-          "key_concepts": ["string"],
-          "success_criteria": "string",
-          "chapter_notes": "string",
-          "chapter_flowchart": "string (Root -> Branch A | Branch B)",
-          "textbook_definitions": [
-            {
-              "concept": "string",
-              "definition": "string",
-              "si_units": "string"
-            }
-          ],
-          "textbook_examples": [
-            {
-              "title": "string",
-              "scenario": "string"
-            }
-          ],
-          "textbook_exercises": [
-            {
-              "exercise_number": "string (e.g. Exercise 1.1)",
-              "questions": [
-                {
-                  "q_num": "string (e.g. Q1)",
-                  "question": "string",
-                  "question_type": "string (conceptual | numerical | proof | construction)",
-                  "solution_method": "string (step-by-step solving approach like Gauth)"
-                }
-              ]
-            }
-          ],
-          "worked_examples": [
-            {
-              "problem": "string",
-              "given": "string",
-              "formula": "string",
-              "substitution": "string",
-              "calculation": "string",
-              "finalAnswer": "string",
-              "unit": "string"
-            }
-          ],
-          "ai_system_prompt_context": "string",
-          "visual_ideas": "string (visual and image generation idea)",
-          "diagram_type": "string (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)",
-          "what_to_make": "string (detailed breakdown of what to make and draw in this diagram)",
-          "diagram_svg": "string (<svg viewBox='0 0 540 280' ...>...</svg>)",
-          "concept_visuals": [
-            {
-              "concept_title": "string",
-              "diagram_title": "string",
-              "diagram_type": "string",
-              "what_to_make": "string",
-              "diagram_svg": "string (<svg viewBox='0 0 540 280' ...>...</svg>)",
-              "timing_and_cue": "string"
-            }
-          ]
+          "title": "Topic name",
+          "description": "Learning objective",
+          "subtopics": ["Subtopic 1", "Subtopic 2"],
+          "key_concepts": ["Formula/Law 1", "Definition 2"],
+          "success_criteria": "Student can solve...",
+          "diagram_type": "vector_svg_diagram",
+          "what_to_make": "Description of chalkboard drawing",
+          "visual_ideas": "Visual hook idea"
         }
       ]
     }

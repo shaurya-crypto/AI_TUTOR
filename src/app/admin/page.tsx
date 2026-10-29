@@ -283,6 +283,9 @@ export default function AdminPortalPage() {
   // AI Pipeline General State
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisStep, setAnalysisStep] = useState<string>('')
+  const [analysisTimer, setAnalysisTimer] = useState<number>(0)
+  const [activeAnalysisModel, setActiveAnalysisModel] = useState<string>('gemini-2.5-flash')
+  const [analysisLogs, setAnalysisLogs] = useState<Array<{ time: string; text: string; type: 'info' | 'model' | 'success' | 'warn' }>>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
@@ -580,23 +583,13 @@ export default function AdminPortalPage() {
   }
 
   // Handle Syllabus Analyze & Preview
-  const handleAnalyze = async (e?: React.FormEvent, executionMode: 'preview' | 'commit' = 'preview') => {
+  const handleAnalyze = async (
+    e?: React.FormEvent,
+    executionMode: 'preview' | 'commit' = 'preview'
+  ) => {
     if (e) e.preventDefault()
     setErrorMsg(null)
     setSuccessMsg(null)
-
-    if (!selectedBoard) {
-      setErrorMsg('Please select an Educational Board (CBSE, ICSE, or IB).')
-      return
-    }
-    if (!selectedClass) {
-      setErrorMsg('Please specify the Target Class Level.')
-      return
-    }
-    if (!selectedSubject) {
-      setErrorMsg('Please specify the Subject or Discipline.')
-      return
-    }
 
     if (inputTab === 'pdf' && !selectedFile) {
       setErrorMsg('Please upload a syllabus PDF or document.')
@@ -608,6 +601,21 @@ export default function AdminPortalPage() {
     }
 
     setIsAnalyzing(true)
+    setAnalysisTimer(0)
+    setActiveAnalysisModel('gemini-2.5-flash')
+    const startSec = Date.now()
+
+    const addLog = (text: string, type: 'info' | 'model' | 'success' | 'warn' = 'info') => {
+      const elapsed = ((Date.now() - startSec) / 1000).toFixed(1)
+      setAnalysisLogs((prev) => [...prev, { time: `${elapsed}s`, text, type }])
+    }
+
+    setAnalysisLogs([
+      { time: '0.0s', text: `Session initialized for ${selectedBoard} ${selectedClass} ${selectedSubject}`, type: 'info' },
+      { time: '0.2s', text: `Payload prepared: ${inputTab === 'pdf' ? `Document "${selectedFile?.name}" (${Math.round((selectedFile?.size || 0)/1024)} KB)` : `Raw text outline (${rawText.length} chars)`}`, type: 'info' },
+      { time: '0.4s', text: 'Primary model connected: gemini-2.5-flash (Cascade: gemini-3.8-flash, gemini-3-flash-preview)', type: 'model' },
+    ])
+
     const stages = [
       `Connecting to AI engine for ${selectedBoard} ${selectedClass} ${selectedSubject}...`,
       'Decomposing curriculum into 15-minute bite-sized capsules...',
@@ -617,10 +625,22 @@ export default function AdminPortalPage() {
     ]
     let stageIdx = 0
     setAnalysisStep(stages[0])
+
     const ticker = setInterval(() => {
       stageIdx = (stageIdx + 1) % stages.length
       setAnalysisStep(stages[stageIdx])
-    }, 3500)
+    }, 3000)
+
+    const timerInterval = setInterval(() => {
+      setAnalysisTimer((t) => t + 1)
+    }, 1000)
+
+    const stageTimers: NodeJS.Timeout[] = [
+      setTimeout(() => addLog('Analyzing document framework & extracting official board chapter units...', 'model'), 2000),
+      setTimeout(() => addLog('Structuring chapters into 15-minute teachable Topic Capsules with Socratic cadence...', 'model'), 4500),
+      setTimeout(() => addLog('Extracting key formulas, examination subtopics, and whiteboard diagram blueprints...', 'model'), 7500),
+      setTimeout(() => addLog('Synthesizing structured JSON payload & validating schema compliance...', 'info'), 11000),
+    ]
 
     try {
       const formData = new FormData()
@@ -644,16 +664,26 @@ export default function AdminPortalPage() {
       const json = await res.json()
 
       if (!res.ok || !json.success) {
+        addLog(`Error: ${json.error || 'Failed to analyze syllabus.'}`, 'warn')
         throw new Error(json.error || 'Failed to analyze syllabus.')
       }
 
+      if (json.modelUsed) {
+        setActiveAnalysisModel(json.modelUsed)
+      }
+
+      const durationStr = ((json.generationTimeMs || (Date.now() - startSec)) / 1000).toFixed(1)
+      addLog(`Generation completed via ${json.modelUsed || 'gemini-2.5-flash'} in ${durationStr}s`, 'success')
+
       if (executionMode === 'commit') {
+        addLog(`Auto-Seeded ${json.insertedCurriculumsCount} chapters and ${json.insertedModulesCount} capsules directly into database!`, 'success')
         setSuccessMsg(
           `Auto-Seeded ${json.insertedCurriculumsCount} chapters and ${json.insertedModulesCount} capsules directly into database for ${json.board} ${json.classLevel}!`
         )
         setPreviewData(null)
         await fetchCurriculumsLibrary()
       } else {
+        addLog(`Extracted ${json.curriculumsCount} chapters and ${json.totalCapsulesCount} teachable capsules for review!`, 'success')
         setPreviewData({
           board: json.board,
           classLevel: json.classLevel,
@@ -669,6 +699,8 @@ export default function AdminPortalPage() {
       setErrorMsg(err?.message || 'Error occurred while communicating with Gemini API.')
     } finally {
       clearInterval(ticker)
+      clearInterval(timerInterval)
+      stageTimers.forEach(clearTimeout)
       setIsAnalyzing(false)
       setAnalysisStep('')
     }
@@ -2214,6 +2246,73 @@ export default function AdminPortalPage() {
                   )}
                 </Button>
               </div>
+
+              {/* LIVE MODEL ACTIVITY & THINKING STREAM CONSOLE */}
+              {(isAnalyzing || analysisLogs.length > 0) && (
+                <div className="mt-5 p-4 rounded-2xl bg-[#060c07] border border-emerald-900/80 shadow-2xl space-y-3 font-mono text-xs animate-in fade-in">
+                  <div className="flex items-center justify-between border-b border-emerald-900/50 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2 w-2">
+                        {isAnalyzing && (
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full h-2 w-2 ${isAnalyzing ? 'bg-emerald-500' : 'bg-emerald-400'}`}></span>
+                      </span>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                        Live Model Activity &amp; Thinking Stream
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-700/60 text-[10px] font-semibold text-emerald-400">
+                        {activeAnalysisModel}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] text-slate-300">
+                        {Math.floor(analysisTimer / 60).toString().padStart(2, '0')}:{(analysisTimer % 60).toString().padStart(2, '0')}s
+                      </span>
+                      {!isAnalyzing && analysisLogs.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setAnalysisLogs([])}
+                          className="text-[10px] text-emerald-600 hover:text-emerald-400 underline ml-1 cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-emerald-900 scrollbar-track-transparent">
+                    {analysisLogs.map((log, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5 text-[11px] leading-relaxed">
+                        <span className="text-emerald-700 font-mono flex-shrink-0 select-none">
+                          [{log.time}]
+                        </span>
+                        <span
+                          className={
+                            log.type === 'model'
+                              ? 'text-cyan-300'
+                              : log.type === 'success'
+                              ? 'text-emerald-300 font-semibold'
+                              : log.type === 'warn'
+                              ? 'text-amber-300 font-medium'
+                              : 'text-slate-300'
+                          }
+                        >
+                          {log.text}
+                        </span>
+                      </div>
+                    ))}
+
+                    {isAnalyzing && (
+                      <div className="flex items-center gap-2 text-emerald-400/90 text-[11px] pt-1">
+                        <span className="w-1.5 h-3 bg-emerald-400 animate-pulse"></span>
+                        <span className="italic">{analysisStep || 'Model reasoning and generating structured curriculum...'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </form>
           </section>
         )}

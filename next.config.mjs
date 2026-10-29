@@ -16,6 +16,7 @@ const cspHeader = `
 
 const nextConfig = {
   reactStrictMode: false, // Prevents duplicate WebSocket handshakes during local development mount cycles
+  allowedDevOrigins: ['192.168.56.1', 'localhost:3000', '127.0.0.1:3000'],
   async headers() {
     return [
       {
