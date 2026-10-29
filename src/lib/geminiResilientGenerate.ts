@@ -155,12 +155,15 @@ export async function resilientGenerateContent(
 /**
  * Bulletproof, auto-repairing JSON parser for LLM streaming & structured outputs.
  * Gracefully handles:
- * 1. Markdown code fences (```json ... ```) even if cut off before closing fence.
- * 2. Unescaped control characters in multi-line strings (new lines in SVG or notes).
- * 3. Truncated mid-string tokens (auto-detects if string is key vs value, closes/strips appropriately).
- * 4. Dangling colons, dangling keys, and trailing commas.
- * 5. Missing closing braces and brackets (stack balancing).
- * 6. Iterative backwards rollback to previous completed object boundary with sanitization.
+ * 1. Markdown code fences (```json ... ```) with leading or trailing prose.
+ * 2. Unescaped control characters in multi-line strings (new lines, tabs).
+ * 3. Unescaped LaTeX backslashes (\sqrt, \times, \delta, etc.).
+ * 4. Trailing commas inside nested objects/arrays (,\s*([\]}]) -> $1).
+ * 5. Single-line // comments inside JSON.
+ * 6. Truncated mid-string tokens (auto-detects if string is key vs value, closes/strips appropriately).
+ * 7. Dangling colons, dangling keys, and trailing commas.
+ * 8. Missing closing braces and brackets (stack balancing).
+ * 9. Iterative backwards rollback to previous completed object boundary with full sanitization.
  */
 export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
   if (!raw || typeof raw !== 'string') {
@@ -169,14 +172,16 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
 
   let cleaned = raw.trim()
 
-  // 1. Strip markdown code fences if present (even if unclosed due to truncation)
-  const fenceMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)(?:```)?$/i)
-  if (fenceMatch && fenceMatch[1]) {
-    cleaned = fenceMatch[1].trim()
+  // 1. Strip markdown code fences if present (captures json inside ```json ... ``` even with prose before/after)
+  const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)(?:```|$)/i
+  const match = cleaned.match(codeBlockRegex)
+  if (match && match[1]) {
+    cleaned = match[1].trim()
   } else {
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
   }
 
+  // Find start of JSON structure
   const firstBrace = cleaned.indexOf('{')
   const firstBracket = cleaned.indexOf('[')
   let startIdx = 0
@@ -198,9 +203,16 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
   let escaped = false
   const stack: string[] = []
   let stringIsKey = false
+  let rootOpened = false
+  let rootClosed = false
 
   for (let i = 0; i < cleaned.length; i++) {
     const char = cleaned[i]
+
+    // If root object/array already opened and closed, ignore any trailing prose outside the JSON
+    if (rootClosed && !inString && stack.length === 0) {
+      break
+    }
 
     if (inString) {
       if (escaped) {
@@ -212,6 +224,7 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
           result += '\\\\'
           escaped = false
         } else if (!/["\\/bfnrtu]/.test(nextChar)) {
+          // Fix LaTeX or unrecognized escapes like \sqrt, \times, \delta, etc.
           result += '\\\\'
         } else {
           result += '\\'
@@ -231,6 +244,17 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
         result += codeNum < 32 ? ' ' : char
       }
     } else {
+      // Strip single-line comments // ...
+      if (char === '/' && cleaned[i + 1] === '/') {
+        const nextNewline = cleaned.indexOf('\n', i)
+        if (nextNewline !== -1) {
+          i = nextNewline
+          continue
+        } else {
+          break
+        }
+      }
+
       if (char === '"') {
         inString = true
         const lastNonWs = result.trim().slice(-1)
@@ -239,13 +263,20 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
         result += '"'
       } else if (char === '{' || char === '[') {
         stack.push(char)
+        rootOpened = true
         result += char
       } else if (char === '}') {
         if (stack.length > 0 && stack[stack.length - 1] === '{') stack.pop()
         result += char
+        if (rootOpened && stack.length === 0) {
+          rootClosed = true
+        }
       } else if (char === ']') {
         if (stack.length > 0 && stack[stack.length - 1] === '[') stack.pop()
         result += char
+        if (rootOpened && stack.length === 0) {
+          rootClosed = true
+        }
       } else {
         result += char
       }
@@ -255,11 +286,9 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
   // Handle truncation at end of input
   if (inString) {
     if (stringIsKey) {
-      // The key was cut off mid-word: strip the opening quote and dangling comma/space
       result = result.trim()
       result = result.replace(/(?:,\s*)?"[^"]*$/, '')
     } else {
-      // It's a string value or array element: close the quote properly
       if (escaped) {
         result += '\\"'
       } else {
@@ -268,11 +297,10 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
     }
   }
 
-  // Clean trailing incomplete constructs:
+  // Clean trailing incomplete constructs & trailing commas
   result = result.trim()
-  // 1. Dangling key with colon: e.g., "key": or , "key": -> remove it
   result = result.replace(/(?:,\s*)?"[^"]*"\s*:\s*$/, '')
-  // 2. Trailing comma before closing braces/brackets
+  result = result.replace(/,\s*([\]}])/g, '$1')
   result = result.replace(/,\s*$/, '')
 
   // Balance open braces/brackets
@@ -284,6 +312,9 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
     balancedResult += openDelim === '{' ? '}' : ']'
   }
 
+  // Clean any trailing commas before newly added closing brackets
+  balancedResult = balancedResult.replace(/,\s*([\]}])/g, '$1')
+
   try {
     return JSON.parse(balancedResult)
   } catch (secondErr) {
@@ -292,7 +323,7 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
 
   // 3. Iterative rollback: search backwards for previous completed object/array boundaries with sanitization
   let searchPos = cleaned.length - 1
-  for (let step = 0; step < 15; step++) {
+  for (let step = 0; step < 50; step++) {
     const lastCloseObj = cleaned.lastIndexOf('}', searchPos)
     const lastCloseArr = cleaned.lastIndexOf(']', searchPos)
     const boundary = Math.max(lastCloseObj, lastCloseArr)
@@ -348,11 +379,15 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
     }
 
     candResult = candResult.trim().replace(/,\s*$/, '')
+    candResult = candResult.replace(/,\s*([\]}])/g, '$1')
+
     while (candStack.length > 0) {
       const open = candStack.pop()
       candResult = candResult.trim().replace(/,\s*$/, '')
       candResult += open === '{' ? '}' : ']'
     }
+
+    candResult = candResult.replace(/,\s*([\]}])/g, '$1')
 
     try {
       return JSON.parse(candResult)
