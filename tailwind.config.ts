@@ -59,6 +59,12 @@ const config = {
         "canvas-base": "var(--canvas-base, #FAF8F4)",
         "canvas-surface": "var(--canvas-surface, #FFFFFF)",
         "canvas-soft": "var(--canvas-soft, #F4F1EA)",
+        surface: "var(--canvas-surface, #FFFFFF)",
+        "surface-container-lowest": "#FFFFFF",
+        "surface-container-low": "#F5F3F1",
+        "surface-container": "#EFEEEB",
+        "surface-container-high": "#E9E8E6",
+        "surface-container-highest": "#E4E2E0",
         "border-subtle": "var(--border-subtle, #E6E3DB)",
         "border-strong": "var(--border-strong, #D6D2C6)",
 

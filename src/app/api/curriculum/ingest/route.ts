@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { isRequestAuthorizedAdmin } from '@/lib/adminAuth'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
-import { resilientGenerateContent } from '@/lib/geminiResilientGenerate'
+import { resilientGenerateContent, resilientJsonParse } from '@/lib/geminiResilientGenerate'
 import { generateVisualLessonPlanForCapsule } from '@/services/visualLessonPlanGenerator'
 
 interface WorkedExample {
@@ -93,154 +93,29 @@ function cleanJsonString(raw: string): string {
   return s
 }
 
-function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
-  if (!raw || typeof raw !== 'string') {
-    throw new Error(`[${label}] Empty or invalid input provided to JSON parser.`)
+function toSafeStringArray(val: any): string[] {
+  if (Array.isArray(val)) {
+    return val.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).filter(Boolean)
   }
-
-  let cleaned = raw.trim()
-
-  // 1. Strip markdown code fences if present (even if unclosed due to truncation)
-  const fenceMatch = cleaned.match(/^\`\`\`(?:json)?\s*([\s\S]*?)(?:\`\`\`)?$/i)
-  if (fenceMatch && fenceMatch[1]) {
-    cleaned = fenceMatch[1].trim()
-  } else {
-    cleaned = cleaned.replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\s*\`\`\`$/i, '')
+  if (typeof val === 'string' && val.trim().length > 0) {
+    return val.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean)
   }
+  return []
+}
 
-  const firstBrace = cleaned.indexOf('{')
-  const firstBracket = cleaned.indexOf('[')
-  let startIdx = 0
-  if (firstBrace !== -1 && firstBracket !== -1) startIdx = Math.min(firstBrace, firstBracket)
-  else if (firstBrace !== -1) startIdx = firstBrace
-  else if (firstBracket !== -1) startIdx = firstBracket
-  if (startIdx > 0) cleaned = cleaned.substring(startIdx)
-
-  // Fast path: try standard parsing first
-  try {
-    return JSON.parse(cleaned)
-  } catch (initialErr) {
-    // Proceed to character-level normalization & structural recovery
-  }
-
-  // 2. Character-by-character sanitize & balance
-  let result = ''
-  let inString = false
-  let escaped = false
-  const stack: string[] = []
-
-  for (let i = 0; i < cleaned.length; i++) {
-    const char = cleaned[i]
-
-    if (inString) {
-      if (escaped) {
-        escaped = false
-        result += char
-      } else if (char === '\\') {
-        const nextChar = cleaned[i + 1]
-        if (!nextChar || !/["\\/bfnrtu]/.test(nextChar)) {
-          result += '\\\\'
-        } else {
-          result += '\\'
-          escaped = true
-        }
-      } else if (char === '"') {
-        inString = false
-        result += '"'
-      } else if (char === '\n') {
-        result += '\\n'
-      } else if (char === '\r') {
-        if (cleaned[i + 1] !== '\n') result += '\\n'
-      } else if (char === '\t') {
-        result += '\\t'
-      } else {
-        const codeNum = char.charCodeAt(0)
-        result += codeNum < 32 ? ' ' : char
-      }
-    } else {
-      if (char === '"') {
-        inString = true
-        result += '"'
-      } else if (char === '{' || char === '[') {
-        stack.push(char)
-        result += char
-      } else if (char === '}') {
-        if (stack.length > 0 && stack[stack.length - 1] === '{') stack.pop()
-        result += char
-      } else if (char === ']') {
-        if (stack.length > 0 && stack[stack.length - 1] === '[') stack.pop()
-        result += char
-      } else {
-        result += char
-      }
-    }
-  }
-
-  if (inString) {
-    result += '"'
-  }
-
-  result = result.trim().replace(/,\s*$/, '')
-  result = result.replace(/,\s*"[^"]*"\s*:\s*$/, '')
-  result = result.replace(/\{\s*"[^"]*"\s*:\s*$/, '{')
-  result = result.replace(/\[\s*"[^"]*"\s*:\s*$/, '[')
-
-  const finalStack = [...stack]
-  let balancedResult = result
-  while (finalStack.length > 0) {
-    const openDelim = finalStack.pop()
-    balancedResult = balancedResult.trim().replace(/,\s*$/, '')
-    balancedResult += openDelim === '{' ? '}' : ']'
-  }
-
-  try {
-    return JSON.parse(balancedResult)
-  } catch (secondErr) {
-    // Proceed to iterative rollback
-  }
-
-  // 3. Iterative rollback: search backwards for previous completed object boundaries (zero recursion)
-  let searchPos = cleaned.length - 1
-  for (let step = 0; step < 10; step++) {
-    const lastCloseObj = cleaned.lastIndexOf('}', searchPos)
-    const lastCloseArr = cleaned.lastIndexOf(']', searchPos)
-    const boundary = Math.max(lastCloseObj, lastCloseArr)
-    if (boundary <= 0) break
-
-    const candidateSub = cleaned.substring(0, boundary + 1)
-    const recStack: string[] = []
-    let sInStr = false
-    let sEsc = false
-
-    for (let i = 0; i < candidateSub.length; i++) {
-      const c = candidateSub[i]
-      if (sInStr) {
-        if (sEsc) sEsc = false
-        else if (c === '\\') sEsc = true
-        else if (c === '"') sInStr = false
-      } else {
-        if (c === '"') sInStr = true
-        else if (c === '{' || c === '[') recStack.push(c)
-        else if (c === '}' && recStack[recStack.length - 1] === '{') recStack.pop()
-        else if (c === ']' && recStack[recStack.length - 1] === '[') recStack.pop()
-      }
-    }
-
-    let recovered = candidateSub.trim().replace(/,\s*$/, '')
-    while (recStack.length > 0) {
-      const open = recStack.pop()
-      recovered = recovered.trim().replace(/,\s*$/, '')
-      recovered += open === '{' ? '}' : ']'
-    }
-
+function toSafeJsonbArray(val: any): any[] {
+  if (Array.isArray(val)) return val
+  if (typeof val === 'string') {
     try {
-      return JSON.parse(recovered)
+      const parsed = JSON.parse(val)
+      if (Array.isArray(parsed)) return parsed
+      return [parsed]
     } catch {
-      searchPos = boundary - 1
+      return [{ text: val }]
     }
   }
-
-  throw new Error(`[${label}] Unable to parse JSON response.`)
+  if (val && typeof val === 'object') return [val]
+  return []
 }
 
 function buildEnhancedVisualPlanAndDirective(cap: any, visualPlan: any) {
@@ -553,7 +428,7 @@ export async function POST(req: Request) {
       const rawPreviewData = formData.get('previewData') as string | null
       if (rawPreviewData) {
         try {
-          bodyData.curriculumsToCommit = JSON.parse(rawPreviewData)
+          bodyData.curriculumsToCommit = resilientJsonParse(rawPreviewData, "Preview Data")
         } catch (e) {
           console.warn('[Ingest API] Failed to parse previewData JSON:', e)
         }
@@ -927,9 +802,9 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
             await adminSupabase
               .from('syllabus_modules')
               .update({
-                chapter_notes: matchingCap.chapter_notes || '',
-                worked_examples: matchingCap.worked_examples || [],
-                common_misconceptions: matchingCap.common_misconceptions || [],
+                chapter_notes: typeof matchingCap.chapter_notes === 'string' ? matchingCap.chapter_notes : JSON.stringify(matchingCap.chapter_notes || ''),
+                worked_examples: toSafeJsonbArray(matchingCap.worked_examples),
+                common_misconceptions: toSafeStringArray(matchingCap.common_misconceptions),
                 ai_system_prompt_context: `${matchingCap.ai_system_prompt_context || exMod.ai_system_prompt_context || ''}${diagramDirective}`,
                 visual_lesson_plan: enhancedVisualPlan,
               })
@@ -992,12 +867,12 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
             description: cap.description || '',
             board,
             class_level: classLevel,
-            subtopics: cap.subtopics || [],
-            key_concepts: cap.key_concepts || [],
-            success_criteria: cap.success_criteria || '',
-            chapter_notes: cap.chapter_notes || '',
-            worked_examples: cap.worked_examples || [],
-            common_misconceptions: cap.common_misconceptions || [],
+            subtopics: toSafeStringArray(cap.subtopics),
+            key_concepts: toSafeStringArray(cap.key_concepts),
+            success_criteria: typeof cap.success_criteria === 'string' ? cap.success_criteria : JSON.stringify(cap.success_criteria || ''),
+            chapter_notes: typeof cap.chapter_notes === 'string' ? cap.chapter_notes : JSON.stringify(cap.chapter_notes || ''),
+            worked_examples: toSafeJsonbArray(cap.worked_examples),
+            common_misconceptions: toSafeStringArray(cap.common_misconceptions),
             ai_system_prompt_context: `${cap.ai_system_prompt_context || ''}${diagramDirective}`,
             visual_lesson_plan: enhancedVisualPlan,
             estimated_minutes: 15,
@@ -1377,12 +1252,12 @@ async function commitCurriculumsToDatabase({
         description: mod.description || '',
         board: curr.board || board,
         class_level: classLevel,
-        subtopics: mod.subtopics || [],
-        key_concepts: mod.key_concepts || [],
-        success_criteria: mod.success_criteria || '',
-        chapter_notes: mod.chapter_notes || '',
-        worked_examples: mod.worked_examples || [],
-        common_misconceptions: mod.common_misconceptions || [],
+        subtopics: toSafeStringArray(mod.subtopics),
+        key_concepts: toSafeStringArray(mod.key_concepts),
+        success_criteria: typeof mod.success_criteria === 'string' ? mod.success_criteria : JSON.stringify(mod.success_criteria || ''),
+        chapter_notes: typeof mod.chapter_notes === 'string' ? mod.chapter_notes : JSON.stringify(mod.chapter_notes || ''),
+        worked_examples: toSafeJsonbArray(mod.worked_examples),
+        common_misconceptions: toSafeStringArray(mod.common_misconceptions),
         ai_system_prompt_context: `${mod.ai_system_prompt_context || ''}${diagramDirective}`,
         visual_lesson_plan: enhancedVisualPlan,
         estimated_minutes: 15,

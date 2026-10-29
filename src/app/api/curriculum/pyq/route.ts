@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { isRequestAuthorizedAdmin } from '@/lib/adminAuth'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
-import { resilientGenerateContent } from '@/lib/geminiResilientGenerate'
+import { resilientGenerateContent, resilientJsonParse } from '@/lib/geminiResilientGenerate'
 
 export interface PyqQuestion {
   id: string
@@ -251,8 +251,7 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
       label: 'PYQ Practice Set Synthesis',
     })
 
-    const cleanedJson = cleanJsonString(rawResponseText)
-    const parsedData = JSON.parse(cleanedJson)
+    const parsedData = resilientJsonParse<any>(rawResponseText, 'PYQ Practice Set Synthesis')
     const practiceSet: PyqQuestion[] = parsedData.practice_set || []
 
     if (practiceSet.length === 0) {
