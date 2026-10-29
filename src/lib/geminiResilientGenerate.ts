@@ -52,9 +52,10 @@ export async function resilientGenerateContent(
   const label = options.label || 'Gemini API'
   const errorsCollected: string[] = []
 
-  // Ensure thinking budget is active by default for high-level reasoning across all models
+  // Ensure thinking budget and generous output token ceiling are active by default (up to 65,536 tokens)
   const baseConfig = {
     thinkingConfig: { thinkingBudget: 2048 },
+    maxOutputTokens: 65536,
     ...(options.config || {}),
   }
 

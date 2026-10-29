@@ -81,13 +81,177 @@ function cleanJsonString(raw: string): string {
   if (match && match[1]) {
     s = match[1].trim()
   } else {
+    s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
     const firstBrace = s.indexOf('{')
-    const lastBrace = s.lastIndexOf('}')
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      s = s.substring(firstBrace, lastBrace + 1)
-    }
+    const firstBracket = s.indexOf('[')
+    let startIdx = 0
+    if (firstBrace !== -1 && firstBracket !== -1) startIdx = Math.min(firstBrace, firstBracket)
+    else if (firstBrace !== -1) startIdx = firstBrace
+    else if (firstBracket !== -1) startIdx = firstBracket
+    if (startIdx > 0) s = s.substring(startIdx)
   }
   return s
+}
+
+function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
+  if (!raw || typeof raw !== 'string') {
+    throw new Error(`[${label}] Empty or invalid input provided to JSON parser.`)
+  }
+
+  let cleaned = raw.trim()
+
+  // 1. Strip markdown code fences if present (even if unclosed due to truncation)
+  const fenceMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)(?:```)?$/i)
+  if (fenceMatch && fenceMatch[1]) {
+    cleaned = fenceMatch[1].trim()
+  } else {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+  }
+
+  const firstBrace = cleaned.indexOf('{')
+  const firstBracket = cleaned.indexOf('[')
+  let startIdx = 0
+  if (firstBrace !== -1 && firstBracket !== -1) startIdx = Math.min(firstBrace, firstBracket)
+  else if (firstBrace !== -1) startIdx = firstBrace
+  else if (firstBracket !== -1) startIdx = firstBracket
+  if (startIdx > 0) cleaned = cleaned.substring(startIdx)
+
+  // Fast path: try standard parsing first
+  try {
+    return JSON.parse(cleaned)
+  } catch (initialErr) {
+    // Proceed to character-level normalization & auto-healing
+  }
+
+  // 2. Character-by-character sanitize:
+  // - Fix unescaped backslashes (especially LaTeX \sqrt, \frac, \pi, \cdot, etc.)
+  // - Escape unescaped newlines/tabs inside strings
+  // - Track delimiter stack to auto-close unclosed strings and structures
+  let result = ''
+  let inString = false
+  let escaped = false
+  const stack: string[] = []
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned[i]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        result += char
+      } else if (char === '\\') {
+        const nextChar = cleaned[i + 1]
+        // In JSON, valid escape targets are " \ / b f n r t u
+        if (!nextChar || !/["\\/bfnrtu]/.test(nextChar)) {
+          result += '\\\\'
+        } else {
+          result += '\\'
+          escaped = true
+        }
+      } else if (char === '"') {
+        inString = false
+        result += '"'
+      } else if (char === '\n') {
+        result += '\\n'
+      } else if (char === '\r') {
+        if (cleaned[i + 1] !== '\n') result += '\\n'
+      } else if (char === '\t') {
+        result += '\\t'
+      } else {
+        const code = char.charCodeAt(0)
+        result += code < 32 ? ' ' : char
+      }
+    } else {
+      if (char === '"') {
+        inString = true
+        result += '"'
+      } else if (char === '{' || char === '[') {
+        stack.push(char)
+        result += char
+      } else if (char === '}') {
+        if (stack.length > 0 && stack[stack.length - 1] === '{') stack.pop()
+        result += char
+      } else if (char === ']') {
+        if (stack.length > 0 && stack[stack.length - 1] === '[') stack.pop()
+        result += char
+      } else {
+        result += char
+      }
+    }
+  }
+
+  // If ended while inside an unclosed string (e.g. truncated at EOF), close it
+  if (inString) {
+    result += '"'
+  }
+
+  result = result.trim().replace(/,\s*$/, '')
+
+  // Remove any unclosed dangling property like `"key":`
+  result = result.replace(/,\s*"[^"]*"\s*:\s*$/, '')
+  result = result.replace(/\{\s*"[^"]*"\s*:\s*$/, '{')
+  result = result.replace(/\[\s*"[^"]*"\s*:\s*$/, '[')
+
+  // Close remaining open delimiters in reverse order
+  const finalStack = [...stack]
+  let balancedResult = result
+  while (finalStack.length > 0) {
+    const openDelim = finalStack.pop()
+    balancedResult = balancedResult.trim().replace(/,\s*$/, '')
+    balancedResult += openDelim === '{' ? '}' : ']'
+  }
+
+  // 3. Try parsing the balanced/repaired JSON
+  try {
+    return JSON.parse(balancedResult)
+  } catch (secondErr) {
+    console.warn(`[${label}] Balanced parse failed, attempting deep structural recovery...`)
+  }
+
+  // 4. Structural recovery: truncate back to the last completed object '}' or array ']'
+  try {
+    const lastCloseObj = cleaned.lastIndexOf('}')
+    const lastCloseArr = cleaned.lastIndexOf(']')
+    const lastSafe = Math.max(lastCloseObj, lastCloseArr)
+
+    if (lastSafe > 0) {
+      const safeSub = cleaned.substring(0, lastSafe + 1)
+      const recStack: string[] = []
+      let sInStr = false
+      let sEsc = false
+
+      for (let i = 0; i < safeSub.length; i++) {
+        const c = safeSub[i]
+        if (sInStr) {
+          if (sEsc) sEsc = false
+          else if (c === '\\') sEsc = true
+          else if (c === '"') sInStr = false
+        } else {
+          if (c === '"') sInStr = true
+          else if (c === '{' || c === '[') recStack.push(c)
+          else if (c === '}' && recStack[recStack.length - 1] === '{') recStack.pop()
+          else if (c === ']' && recStack[recStack.length - 1] === '[') recStack.pop()
+        }
+      }
+
+      let recovered = safeSub.trim().replace(/,\s*$/, '')
+      while (recStack.length > 0) {
+        const open = recStack.pop()
+        recovered = recovered.trim().replace(/,\s*$/, '')
+        recovered += open === '{' ? '}' : ']'
+      }
+
+      try {
+        return JSON.parse(recovered)
+      } catch (innerErr) {
+        return resilientJsonParse(recovered, label)
+      }
+    }
+  } catch (deepErr) {
+    console.error(`[${label}] Deep structural recovery failed:`, deepErr)
+  }
+
+  throw new Error(`[${label}] Unable to parse JSON response.`)
 }
 
 function buildEnhancedVisualPlanAndDirective(cap: any, visualPlan: any) {
@@ -685,14 +849,14 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
         config: {
           responseMimeType: 'application/json',
           temperature: 0.2,
+          maxOutputTokens: 65536,
           thinkingConfig: { thinkingBudget: 2048 },
           ...(geminiCacheName ? { cachedContent: geminiCacheName } : {}),
         },
         label: 'Chapter Notes Synthesis',
       })
 
-      const cleanedJson = cleanJsonString(rawResponseText)
-      const parsedData = JSON.parse(cleanedJson)
+      const parsedData = resilientJsonParse<any>(rawResponseText, 'Chapter Notes Synthesis')
       const capsules: GeneratedModule[] = parsedData.capsules || []
       const chapterSummary = parsedData.summary || ''
 
@@ -959,18 +1123,18 @@ SPECIAL MATHEMATICS PROTOCOL (CLASSES 6-12) - GAUTH-LEVEL RIGOR & ZERO OMISSION:
    - subtopics: Array of 4-6 specific examination subtopics aligned with ${board} board exam question papers
    - key_concepts: Array of 4-6 core mathematical formulas, principles, definitions with SI units, or scientific laws
    - success_criteria: A verifiable test problem or numerical the student must solve to demonstrate board mastery
-   - chapter_notes: Structured, comprehensive notes (800-1400 words) with definitions, formulas, and step-by-step proofs
+   - chapter_notes: Structured conceptual summary notes (150-300 words) covering key definitions, formulas, and essential properties
    - chapter_flowchart: Multi-level hierarchical flowchart or branch tree ("Root -> Branch A | Branch B; Branch A -> Sub 1 | Sub 2")
    - textbook_definitions: Array of verbatim textbook definitions with formal laws and SI units
    - textbook_examples: Array of concrete illustrative real-life examples from the syllabus
    - textbook_exercises: Array of authentic textbook exercises and question breakdowns with solving methods
    - worked_examples: Array of 2 to 4 fully solved textbook & board numerical exemplars (especially for Maths) with Given, Formula, Substitution, Line-by-line scratchpad calculations, and Boxed answer
-   - ai_system_prompt_context: Detailed pedagogical context, everyday physical analogies, step-by-step whiteboard layout, common student pitfalls, and Socratic voice-teaching cues for the AI tutor.
-   - visual_ideas: Comprehensive visual and image generation ideas.
+   - ai_system_prompt_context: Concise pedagogical teaching context, whiteboard layout, and Socratic voice-teaching cues for the AI tutor (2-4 sentences).
+   - visual_ideas: Focused visual description of the core concept.
    - diagram_type: The exact diagram type (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics | anatomy_structure)
    - what_to_make: Detailed blueprint of components, geometric shapes, coordinate axes, labeled arrows, numerical values, and pedagogical highlights to draw.
    - diagram_svg: Complete, production-ready, clean vector SVG markup (<svg viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" xmlns="http://www.w3.org/2000/svg">...</svg>)
-   - concept_visuals: Array of 2 to 4 UNIQUE, DISTINCT visual diagram blueprints for key concepts in the capsule with complete SVG markup (<svg viewBox="0 0 540 280" ...>...</svg>)!
+   - concept_visuals: Array of 2 to 3 distinct visual diagram blueprints for key concepts in the capsule with clean, valid vector SVG markup (<svg viewBox="0 0 540 280" ...>...</svg>)!
 
 OUTPUT FORMAT:
 Respond with ONLY a valid JSON object matching this schema (do NOT include conversational prose outside the JSON):
@@ -1062,13 +1226,13 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
       config: {
         responseMimeType: 'application/json',
         temperature: 0.2,
+        maxOutputTokens: 65536,
         thinkingConfig: { thinkingBudget: 2048 },
       },
       label: 'Syllabus Decomposition',
     })
 
-    const cleanedJson = cleanJsonString(rawResponseText)
-    const parsedData = JSON.parse(cleanedJson)
+    const parsedData = resilientJsonParse<any>(rawResponseText, 'Syllabus Decomposition')
     const curriculumsList: GeneratedCurriculum[] = parsedData.curriculums || []
 
     if (curriculumsList.length === 0) {
