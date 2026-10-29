@@ -755,6 +755,18 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                     </span>
                   </div>
                 </div>
+
+                <div className="pt-2.5 border-t border-[var(--border-subtle)]/60 text-[11px] text-[#78716C]">
+                  <span>
+                    We are still building this is just a prototype, for more limits contact{' '}
+                    <a
+                      href="mailto:shauryaprabhakar097@gmail.com"
+                      className="font-semibold text-[#255D88] hover:underline"
+                    >
+                      shauryaprabhakar097@gmail.com
+                    </a>
+                  </span>
+                </div>
               </div>
 
               {/* Personal Details Form */}

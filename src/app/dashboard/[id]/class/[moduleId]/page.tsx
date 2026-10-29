@@ -372,7 +372,7 @@ export default function ModuleClassroomPage() {
     if (userQuota.limit_type !== 'requests') return true
     if (userQuota.used_requests >= userQuota.max_requests) {
       setQuotaExceededMessage(
-        `Request Limit Reached: You have reached the maximum allowance of ${userQuota.max_requests} AI interactions for this account. Please contact your administrator to add more requests.`
+        'We are still building this is just a prototype, for more limits contact shauryaprabhakar097@gmail.com'
       )
       setQuotaExceededModalOpen(true)
       return false
@@ -387,7 +387,7 @@ export default function ModuleClassroomPage() {
       const data = await res.json()
       if (data?.allowed === false) {
         setQuotaExceededMessage(
-          `Request Limit Reached: You have reached the maximum allowance of ${data.max_requests} AI interactions for this account. Please contact your administrator to add more requests.`
+          'We are still building this is just a prototype, for more limits contact shauryaprabhakar097@gmail.com'
         )
         setQuotaExceededModalOpen(true)
         return false
@@ -644,7 +644,7 @@ export default function ModuleClassroomPage() {
             const quotaData = await quotaCheckRes.json()
             if (quotaData?.allowed === false) {
               setQuotaExceededMessage(
-                `Module Limit Reached: Your current plan allows access to ${quotaData.max_modules} topic capsules. You have already completed/accessed ${quotaData.used_modules} modules. Please contact your administrator to unlock additional modules.`
+                'We are still building this is just a prototype, for more limits contact shauryaprabhakar097@gmail.com'
               )
               setQuotaExceededModalOpen(true)
             } else if (quotaData?.used_modules) {
@@ -2795,10 +2795,17 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
 
             <div className="space-y-2">
               <h3 className="text-xl font-serif font-bold text-[#2D2A26]">
-                Classroom Quota Limit Reached
+                Prototype Limit Reached
               </h3>
               <p className="text-xs sm:text-sm text-[#57534E] leading-relaxed">
-                {quotaExceededMessage || 'You have reached the interaction or module limit assigned to your student account.'}
+                We are still building this is just a prototype, for more limits contact{' '}
+                <a
+                  href="mailto:shauryaprabhakar097@gmail.com"
+                  className="font-semibold text-[#255D88] hover:underline"
+                >
+                  shauryaprabhakar097@gmail.com
+                </a>
+                .
               </p>
             </div>
 

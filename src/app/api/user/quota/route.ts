@@ -46,6 +46,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
           allowed: false,
           reason: 'REQUEST_LIMIT_REACHED',
+          message: 'We are still building this is just a prototype, for more limits contact shauryaprabhakar097@gmail.com',
           limit_type: limitType,
           max_requests: maxRequests,
           used_requests: usedRequests,
@@ -95,6 +96,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
           allowed: false,
           reason: 'MODULE_LIMIT_REACHED',
+          message: 'We are still building this is just a prototype, for more limits contact shauryaprabhakar097@gmail.com',
           limit_type: limitType,
           max_modules: maxModules,
           used_modules: usedModules,
