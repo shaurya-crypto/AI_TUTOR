@@ -127,13 +127,28 @@ function buildEnhancedVisualPlanAndDirective(cap: any, visualPlan: any) {
   }))
 
   const exercisesList = Array.isArray(cap.textbook_exercises) ? cap.textbook_exercises : []
+  const bestSvg = cap.diagram_svg || conceptVisualsList[0]?.svg || ''
+
+  const updatedSteps = (visualPlan?.steps || []).map((st: any) => {
+    if (st.type === 'DIAGRAM' && bestSvg) {
+      return {
+        ...st,
+        boardDirective: {
+          action: 'render_svg_diagram',
+          content: `${cap.title} | ${bestSvg} | ${cap.what_to_make || cap.title}`,
+        },
+      }
+    }
+    return st
+  })
 
   const enhancedVisualPlan = {
     ...visualPlan,
+    steps: updatedSteps,
     diagram_idea: cap.visual_ideas || cap.diagram_idea || '',
     diagram_type: cap.diagram_type || 'vector_svg_diagram',
     what_to_make: cap.what_to_make || cap.diagram_description || '',
-    diagram_svg: cap.diagram_svg || '',
+    diagram_svg: bestSvg,
     chapter_flowchart: cap.chapter_flowchart || '',
     textbook_definitions: cap.textbook_definitions || [],
     textbook_examples: cap.textbook_examples || [],
@@ -573,39 +588,46 @@ export async function POST(req: Request) {
       const isMath = category?.toLowerCase().includes('math') || existingCurriculum?.category?.toLowerCase().includes('math')
       const isMathCategory = isMath
       const synthesisPrompt = `You are a Principal Academic Curriculum Architect and Master Teacher for ${board}.
-Your task is to exhaustively analyze the provided Textbook Chapter document for "${targetChapterTitle}" (${classLevel}, ${category}) and decompose it into an EXHAUSTIVE, topper-ready series of 4 to 8 granular 15-minute teachable units called "Topic Capsules" (NEVER fewer than 4 capsules). Do NOT summarize or condense; provide zero-omission, authentic textbook depth for each capsule covering the entire chapter.
+Your task is to exhaustively analyze the provided Textbook Chapter document for "${targetChapterTitle}" (${classLevel}, ${category}) and decompose it into an EXHAUSTIVE, topper-ready curriculum series of Topic Capsules:
+1. PART A — CONCEPTUAL FOUNDATION CAPSULES (3 to 5 capsules): Deep concept explanations, verbatim laws, formulas, derivations, and authentic visual diagrams.
+2. PART B — DEDICATED EXERCISE SOLVER CAPSULES (MANDATORY): You MUST create dedicated question solver capsules for EVERY single exercise in the textbook (e.g., "Exercise 1.1: Complete Step-by-Step Question Solver", "Exercise 1.2: Complete Step-by-Step Question Solver"). If an exercise is large (>5 multi-part problems), split into Part 1 and Part 2. Every single question must be fully enumerated and co-solved with complete Gauth-style scratchpad calculations!
 
 TARGET ACADEMIC SPECIFICATION:
 - Educational Board: "${board}" (NCERT standard structure, zero calculators for Class 10/CBSE, 50% NEP 2020 competency questions)
 - Target Class: "${classLevel || existingCurriculum?.class_level || 'Class 10'}" (Strictly school level 6-12)
 - Subject / Discipline: "${category || existingCurriculum?.category || 'General'}"
 - Chapter: "${targetChapterTitle}"
-- TEXTBOOK FIDELITY INVARIANT: Wherever images, graphs, diagrams, and exact verbatim definitions appear in the book on a concept, capture them accurately so the AI tutor presents those exact illustrations, graphs, diagrams, and definitions on the whiteboard.
-- ZERO OMISSION OF EXERCISES & EXAMPLES: You must catalog every exercise (Exercise 1.1, 1.2, 1.3...) and every single question, along with all worked examples from the book.
-- DYNAMIC CAPSULE SCALING BY CHAPTER LENGTH & DEPTH:
-  * Standard length chapter (~8 to 15 pages): Decompose into 4 to 5 granular capsules.
-  * Medium-to-long chapter (~15 to 25 pages): Decompose into 6 to 7 granular capsules.
-  * Deep, dense, or multi-topic chapter (25+ pages, e.g. Number System, Polynomials, Triangles, Electricity): Decompose into 7 to 8 granular capsules.
-  * Strictly maintain between 4 and 8 capsules (never fewer than 4). Each capsule represents a complete, self-contained 15-minute teachable unit.
+- TEXTBOOK FIDELITY INVARIANT: Wherever images, graphs, coordinate systems, and exact verbatim definitions appear in the book, capture them accurately with authentic vector SVG markup.
+- HIGHEST QUALITY PRODUCTION SVG INVARIANT (ZERO FAKE BLUEPRINTS):
+  * Every single capsule MUST include authentic, production-ready vector SVG markup in "diagram_svg" and "concept_visuals".
+  * STRICT PROHIBITION: NEVER output generic placeholder boxes, corporate flowchart cards ("CONCEPTUAL BLUEPRINT", "ANAXLY VECTOR ENGINE", "1. GOVERNING PRINCIPLE"), or empty SVGs!
+  * If the topic is Coordinate Geometry / Quadrants: Draw the actual 2D Cartesian plane with X and Y axes, arrows, origin O(0,0), numbered ticks (-5 to 5), and the 4 Quadrants clearly labeled: Quadrant I (+, +), Quadrant II (-, +), Quadrant III (-, -), Quadrant IV (+, -) with plotted points!
+  * If the topic is Science/Physics: Draw the exact apparatus, ray paths, circuits with resistors and battery, or anatomical and molecular setups!
+  * Dark chalkboard background #13211B, contrasting strokes (#FFFFFF, #7EC8E3, #68B084, #FBBF24, #F87171).
+- ZERO OMISSION OF EXERCISES & PRACTICE QUESTIONS: In Part B, every question (Q1, Q2, Q3...) from each textbook exercise must have its own dedicated worked example with Given, Formula, Substitution, Scratchpad Calculation, and Boxed Answer.
 
 ${isMathCategory ? `
 MATHEMATICS SPECIALIZATION & GAUTH-LEVEL RIGOR:
-1. EXHAUSTIVE EXERCISE EXTRACTION:
-   - Identify every exercise in this chapter (e.g. Exercise 1.1, Exercise 1.2, Exercise 1.3, Exercise 1.4, Exercise 1.5, Exercise 1.6).
-   - Enumerate all questions in "textbook_exercises" with question number (Q1, Q2...), full problem statement, question type, and step-by-step solving approach like Gauth.
+1. DEDICATED EXERCISE SOLVER MODULES:
+   - Identify every exercise in this chapter (e.g. Exercise 1.1, Exercise 1.2, Exercise Set 1.1, Exercise Set 1.2).
+   - Create a DEDICATED capsule for each exercise titled "Exercise X.X: Complete Step-by-Step Question Solver".
+   - In "worked_examples", solve every single question:
+     * Problem statement verbatim from the textbook
+     * Given values and geometry setup
+     * Governing mathematical identity or theorem
+     * Line-by-line scratchpad calculation
+     * Boxed final answer with units
 2. ALL TEXTBOOK WORKED EXAMPLES:
-   - Extract and solve all textbook examples (Example 1, Example 2, Example 3...) in "worked_examples":
-     * Given, Formula / Identity applied, Substitution, Step-by-step line-by-line scratchpad calculation, Boxed final answer.
+   - Extract and solve all worked examples from the chapter text (Example 1, Example 2...).
 3. ALL BOOK DIAGRAMS & THEOREM CONSTRUCTIONS:
-   - Generate production-ready SVG diagrams for:
-     * Square root spiral (Theodorus) with origin O, unit base, perpendiculars, hypotenuses (√2, √3, √4, √5), right-angle markers, colored radical labels.
-     * Number lines with interval subdivisions and magnified zoom callouts showing density of rational fractions.
-     * Real numbers classification Euler/Venn diagram (N ⊂ W ⊂ Z ⊂ Q ⊂ R).
-     * Geometric construction of √x using semi-circle of diameter (x+1) and perpendicular chord.
-     * Coordinate plots and radical identities geometry.
+   - Generate production-ready SVG diagrams for all figures in the chapter:
+     * Cartesian coordinate planes with numbered grid ticks, origin, and quadrants.
+     * Floor plans, room layouts, and coordinate mapping grids (e.g. Reiaan's room floor grid).
+     * Number lines with interval subdivisions and magnified zoom callouts.
+     * Geometric constructions and theorem diagrams.
    - In "concept_visuals", provide 2 to 4 DISTINCT visual diagrams per capsule with complete <svg viewBox="0 0 540 280" ...>...</svg> code!
 4. RIGOROUS THEOREM PROOFS:
-   - State theorems verbatim with Given, To Prove, Construction, and complete step-by-step contradiction proofs (e.g. proof of irrationality of √2 and √3).
+   - State theorems verbatim with Given, To Prove, Construction, and complete step-by-step proofs.
 ` : ''}
 
 ${activeNotes && !geminiCacheName ? `CHAPTER NOTES TEXT:\n"""\n${activeNotes.substring(0, 100000)}\n"""` : 'Analyze the attached detailed chapter notes document thoroughly.'}

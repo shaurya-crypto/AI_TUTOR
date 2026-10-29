@@ -2097,8 +2097,58 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
             chalkboardRef.current.drawVideoCard?.(parts[0] || 'Demonstration', parts[1] || '')
           }
           else if (action === 'render_svg_diagram' || action === 'draw_svg' || action === 'draw_svg_diagram') {
+            const vPlan = (activeModule?.visual_lesson_plan as any) || {}
+            const conceptVisuals: any[] = Array.isArray(vPlan.concept_visuals) ? vPlan.concept_visuals : []
+            const moduleDefaultSvg = vPlan.diagram_svg || ''
+
+            const findMatchedSvg = (query: string): { title: string; svg: string; caption?: string } => {
+              const qLower = query.toLowerCase().trim()
+              // Try exact or partial match on concept_title or diagram_title
+              const matched = conceptVisuals.find((cv: any) => {
+                const cTitle = (cv.concept_title || '').toLowerCase()
+                const dTitle = (cv.diagram_title || '').toLowerCase()
+                return (
+                  (cTitle && (cTitle.includes(qLower) || qLower.includes(cTitle))) ||
+                  (dTitle && (dTitle.includes(qLower) || qLower.includes(dTitle)))
+                )
+              })
+              if (matched && (matched.svg || matched.diagram_svg)) {
+                return {
+                  title: matched.diagram_title || matched.concept_title || query,
+                  svg: matched.svg || matched.diagram_svg,
+                  caption: matched.what_to_make || matched.timing_and_cue || '',
+                }
+              }
+              // If only 1 concept visual exists or default diagram_svg exists, use it
+              if (conceptVisuals.length === 1 && (conceptVisuals[0].svg || conceptVisuals[0].diagram_svg)) {
+                return {
+                  title: conceptVisuals[0].diagram_title || query,
+                  svg: conceptVisuals[0].svg || conceptVisuals[0].diagram_svg,
+                  caption: conceptVisuals[0].what_to_make || '',
+                }
+              }
+              if (moduleDefaultSvg) {
+                return {
+                  title: query || vPlan.what_to_make || 'Educational Diagram',
+                  svg: moduleDefaultSvg,
+                  caption: vPlan.diagram_idea || '',
+                }
+              }
+              return { title: query, svg: '' }
+            }
+
             if (typeof content === 'object' && content !== null) {
-              chalkboardRef.current.drawSvgDiagram?.(content.title || 'Educational Diagram', content.svg || '', content.caption)
+              let targetSvg = content.svg || ''
+              let targetTitle = content.title || 'Educational Diagram'
+              let targetCaption = content.caption
+              if (!targetSvg || !targetSvg.toLowerCase().includes('<svg')) {
+                const matched = findMatchedSvg(targetTitle)
+                if (matched.svg) {
+                  targetSvg = matched.svg
+                  if (!targetCaption) targetCaption = matched.caption
+                }
+              }
+              chalkboardRef.current.drawSvgDiagram?.(targetTitle, targetSvg, targetCaption)
             } else if (typeof content === 'string') {
               const trimmed = content.trim()
               if (trimmed.includes('|') && trimmed.includes('<svg')) {
@@ -2107,7 +2157,8 @@ RULES: Strictly ZERO emojis. Board is single source of truth for notes. Warm, in
               } else if (trimmed.includes('<svg')) {
                 chalkboardRef.current.drawSvgDiagram?.('Educational Diagram', trimmed)
               } else {
-                chalkboardRef.current.drawSvgDiagram?.(trimmed, '')
+                const matched = findMatchedSvg(trimmed)
+                chalkboardRef.current.drawSvgDiagram?.(matched.title || trimmed, matched.svg || '', matched.caption)
               }
             }
           }

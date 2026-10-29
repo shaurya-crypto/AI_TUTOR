@@ -2,6 +2,26 @@
 
 import { SimliClient, LogLevel } from 'simli-client'
 
+// Suppress benign WebRTC signal stream disconnect noise from livekit-client in Next.js dev overlay
+if (typeof window !== 'undefined' && !(window as any).__livekit_signal_filter_installed) {
+  ;(window as any).__livekit_signal_filter_installed = true
+  const originalConsoleError = console.error
+  console.error = function (...args: any[]) {
+    const firstArg = typeof args[0] === 'string' ? args[0] : args[0]?.message || ''
+    if (
+      typeof firstArg === 'string' &&
+      (firstArg.includes('error reading from signal stream') ||
+        firstArg.includes('Called Disconnect Before A Connecction succeeded') ||
+        firstArg.includes('Client initiated disconnect'))
+    ) {
+      // Benign WebRTC disconnect notice — demote to debug log so Next dev overlay does not trigger
+      console.debug('[Simli/LiveKit WebRTC Notice]', ...args)
+      return
+    }
+    originalConsoleError.apply(console, args)
+  }
+}
+
 export type SimliStatus = 'idle' | 'connecting' | 'connected' | 'fallback' | 'error'
 
 export interface SimliSessionCredentials {

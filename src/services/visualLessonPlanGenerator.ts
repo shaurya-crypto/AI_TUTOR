@@ -478,7 +478,10 @@ export function generateVisualLessonPlanForCapsule(
       },
       boardDirective: {
         action: 'render_svg_diagram',
-        content: title,
+        content: (() => {
+          const dyn = createUniversalScientificSvg(title)
+          return `${title} | ${dyn.svg} | ${dyn.caption || title}`
+        })(),
       },
       estimatedSeconds: 120,
       sourceCitation: {

@@ -573,58 +573,144 @@ export function generateDynamic1DMotionSvg(params: {
 }
 
 /**
- * 6. TRULY GENERATIVE CONCEPTUAL BLUEPRINT
- * Canonical vector chalkboard representation for general scientific and mathematical concepts.
- * Prevents erroneous optics lens generation for non-optics topics.
+ * 6. MATHEMATICAL CARTESIAN COORDINATE PLANE & QUADRANTS
+ * Authentic, textbook-accurate 2D coordinate system with perpendicular axes,
+ * origin O(0,0), numbered grid ticks, and all 4 quadrants labeled with sign conventions.
  */
-export function generateDynamicConceptualFrameSvg(params: {
+export function generateDynamicCoordinatePlaneSvg(params: {
   title?: string
   caption?: string
+  highlightQuadrant?: number // 1, 2, 3, or 4
 }): GeneratedScientificSvg {
-  const title = params.title || 'Core Scientific Concept'
-  const caption = params.caption || 'Governing physical laws, definitions, and foundational axioms.'
+  const title = params.title || '2-D Cartesian Plane & Quadrants'
+  const caption = params.caption || 'The coordinate axes divide the plane into four quadrants (I, II, III, IV) numbered counter-clockwise.'
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 280" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" style="background:#13211B; font-family:'JetBrains Mono',monospace;">
   ${getSvgDefs()}
-  <rect x="10" y="10" width="520" height="260" rx="12" fill="#13211B" stroke="#233930" stroke-width="2"/>
-  <rect x="16" y="16" width="508" height="248" rx="8" fill="url(#chalkGrid)"/>
+  <!-- Outer Chalkboard Frame -->
+  <rect x="8" y="8" width="524" height="264" rx="10" fill="#13211B" stroke="#233930" stroke-width="2"/>
+  <rect x="14" y="14" width="512" height="252" rx="8" fill="url(#chalkGrid)"/>
 
-  <!-- Dynamic Header Bar -->
-  <rect x="24" y="22" width="492" height="26" rx="6" fill="#0F1A15" stroke="#233930" stroke-width="1"/>
-  <text x="36" y="39" font-size="11" font-weight="bold" fill="#68B084">CONCEPTUAL BLUEPRINT: ${title.toUpperCase().slice(0, 48)}</text>
-  <text x="495" y="39" text-anchor="end" font-size="10" fill="#7EC8E3">ANAXLY VECTOR ENGINE</text>
+  <!-- Light Coordinate Grid Lines -->
+  <g stroke="#1F382E" stroke-width="0.8" opacity="0.7">
+    <!-- Horizontal grid lines -->
+    <line x1="30" y1="50" x2="510" y2="50"/>
+    <line x1="30" y1="80" x2="510" y2="80"/>
+    <line x1="30" y1="110" x2="510" y2="110"/>
+    <line x1="30" y1="170" x2="510" y2="170"/>
+    <line x1="30" y1="200" x2="510" y2="200"/>
+    <line x1="30" y1="230" x2="510" y2="230"/>
+    <!-- Vertical grid lines -->
+    <line x1="70" y1="30" x2="70" y2="250"/>
+    <line x1="120" y1="30" x2="120" y2="250"/>
+    <line x1="170" y1="30" x2="170" y2="250"/>
+    <line x1="220" y1="30" x2="220" y2="250"/>
+    <line x1="320" y1="30" x2="320" y2="250"/>
+    <line x1="370" y1="30" x2="370" y2="250"/>
+    <line x1="420" y1="30" x2="420" y2="250"/>
+    <line x1="470" y1="30" x2="470" y2="250"/>
+  </g>
 
-  <!-- Core Concept Card Left -->
-  <rect x="36" y="60" width="225" height="150" rx="8" fill="#11221B" stroke="#233930" stroke-width="1.5"/>
-  <rect x="46" y="70" width="205" height="24" rx="4" fill="#172A22"/>
-  <text x="56" y="86" font-size="10" font-weight="bold" fill="#68B084">1. GOVERNING PRINCIPLE</text>
-  <text x="56" y="115" font-size="11" fill="#FFFFFF">${title.slice(0, 24)}</text>
-  <text x="56" y="138" font-size="9" fill="#94A3B8">• Fundamental physical axiom</text>
-  <text x="56" y="156" font-size="9" fill="#94A3B8">• Direct textbook alignment</text>
-  <text x="56" y="174" font-size="9" fill="#94A3B8">• Verified SI standard units</text>
+  <!-- Quadrant Background Tints -->
+  <!-- Quad I (Top Right) -->
+  <rect x="270" y="32" width="235" height="108" fill="#7EC8E3" fill-opacity="0.04"/>
+  <!-- Quad II (Top Left) -->
+  <rect x="35" y="32" width="235" height="108" fill="#F87171" fill-opacity="0.04"/>
+  <!-- Quad III (Bottom Left) -->
+  <rect x="35" y="140" width="235" height="108" fill="#68B084" fill-opacity="0.04"/>
+  <!-- Quad IV (Bottom Right) -->
+  <rect x="270" y="140" width="235" height="108" fill="#FBBF24" fill-opacity="0.04"/>
 
-  <!-- Core Concept Card Right -->
-  <rect x="279" y="60" width="225" height="150" rx="8" fill="#11221B" stroke="#233930" stroke-width="1.5"/>
-  <rect x="289" y="70" width="205" height="24" rx="4" fill="#1F3852"/>
-  <text x="299" y="86" font-size="10" font-weight="bold" fill="#7EC8E3">2. ANALYTICAL RELATION</text>
-  <text x="299" y="115" font-size="11" fill="#FFFFFF">Direct Relationship</text>
-  <text x="299" y="138" font-size="9" fill="#CBD5E1">• Mathematical formulation</text>
-  <text x="299" y="156" font-size="9" fill="#CBD5E1">• Board numerical template</text>
-  <text x="299" y="174" font-size="9" fill="#CBD5E1">• Zero hallucinated parameters</text>
+  <!-- Quadrant Large Sign & Label Badges -->
+  <!-- Quadrant I -->
+  <text x="390" y="65" text-anchor="middle" font-size="12" font-weight="bold" fill="#7EC8E3">Quadrant I</text>
+  <text x="390" y="82" text-anchor="middle" font-size="11" fill="#7EC8E3">(x &gt; 0, y &gt; 0) [+, +]</text>
 
-  <!-- Connecting Vector -->
-  <line x1="261" y1="135" x2="279" y2="135" stroke="#68B084" stroke-width="2" marker-end="url(#arrowSage)"/>
+  <!-- Quadrant II -->
+  <text x="150" y="65" text-anchor="middle" font-size="12" font-weight="bold" fill="#F87171">Quadrant II</text>
+  <text x="150" y="82" text-anchor="middle" font-size="11" fill="#F87171">(x &lt; 0, y &gt; 0) [-, +]</text>
 
-  <!-- Footer Banner -->
-  <rect x="36" y="222" width="468" height="28" rx="6" fill="#0F1A15" stroke="#233930" stroke-width="1"/>
-  <text x="270" y="240" text-anchor="middle" font-size="9" fill="#FFFFFF">${caption.slice(0, 95)}</text>
+  <!-- Quadrant III -->
+  <text x="150" y="215" text-anchor="middle" font-size="12" font-weight="bold" fill="#68B084">Quadrant III</text>
+  <text x="150" y="232" text-anchor="middle" font-size="11" fill="#68B084">(x &lt; 0, y &lt; 0) [-, -]</text>
+
+  <!-- Quadrant IV -->
+  <text x="390" y="215" text-anchor="middle" font-size="12" font-weight="bold" fill="#FBBF24">Quadrant IV</text>
+  <text x="390" y="232" text-anchor="middle" font-size="11" fill="#FBBF24">(x &gt; 0, y &lt; 0) [+, -]</text>
+
+  <!-- Principal X-Axis (Horizontal) -->
+  <line x1="30" y1="140" x2="505" y2="140" stroke="#FFFFFF" stroke-width="2" marker-end="url(#arrowSage)"/>
+  <line x1="505" y1="140" x2="35" y2="140" stroke="#FFFFFF" stroke-width="2" marker-end="url(#arrowSage)"/>
+  <text x="515" y="144" font-size="13" font-weight="bold" fill="#FFFFFF">X</text>
+  <text x="20" y="144" font-size="13" font-weight="bold" fill="#FFFFFF">X'</text>
+
+  <!-- Principal Y-Axis (Vertical) -->
+  <line x1="270" y1="250" x2="270" y2="28" stroke="#FFFFFF" stroke-width="2" marker-end="url(#arrowSage)"/>
+  <line x1="270" y1="28" x2="270" y2="250" stroke="#FFFFFF" stroke-width="2" marker-end="url(#arrowSage)"/>
+  <text x="275" y="25" font-size="13" font-weight="bold" fill="#FFFFFF">Y</text>
+  <text x="275" y="262" font-size="13" font-weight="bold" fill="#FFFFFF">Y'</text>
+
+  <!-- Origin Point O(0,0) -->
+  <circle cx="270" cy="140" r="4.5" fill="#FBBF24"/>
+  <text x="256" y="155" font-size="11" font-weight="bold" fill="#FBBF24">O (0,0)</text>
+
+  <!-- Numerical Ticks on X-Axis -->
+  <g fill="#94A3B8" font-size="10" text-anchor="middle">
+    <!-- Negative X -->
+    <line x1="70" y1="136" x2="70" y2="144" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="70" y="155">-4</text>
+    <line x1="120" y1="136" x2="120" y2="144" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="120" y="155">-3</text>
+    <line x1="170" y1="136" x2="170" y2="144" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="170" y="155">-2</text>
+    <line x1="220" y1="136" x2="220" y2="144" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="220" y="155">-1</text>
+    <!-- Positive X -->
+    <line x1="320" y1="136" x2="320" y2="144" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="320" y="155">1</text>
+    <line x1="370" y1="136" x2="370" y2="144" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="370" y="155">2</text>
+    <line x1="420" y1="136" x2="420" y2="144" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="420" y="155">3</text>
+    <line x1="470" y1="136" x2="470" y2="144" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="470" y="155">4</text>
+  </g>
+
+  <!-- Numerical Ticks on Y-Axis -->
+  <g fill="#94A3B8" font-size="10" text-anchor="end">
+    <!-- Positive Y -->
+    <line x1="266" y1="50" x2="274" y2="50" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="264" y="54">3</text>
+    <line x1="266" y1="80" x2="274" y2="80" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="264" y="84">2</text>
+    <line x1="266" y1="110" x2="274" y2="110" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="264" y="114">1</text>
+    <!-- Negative Y -->
+    <line x1="266" y1="170" x2="274" y2="170" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="264" y="174">-1</text>
+    <line x1="266" y1="200" x2="274" y2="200" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="264" y="204">-2</text>
+    <line x1="266" y1="230" x2="274" y2="230" stroke="#FFFFFF" stroke-width="1.5"/>
+    <text x="264" y="234">-3</text>
+  </g>
+
+  <!-- Plotted Example Point P(3, 2) in Quad I with dashed projections -->
+  <line x1="420" y1="140" x2="420" y2="80" stroke="#7EC8E3" stroke-width="1.2" stroke-dasharray="3,3"/>
+  <line x1="270" y1="80" x2="420" y2="80" stroke="#7EC8E3" stroke-width="1.2" stroke-dasharray="3,3"/>
+  <circle cx="420" cy="80" r="4.5" fill="#7EC8E3"/>
+  <text x="428" y="76" font-size="11" font-weight="bold" fill="#7EC8E3">P (3, 2)</text>
+
+  <!-- Top Title Banner -->
+  <rect x="24" y="18" width="492" height="22" rx="4" fill="#0F1A15" stroke="#233930" stroke-width="1"/>
+  <text x="34" y="33" font-size="11" font-weight="bold" fill="#68B084">CARTESIAN PLANE: QUADRANTS &amp; COORDINATES</text>
+  <text x="506" y="33" text-anchor="end" font-size="10" fill="#94A3B8">Counter-Clockwise Convention</text>
 </svg>`
 
   return {
     title,
     svg,
     caption,
-    domain: 'general',
+    domain: 'mathematics',
     isDynamic: true,
     computedMetrics: { title },
   }
@@ -641,7 +727,25 @@ export function createUniversalScientificSvg(
 ): GeneratedScientificSvg {
   const norm = typeof input === 'string' ? `${input} ${caption || ''}`.toLowerCase() : JSON.stringify(input).toLowerCase()
 
-  // 1. Kinematics & 1D Motion: Position, Reference Point, Distance & Displacement
+  // 1. Coordinate Geometry & Cartesian Plane (Quadrants, Axes, Coordinates, Abscissa, Ordinate)
+  if (
+    norm.includes('quadrant') ||
+    norm.includes('cartesian') ||
+    norm.includes('coordinate') ||
+    norm.includes('axis') ||
+    norm.includes('axes') ||
+    norm.includes('origin') ||
+    norm.includes('abscissa') ||
+    norm.includes('ordinate') ||
+    norm.includes('2-d plane')
+  ) {
+    return generateDynamicCoordinatePlaneSvg({
+      title: typeof input === 'string' ? input : input.title,
+      caption,
+    })
+  }
+
+  // 2. Kinematics & 1D Motion: Position, Reference Point, Distance & Displacement
   if (
     norm.includes('position') ||
     norm.includes('reference') ||
@@ -667,7 +771,7 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // 2. Ray Optics: Lenses & Mirrors (STRICT: Only when optics/lens is explicitly referenced)
+  // 3. Ray Optics: Lenses & Mirrors (STRICT: Only when optics/lens is explicitly referenced)
   if (norm.includes('lens') || norm.includes('focal') || norm.includes('ray diagram') || norm.includes('optics') || norm.includes('refraction') || norm.includes('convex') || norm.includes('concave')) {
     const fMatch = norm.match(/\bf\s*=\s*([\d\.]+)/)
     const uMatch = norm.match(/\bu\s*=\s*([\-\d\.]+)/)
@@ -684,7 +788,7 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // 3. Mechanics: Incline / Free Body Diagram
+  // 4. Mechanics: Incline / Free Body Diagram
   if (norm.includes('inclined') || norm.includes('incline') || norm.includes('free body') || norm.includes('fbd') || norm.includes('friction') || norm.includes('ramp')) {
     const angleMatch = norm.match(/(?:angle|theta|\bdeg)\s*[:=]?\s*(\d+)/i) || norm.match(/(\d+)\s*(?:deg|°|degree)/i)
     const massMatch = norm.match(/(?:mass|m)\s*[:=]?\s*([\d\.]+)/i) || norm.match(/([\d\.]+)\s*kg/i)
@@ -699,7 +803,7 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // 4. Euclidean Geometry: Circle Theorems
+  // 5. Euclidean Geometry: Circle Theorems
   if (norm.includes('circle') || norm.includes('subtend') || norm.includes('tangent') || norm.includes('arc') || norm.includes('theorem')) {
     const arcMatch = norm.match(/(?:arc|angle)\s*[:=]?\s*(\d+)/i) || norm.match(/(\d+)\s*(?:deg|°|degree)/i)
 
@@ -710,7 +814,7 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // 5. Electric Circuits & Ohm's Law
+  // 6. Electric Circuits & Ohm's Law
   if (norm.includes('circuit') || norm.includes('ohm') || norm.includes('resistor') || norm.includes('ammeter') || norm.includes('battery')) {
     const vMatch = norm.match(/(?:v|volt|voltage)\s*[:=]?\s*([\d\.]+)/i) || norm.match(/([\d\.]+)\s*v\b/i)
     const rMatch = norm.match(/(?:r|ohm|resistance)\s*[:=]?\s*([\d\.]+)/i) || norm.match(/([\d\.]+)\s*(?:ohm|Ω)/i)
@@ -723,9 +827,9 @@ export function createUniversalScientificSvg(
     })
   }
 
-  // Safe Conceptual Fallback: Topic-grounded conceptual blueprint (NEVER an unrelated optics ray diagram)
-  return generateDynamicConceptualFrameSvg({
-    title: typeof input === 'string' ? input : input.title || 'Dynamic Scientific Formulation',
-    caption: caption || 'Parametric vector visualization generated with exact physical laws.',
+  // Default Scientific Coordinate Framework: Always return mathematical 2D Cartesian plane
+  return generateDynamicCoordinatePlaneSvg({
+    title: typeof input === 'string' ? input : input.title || 'Cartesian Coordinate System',
+    caption: caption || 'Authentic vector visualization plotted on digital chalkboard.',
   })
 }
