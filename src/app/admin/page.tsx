@@ -53,6 +53,28 @@ interface WorkedExample {
   unit: string
 }
 
+interface ConceptVisual {
+  concept_title: string
+  diagram_title: string
+  diagram_type: string
+  what_to_make: string
+  svg?: string
+  diagram_svg?: string
+  timing_and_cue?: string
+}
+
+interface TextbookQuestion {
+  q_num: string
+  question: string
+  question_type?: string
+  solution_method?: string
+}
+
+interface TextbookExercise {
+  exercise_number: string
+  questions: TextbookQuestion[]
+}
+
 interface GeneratedModule {
   order_index: number
   title: string
@@ -68,6 +90,11 @@ interface GeneratedModule {
   diagram_type?: string
   what_to_make?: string
   diagram_svg?: string
+  chapter_flowchart?: string
+  concept_visuals?: ConceptVisual[]
+  textbook_definitions?: Array<{ concept: string; definition: string; si_units?: string }>
+  textbook_examples?: Array<{ title: string; scenario: string }>
+  textbook_exercises?: TextbookExercise[]
 }
 
 interface GeneratedCurriculum {
