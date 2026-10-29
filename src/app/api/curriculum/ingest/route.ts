@@ -1,6 +1,6 @@
 export const maxDuration = 300;
 import { NextResponse } from 'next/server'
-import { GoogleGenAI, Part } from '@google/genai'
+import { GoogleGenAI, Part, createPartFromUri } from '@google/genai'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { isRequestAuthorizedAdmin } from '@/lib/adminAuth'
@@ -412,17 +412,49 @@ export async function POST(req: Request) {
 
       const file = formData.get('file') as File | null
       if (file && file.size > 0) {
-        const arrayBuffer = await file.arrayBuffer()
-        const base64Data = Buffer.from(arrayBuffer).toString('base64')
-        const mimeType = file.type || 'application/pdf'
-        filePart = {
-          inlineData: {
-            mimeType,
-            data: base64Data,
-          },
-        }
         if (!bodyData.notesSourceFilename) {
           bodyData.notesSourceFilename = file.name
+        }
+
+        const mimeType = file.type || 'application/pdf'
+        const arrayBuffer = await file.arrayBuffer()
+
+        // Primary: Stream directly to Google File Storage via ai.files.upload (zero socket payload, no fetch drops)
+        try {
+          const uploadedFile = await ai.files.upload({
+            file: new Blob([arrayBuffer], { type: mimeType }),
+            config: {
+              displayName: file.name,
+              mimeType,
+            },
+          })
+
+          const fileName = uploadedFile.name as string
+          let getFile = await ai.files.get({ name: fileName })
+          let pollCount = 0
+          while (getFile.state === 'PROCESSING' && pollCount < 10) {
+            await new Promise((r) => setTimeout(r, 600))
+            getFile = await ai.files.get({ name: fileName })
+            pollCount++
+          }
+
+          if (uploadedFile.uri) {
+            filePart = createPartFromUri(uploadedFile.uri, uploadedFile.mimeType || mimeType)
+            console.log(`[Ingest API] Uploaded file "${file.name}" to Google File Storage: ${uploadedFile.uri}`)
+          }
+        } catch (uploadErr: any) {
+          console.warn('[Ingest API] Files API upload notice (falling back to inlineData):', uploadErr?.message)
+        }
+
+        // Fallback: inlineData if Files API upload failed
+        if (!filePart) {
+          const base64Data = Buffer.from(arrayBuffer).toString('base64')
+          filePart = {
+            inlineData: {
+              mimeType,
+              data: base64Data,
+            },
+          }
         }
       }
 
@@ -948,20 +980,16 @@ ${rawSyllabusText}
 CURRICULUM DECOMPOSITION REQUIREMENTS:
 1. Identify all sequential Chapters conforming strictly to official ${board} textbooks.
    - Chapter order_index: (1, 2, 3...)
-   - Chapter title: Official, complete chapter name (e.g., "Chapter 1: Number System", "Chapter 2: Polynomials")
+   - Chapter title: Official, complete chapter name (e.g., "Chapter 1: Real Numbers", "Chapter 2: Polynomials")
    - Chapter difficulty_level: "beginner" | "intermediate" | "advanced"
-   - Chapter description: Concise 1-2 sentence overview of what the chapter covers.
-2. For EACH Chapter, break it down comprehensively into 4 to 6 granular 15-minute Topic Capsules (modules).
-   - Each capsule must represent a distinct, teachable concept block.
+   - Chapter description: Concise 1-sentence overview of what the chapter covers.
+2. For EACH Chapter, break it down into 3 to 5 focused 15-minute Topic Capsules (modules):
    - order_index: Sequential number within chapter (1, 2, 3...)
-   - title: Specific topic name (e.g., "Irrational Numbers & Proofs of Irrationality")
-   - description: 1-sentence learning objective
-   - subtopics: Array of 3 to 5 core examination subtopics aligned with ${board} board exams
-   - key_concepts: Array of 3 to 5 core formulas, principles, definitions, or laws
-   - success_criteria: A specific test question or problem type the student should be able to solve
-   - diagram_type: The most appropriate diagram type (vector_svg_diagram | mafs_graph | flowchart | circuit_schematic | ray_optics)
-   - what_to_make: Blueprint description of the key visual or diagram to draw on the chalkboard
-   - visual_ideas: Real-life physical intuition or visual analogy for the AI tutor
+   - title: Specific topic capsule name
+   - description: 1-sentence concise learning objective
+   - subtopics: Array of 2 to 3 core concepts tested in ${board} board exams
+   - key_concepts: Array of 2 to 3 core formulas, principles, or laws
+   - success_criteria: 1 clear problem type or question the student will master
 
 OUTPUT FORMAT:
 Respond with ONLY a valid JSON object matching this schema (do NOT include conversational prose outside the JSON):
@@ -973,18 +1001,15 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
       "board": "${board}",
       "category": "${category}",
       "description": "...",
-      "difficulty_level": "beginner",
+      "difficulty_level": "intermediate",
       "modules": [
         {
           "order_index": 1,
           "title": "Topic name",
           "description": "Learning objective",
           "subtopics": ["Subtopic 1", "Subtopic 2"],
-          "key_concepts": ["Formula/Law 1", "Definition 2"],
-          "success_criteria": "Student can solve...",
-          "diagram_type": "vector_svg_diagram",
-          "what_to_make": "Description of chalkboard drawing",
-          "visual_ideas": "Visual hook idea"
+          "key_concepts": ["Core Formula 1", "Core Law 2"],
+          "success_criteria": "Student can solve standard board question on this topic"
         }
       ]
     }

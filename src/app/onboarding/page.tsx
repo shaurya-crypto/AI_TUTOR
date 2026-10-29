@@ -7,7 +7,7 @@ import { createClient } from '@/utils/supabase/client'
 import { SobiVectorBot } from '@/components/mascot/SobiVectorBot'
 import { completeOnboardingAction, Phase4OnboardingData } from './actions'
 import { getLanguageVoiceConfig } from '@/lib/voiceAndLanguageConfig'
-import { ArrowLeft, ArrowRight, Volume2, VolumeX, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Volume2, VolumeX, Loader2, Info } from 'lucide-react'
 
 // Sparkle Icon matching Aristotle's selection option styling
 function SparkleStar({ className = 'w-5 h-5' }: { className?: string }) {
@@ -222,10 +222,51 @@ export default function OnboardingPage() {
   const [textInputValue, setTextInputValue] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const [ingestedClasses, setIngestedClasses] = useState<string[]>(['Class 9'])
+  const [classWarningMessage, setClassWarningMessage] = useState<string | null>(null)
   const textInputRef = useRef<HTMLInputElement | null>(null)
 
   const currentQ = QUESTIONS[currentStep]
   const progressPercent = Math.round(((currentStep + 1) / QUESTIONS.length) * 100)
+
+  // Query database for authentic ingested classes
+  useEffect(() => {
+    async function loadIngestedClasses() {
+      try {
+        const { data, error } = await supabase
+          .from('curriculums')
+          .select('class_level')
+          .not('class_level', 'is', null)
+
+        if (!error && data && data.length > 0) {
+          const unique = Array.from(
+            new Set(data.map((d: any) => d.class_level).filter(Boolean))
+          ) as string[]
+
+          // Sort naturally: Class 6, Class 7, Class 8...
+          unique.sort((a, b) => {
+            const numA = parseInt(a.replace(/\D/g, ''), 10) || 0
+            const numB = parseInt(b.replace(/\D/g, ''), 10) || 0
+            return numA - numB
+          })
+
+          if (unique.length > 0) {
+            setIngestedClasses(unique)
+            // Pre-select first ingested class if default is not ingested
+            setAnswers((prev) => {
+              if (!unique.includes(prev.classLevel)) {
+                return { ...prev, classLevel: unique[0] }
+              }
+              return prev
+            })
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load ingested classes:', err)
+      }
+    }
+    loadIngestedClasses()
+  }, [supabase])
 
   // Pre-populate name if user metadata exists
   useEffect(() => {
@@ -252,13 +293,28 @@ export default function OnboardingPage() {
 
   // Advance to next question or submit with visible celebration reaction
   const handleNext = async (customValue?: any) => {
+    const valueToSave = customValue !== undefined ? customValue : textInputValue
+
+    // Ingestion prototype guard: verify if selected class has ingested chapters/curricula
+    if (currentQ.id === 'classLevel' && typeof valueToSave === 'string') {
+      const isIngested = ingestedClasses.includes(valueToSave)
+      if (!isIngested) {
+        const formattedClasses = ingestedClasses.join(', ')
+        setClassWarningMessage(
+          `This is in prototype. We have only ingested ${formattedClasses}. Please select that.`
+        )
+        setReactionExpression('gentle-downward-gaze')
+        return
+      }
+      setClassWarningMessage(null)
+    }
+
     // Sobi joyful celebration reaction on answer confirmation
     setReactionExpression('joyful-wide')
     setTimeout(() => {
       setReactionExpression(undefined)
     }, 700)
 
-    const valueToSave = customValue !== undefined ? customValue : textInputValue
     const updatedAnswers = {
       ...answers,
       [currentQ.id]: currentQ.type === 'number' && valueToSave ? parseInt(valueToSave, 10) : valueToSave,
@@ -282,6 +338,7 @@ export default function OnboardingPage() {
 
   // Back to previous question
   const handleBack = () => {
+    setClassWarningMessage(null)
     if (currentStep > 0) {
       setCurrentStep((prev) => prev - 1)
     }
@@ -289,6 +346,7 @@ export default function OnboardingPage() {
 
   // Skip current question
   const handleSkip = () => {
+    setClassWarningMessage(null)
     if (currentStep < QUESTIONS.length - 1) {
       setCurrentStep((prev) => prev + 1)
     } else {
@@ -459,10 +517,27 @@ export default function OnboardingPage() {
 
               {/* Options Card Container */}
               <div className="w-full rounded-2xl border border-neutral-200/80 bg-white/95 p-3.5 shadow-[0_4px_24px_rgba(0,0,0,0.04)] backdrop-blur-sm max-h-[58vh] overflow-y-auto">
+                {classWarningMessage && currentQ.id === 'classLevel' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-3.5 flex items-start gap-2.5 rounded-xl border border-amber-300/90 bg-amber-50/95 px-3.5 py-3 text-xs text-amber-900 shadow-sm"
+                  >
+                    <Info className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                    <span className="font-medium leading-relaxed">{classWarningMessage}</span>
+                  </motion.div>
+                )}
+
                 <div className="flex flex-col gap-2.5">
                   {currentQ.options?.map((opt) => {
                     const isSelected = answers[currentQ.id] === opt.value
                     const isDisabled = !!opt.disabled
+                    const isClassQuestion = currentQ.id === 'classLevel'
+                    const isClassIngested = isClassQuestion ? ingestedClasses.includes(opt.value) : true
+                    const displayBadge =
+                      opt.badge ||
+                      (isClassQuestion ? (isClassIngested ? 'Ready' : 'Prototype') : undefined)
+
                     return (
                       <button
                         key={opt.value}
@@ -487,9 +562,17 @@ export default function OnboardingPage() {
                             {opt.label}
                           </span>
                         </div>
-                        {opt.badge && (
-                          <span className="shrink-0 rounded-full border border-neutral-300 bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-                            {opt.badge}
+                        {displayBadge && (
+                          <span
+                            className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] uppercase tracking-wider ${
+                              isClassQuestion
+                                ? isClassIngested
+                                  ? 'border-emerald-300 bg-emerald-50 font-semibold text-emerald-700'
+                                  : 'border-neutral-200 bg-neutral-100 font-medium text-neutral-500'
+                                : 'border-neutral-300 bg-neutral-100 font-semibold text-neutral-500'
+                            }`}
+                          >
+                            {displayBadge}
                           </span>
                         )}
                       </button>

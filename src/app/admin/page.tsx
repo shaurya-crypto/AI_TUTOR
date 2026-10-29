@@ -602,7 +602,7 @@ export default function AdminPortalPage() {
 
     setIsAnalyzing(true)
     setAnalysisTimer(0)
-    setActiveAnalysisModel('gemini-2.5-flash')
+    setActiveAnalysisModel('gemini-3-flash-preview')
     const startSec = Date.now()
 
     const addLog = (text: string, type: 'info' | 'model' | 'success' | 'warn' = 'info') => {
@@ -613,7 +613,7 @@ export default function AdminPortalPage() {
     setAnalysisLogs([
       { time: '0.0s', text: `Session initialized for ${selectedBoard} ${selectedClass} ${selectedSubject}`, type: 'info' },
       { time: '0.2s', text: `Payload prepared: ${inputTab === 'pdf' ? `Document "${selectedFile?.name}" (${Math.round((selectedFile?.size || 0)/1024)} KB)` : `Raw text outline (${rawText.length} chars)`}`, type: 'info' },
-      { time: '0.4s', text: 'Primary model connected: gemini-2.5-flash (Cascade: gemini-3.8-flash, gemini-3-flash-preview)', type: 'model' },
+      { time: '0.4s', text: 'Primary model connected: gemini-3-flash-preview (Cascade: gemini-3.8-flash, gemini-2.5-flash, gemini-2.5-flash-lite)', type: 'model' },
     ])
 
     const stages = [

@@ -20,22 +20,22 @@ export interface ResilientGenerateOptions {
 
 /**
  * Verified models for curriculum decomposition and chapter synthesis:
- * 1. gemini-2.5-flash: Ultra-fast flagship workhorse (1.1s response, exceptional structured JSON)
- * 2. gemini-3.8-flash: High-intelligence workhorse in 2nd position
- * 3. gemini-3-flash-preview: High-speed preview engine (1.5s response, active quota)
+ * 1. gemini-3-flash-preview: Primary high-speed preview engine (1st position, ultra-fast generation)
+ * 2. gemini-3.8-flash: High-intelligence workhorse in 2nd position (thinking disabled for fast structured JSON)
+ * 3. gemini-2.5-flash: Ultra-fast flagship workhorse (1.1s response)
  * 4. gemini-2.5-flash-lite: Ultra-low latency safety net (0.8s response)
  */
 export const DEFAULT_MODEL_CASCADE = [
-  'gemini-2.5-flash',
-  'gemini-3.8-flash',
   'gemini-3-flash-preview',
+  'gemini-3.8-flash',
+  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
 ]
 
 /**
  * Instant-Failover Multi-Model Generator with per-attempt timeout guard.
  * Prevents requests from hanging on upstream demand spikes (e.g. 503 errors).
- * If a model times out (default 25s) or returns an error, it immediately cascades to the next available model.
+ * If a model times out (default 60s) or returns an error, it immediately cascades to the next available model.
  */
 export async function resilientGenerateContent(
   ai: GoogleGenAI,
@@ -48,7 +48,7 @@ export async function resilientGenerateContent(
 
   const maxRounds = options.maxRounds || 2
   const label = options.label || 'Gemini API'
-  const timeoutLimit = options.timeoutMs ?? 0
+  const timeoutLimit = options.timeoutMs !== undefined ? options.timeoutMs : 60000
   const errorsCollected: string[] = []
 
   const baseConfig = {
@@ -61,13 +61,27 @@ export async function resilientGenerateContent(
       const model = models[i]
       const nextModel = models[i + 1]
 
-      // Helper to execute generation with timeout guard
+      // Helper to execute generation with timeout guard and model-specific configuration
       const executeWithTimeout = async (): Promise<string> => {
+        // Construct per-model config
+        const modelConfig: any = { ...baseConfig }
+
+        // Gemini 3.x models support thinkingConfig. For fast structured JSON extraction,
+        // if thinkingBudget is not explicitly configured, disable thinking (thinkingBudget: 0) to prevent 2-minute delays.
+        if (model.startsWith('gemini-3')) {
+          if (!modelConfig.thinkingConfig && baseConfig.responseMimeType === 'application/json') {
+            modelConfig.thinkingConfig = { thinkingBudget: 0 }
+          }
+        } else {
+          // Gemini 2.x models do not accept thinkingConfig; delete to prevent API errors
+          delete modelConfig.thinkingConfig
+        }
+
         if (!timeoutLimit || timeoutLimit <= 0) {
           const response = await ai.models.generateContent({
             model,
             contents: options.contents,
-            config: baseConfig,
+            config: modelConfig,
           })
           return response?.text?.trim() || ''
         }
@@ -84,7 +98,7 @@ export async function resilientGenerateContent(
           const apiPromise = ai.models.generateContent({
             model,
             contents: options.contents,
-            config: baseConfig,
+            config: modelConfig,
           })
 
           const response = await Promise.race([apiPromise, timeoutPromise])
@@ -220,15 +234,22 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
         result += char
       } else if (char === '\\') {
         const nextChar = cleaned[i + 1]
-        if (!nextChar) {
-          result += '\\\\'
-          escaped = false
-        } else if (!/["\\/bfnrtu]/.test(nextChar)) {
-          // Fix LaTeX or unrecognized escapes like \sqrt, \times, \delta, etc.
-          result += '\\\\'
-        } else {
+        // Check if next characters form a valid 4-digit hex Unicode escape: \uXXXX
+        const isUnicode = nextChar === 'u' && /^[0-9a-fA-F]{4}/.test(cleaned.substring(i + 2, i + 6))
+        // Check for valid standard JSON escapes (\", \\, \/, \b, \f, \n, \r, \t)
+        // If \b, \f, \r, \t are followed immediately by an ASCII letter (e.g. \beta, \frac, \rho, \theta),
+        // it is a LaTeX command, NOT a lone control character!
+        const isValidStandardEscape =
+          Boolean(nextChar) &&
+          /["\\/bfnrt]/.test(nextChar) &&
+          !(/^[bfrt][a-zA-Z]/.test(cleaned.substring(i + 1, i + 3)))
+
+        if (isUnicode || isValidStandardEscape) {
           result += '\\'
           escaped = true
+        } else {
+          // Double the backslash so LaTeX or unescaped characters are preserved as valid JSON string literals
+          result += '\\\\'
         }
       } else if (char === '"') {
         inString = false
@@ -300,20 +321,20 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
   // Clean trailing incomplete constructs & trailing commas
   result = result.trim()
   result = result.replace(/(?:,\s*)?"[^"]*"\s*:\s*$/, '')
-  result = result.replace(/,\s*([\]}])/g, '$1')
-  result = result.replace(/,\s*$/, '')
+  result = result.replace(/,[\s,]*([\]}])/g, '$1')
+  result = result.replace(/,[\s,]*$/, '')
 
   // Balance open braces/brackets
   const finalStack = [...stack]
   let balancedResult = result
   while (finalStack.length > 0) {
     const openDelim = finalStack.pop()
-    balancedResult = balancedResult.trim().replace(/,\s*$/, '')
+    balancedResult = balancedResult.trim().replace(/,[\s,]*$/, '')
     balancedResult += openDelim === '{' ? '}' : ']'
   }
 
   // Clean any trailing commas before newly added closing brackets
-  balancedResult = balancedResult.replace(/,\s*([\]}])/g, '$1')
+  balancedResult = balancedResult.replace(/,[\s,]*([\]}])/g, '$1')
 
   try {
     return JSON.parse(balancedResult)
@@ -345,8 +366,18 @@ export function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'):
           candResult += c
         } else if (c === '\\') {
           const next = candidateSub[i + 1]
-          if (!next || !/["\\/bfnrtu]/.test(next)) candResult += '\\\\'
-          else { candResult += '\\'; candEsc = true }
+          const isUni = next === 'u' && /^[0-9a-fA-F]{4}/.test(candidateSub.substring(i + 2, i + 6))
+          const isStd =
+            Boolean(next) &&
+            /["\\/bfnrt]/.test(next) &&
+            !(/^[bfrt][a-zA-Z]/.test(candidateSub.substring(i + 1, i + 3)))
+
+          if (isUni || isStd) {
+            candResult += '\\'
+            candEsc = true
+          } else {
+            candResult += '\\\\'
+          }
         } else if (c === '"') {
           candInStr = false
           candResult += '"'
