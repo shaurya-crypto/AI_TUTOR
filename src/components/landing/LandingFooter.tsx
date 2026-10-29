@@ -112,9 +112,15 @@ export function LandingFooter() {
           <p>
             &copy; {new Date().getFullYear()} AI Tutor. Built with Classical Intelligence &times; Modern Learning.
           </p>
-          <p className="font-mono text-[11px] text-ink-muted">
-            First-Principles Socratic Education &bull; Zero Lecture Monotony
-          </p>
+          <div className="flex items-center gap-4 text-xs font-mono">
+            <Link href="/terms" className="hover:text-ink-primary transition-colors">
+              Terms of Service
+            </Link>
+            <span>&bull;</span>
+            <Link href="/privacy" className="hover:text-ink-primary transition-colors">
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       </div>
     </footer>

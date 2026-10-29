@@ -8,6 +8,14 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
+  // Catch-all for OAuth code redirect fallback (e.g. Supabase redirecting to /?code=... instead of /auth/callback)
+  const code = request.nextUrl.searchParams.get('code')
+  if (code && !pathname.startsWith('/auth')) {
+    const callbackUrl = new URL('/auth/callback', request.url)
+    callbackUrl.search = request.nextUrl.search
+    return NextResponse.redirect(callbackUrl)
+  }
+
   // 1. Static media & asset bypass: Never run auth or session checks on audio, video, images, or assets
   const isStaticAsset =
     pathname.startsWith('/_next') ||
