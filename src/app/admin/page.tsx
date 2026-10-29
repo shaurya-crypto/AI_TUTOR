@@ -183,6 +183,13 @@ const PRESET_SUBJECTS = [
   'Chemistry',
   'Biology',
 ]
+function getSubjectsForClass(classLevel: string): string[] {
+  if (classLevel === 'Class 11' || classLevel === 'Class 12') {
+    return ['Mathematics', 'Physics', 'Chemistry', 'Biology']
+  }
+  return ['Mathematics', 'Science']
+}
+
 
 function formatChapterTitleDisplay(curr: { title: string; order_index?: number }): string {
   const trimmed = (curr.title || '').trim()
@@ -235,6 +242,24 @@ export default function AdminPortalPage() {
   const [notesBoard, setNotesBoard] = useState<EducationalBoard>('CBSE')
   const [notesClass, setNotesClass] = useState<string>('Class 10')
   const [notesSubject, setNotesSubject] = useState<string>('Science')
+  // Batch Chapter Ingestion State
+  interface BatchChapterItem {
+    id: string
+    file: File
+    chapterNumber: number
+    chapterTitle: string
+    targetCurriculumId?: string
+    status: 'pending' | 'processing' | 'success' | 'error'
+    errorMsg?: string
+    capsulesCount?: number
+  }
+
+  const [notesUploadMode, setNotesUploadMode] = useState<'single' | 'batch'>('batch')
+  const [batchQueue, setBatchQueue] = useState<BatchChapterItem[]>([])
+  const [isBatchRunning, setIsBatchRunning] = useState(false)
+  const [batchCurrentIndex, setBatchCurrentIndex] = useState<number>(-1)
+  const batchFileInputRef = useRef<HTMLInputElement | null>(null)
+
   const [notesTargetChapterId, setNotesTargetChapterId] = useState<string>('new')
   const [notesNewChapterNumber, setNotesNewChapterNumber] = useState<number>(1)
   const [notesNewChapterTitle, setNotesNewChapterTitle] = useState<string>('')
@@ -412,9 +437,151 @@ export default function AdminPortalPage() {
     }
   }
 
+  // Batch filename parser
+  const parseChapterFromFilename = (
+    filename: string,
+    existingChapters: PublishedCurriculum[]
+  ): { chapterNumber: number; chapterTitle: string; matchedId?: string } => {
+    const clean = filename.replace(/\.[^/.]+$/, '').trim()
+    const match = clean.match(/(?:ch(?:apter)?[s._-]*(d+))|(?:^(d+)[s._-]+)|(?:_(d+)_)/i)
+    let num = 1
+    if (match) {
+      num = parseInt(match[1] || match[2] || match[3] || '1', 10)
+    }
+
+    const existing = existingChapters.find((c) => (c.order_index ?? 0) === num)
+    if (existing) {
+      return { chapterNumber: num, chapterTitle: existing.title, matchedId: existing.id }
+    }
+
+    const titleWithoutPrefix = clean
+      .replace(/^(?:ch(?:apter)?[s._-]*d+[s._-]*)/i, '')
+      .replace(/^d+[s._-]+/, '')
+      .replace(/[_-]/g, ' ')
+      .trim()
+
+    const title = titleWithoutPrefix
+      ? `Chapter ${num}: ${titleWithoutPrefix.charAt(0).toUpperCase() + titleWithoutPrefix.slice(1)}`
+      : `Chapter ${num}`
+
+    return { chapterNumber: num, chapterTitle: title }
+  }
+
+  const handleBatchFilesSelected = (files: FileList | File[]) => {
+    const fileList = Array.from(files).filter(
+      (f) => f.name.endsWith('.pdf') || f.name.endsWith('.md') || f.name.endsWith('.txt')
+    )
+    if (fileList.length === 0) return
+
+    const newItems: BatchChapterItem[] = fileList.map((file, idx) => {
+      const { chapterNumber, chapterTitle, matchedId } = parseChapterFromFilename(
+        file.name,
+        matchingChaptersForNotes
+      )
+      return {
+        id: `${file.name}-${Date.now()}-${idx}`,
+        file,
+        chapterNumber,
+        chapterTitle,
+        targetCurriculumId: matchedId,
+        status: 'pending',
+      }
+    })
+
+    newItems.sort((a, b) => a.chapterNumber - b.chapterNumber)
+    setBatchQueue((prev) => [...prev, ...newItems])
+  }
+
+  const handleStartBatchSeeding = async () => {
+    if (batchQueue.length === 0 || isBatchRunning) return
+    setIsBatchRunning(true)
+    setErrorMsg(null)
+    setSuccessMsg(null)
+
+    let successCount = 0
+    let totalCapsules = 0
+
+    for (let i = 0; i < batchQueue.length; i++) {
+      const item = batchQueue[i]
+      if (item.status === 'success') {
+        successCount++
+        totalCapsules += item.capsulesCount || 0
+        continue
+      }
+
+      setBatchCurrentIndex(i)
+      setBatchQueue((prev) =>
+        prev.map((q, idx) => (idx === i ? { ...q, status: 'processing' } : q))
+      )
+
+      try {
+        const formData = new FormData()
+        formData.append('action', 'attach_chapter_notes')
+        if (item.targetCurriculumId) {
+          formData.append('curriculumId', item.targetCurriculumId)
+        }
+        formData.append('board', notesBoard)
+        formData.append('classLevel', notesClass)
+        formData.append('category', notesSubject)
+        formData.append('chapterNumber', String(item.chapterNumber))
+        formData.append('chapterTitle', item.chapterTitle)
+        formData.append('strategy', 'synthesize_capsules')
+        formData.append('file', item.file)
+        formData.append('notesSourceFilename', item.file.name)
+
+        const res = await fetch('/api/curriculum/ingest', {
+          method: 'POST',
+          body: formData,
+        })
+
+        const json = await res.json()
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || `Failed to synthesize ${item.chapterTitle}`)
+        }
+
+        successCount++
+        totalCapsules += json.capsulesCount || 0
+
+        setBatchQueue((prev) =>
+          prev.map((q, idx) =>
+            idx === i
+              ? {
+                  ...q,
+                  status: 'success',
+                  capsulesCount: json.capsulesCount,
+                  chapterTitle: json.chapterTitle || q.chapterTitle,
+                }
+              : q
+          )
+        )
+      } catch (err: any) {
+        console.error(`Error ingesting ${item.chapterTitle}:`, err)
+        setBatchQueue((prev) =>
+          prev.map((q, idx) =>
+            idx === i
+              ? {
+                  ...q,
+                  status: 'error',
+                  errorMsg: err?.message || 'Synthesis failed',
+                }
+              : q
+          )
+        )
+      }
+    }
+
+    setIsBatchRunning(false)
+    setBatchCurrentIndex(-1)
+    await fetchCurriculumsLibrary()
+
+    setSuccessMsg(
+      `Batch Auto-Seeding Finished: Successfully synthesized ${successCount} of ${batchQueue.length} chapters (${totalCapsules} capsules) into Supabase!`
+    )
+  }
+
   // Handle Syllabus Analyze & Preview
-  const handleAnalyze = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleAnalyze = async (e?: React.FormEvent, executionMode: 'preview' | 'commit' = 'preview') => {
+    if (e) e.preventDefault()
     setErrorMsg(null)
     setSuccessMsg(null)
 
@@ -460,7 +627,7 @@ export default function AdminPortalPage() {
       formData.append('board', selectedBoard)
       formData.append('classLevel', selectedClass)
       formData.append('category', selectedSubject)
-      formData.append('mode', 'preview')
+      formData.append('mode', executionMode)
       formData.append('replaceExisting', replaceExisting ? 'true' : 'false')
 
       if (inputTab === 'pdf' && selectedFile) {
@@ -480,15 +647,23 @@ export default function AdminPortalPage() {
         throw new Error(json.error || 'Failed to analyze syllabus.')
       }
 
-      setPreviewData({
-        board: json.board,
-        classLevel: json.classLevel,
-        category: json.category,
-        curriculums: json.curriculums,
-      })
-      setSuccessMsg(
-        `Successfully extracted ${json.curriculumsCount} chapters and ${json.totalCapsulesCount} teachable capsules for ${json.board} ${json.classLevel}.`
-      )
+      if (executionMode === 'commit') {
+        setSuccessMsg(
+          `Auto-Seeded ${json.insertedCurriculumsCount} chapters and ${json.insertedModulesCount} capsules directly into database for ${json.board} ${json.classLevel}!`
+        )
+        setPreviewData(null)
+        await fetchCurriculumsLibrary()
+      } else {
+        setPreviewData({
+          board: json.board,
+          classLevel: json.classLevel,
+          category: json.category,
+          curriculums: json.curriculums,
+        })
+        setSuccessMsg(
+          `Successfully extracted ${json.curriculumsCount} chapters and ${json.totalCapsulesCount} teachable capsules for ${json.board} ${json.classLevel}.`
+        )
+      }
     } catch (err: any) {
       console.error('Analyze error:', err)
       setErrorMsg(err?.message || 'Error occurred while communicating with Gemini API.')
@@ -1206,7 +1381,14 @@ export default function AdminPortalPage() {
                   </label>
                   <select
                     value={notesClass}
-                    onChange={(e) => setNotesClass(e.target.value)}
+                    onChange={(e) => {
+                      const c = e.target.value
+                      setNotesClass(c)
+                      const subs = getSubjectsForClass(c)
+                      if (!subs.includes(notesSubject)) {
+                        setNotesSubject(subs[0])
+                      }
+                    }}
                     className="w-full h-11 px-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-sm text-emerald-100 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer"
                   >
                     {PRESET_CLASSES.map((cls) => (
@@ -1226,7 +1408,7 @@ export default function AdminPortalPage() {
                     onChange={(e) => setNotesSubject(e.target.value)}
                     className="w-full h-11 px-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-sm text-emerald-100 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer"
                   >
-                    {PRESET_SUBJECTS.map((sub) => (
+                    {getSubjectsForClass(notesClass).map((sub) => (
                       <option key={sub} value={sub}>
                         {sub}
                       </option>
@@ -1235,7 +1417,265 @@ export default function AdminPortalPage() {
                 </div>
               </div>
 
-              {/* TARGET CHAPTER SELECTION (EXISTING OR CREATE NEW) */}
+              {/* UPLOAD MODE SWITCHER (BATCH VS SINGLE) */}
+              <div className="flex items-center justify-between p-1 bg-[#08110a] border border-emerald-900/60 rounded-2xl mb-4">
+                <button
+                  type="button"
+                  onClick={() => setNotesUploadMode('batch')}
+                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold font-mono tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    notesUploadMode === 'batch'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'text-emerald-400 hover:text-white'
+                  }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Batch Upload All Chapters (Auto-Feed Queue)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotesUploadMode('single')}
+                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold font-mono tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    notesUploadMode === 'single'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'text-emerald-400 hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Single Chapter Upload</span>
+                </button>
+              </div>
+
+              {/* BATCH CHAPTER INGESTION MODE */}
+              {notesUploadMode === 'batch' && (
+                <div className="space-y-5">
+                  {/* Multi-file Dropzone */}
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                        handleBatchFilesSelected(e.dataTransfer.files)
+                      }
+                    }}
+                    onClick={() => batchFileInputRef.current?.click()}
+                    className="p-8 rounded-3xl border-2 border-dashed border-emerald-700/80 hover:border-emerald-400 bg-[#0c1610] flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors shadow-inner"
+                  >
+                    <input
+                      ref={batchFileInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.md,.txt"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          handleBatchFilesSelected(e.target.files)
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-950/80 border border-emerald-600 flex items-center justify-center text-emerald-400 shadow-md">
+                      <UploadCloud className="w-7 h-7" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <span className="text-sm font-bold text-white block">
+                        Drag and drop ALL chapter PDFs for {notesBoard} {notesClass} {notesSubject}
+                      </span>
+                      <span className="text-xs text-emerald-300/80 font-mono block">
+                        Select multiple files at once (.pdf, .md, .txt) • Auto-detects chapter numbers and titles
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Batch Queue & Progress Table */}
+                  {batchQueue.length > 0 && (
+                    <div className="p-5 rounded-3xl bg-[#08110a] border border-emerald-900/80 space-y-4 shadow-xl">
+                      {/* Queue Header & Actions */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-900/60 pb-3">
+                        <div>
+                          <h4 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                            <span>Batch Ingestion Queue</span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold">
+                              {batchQueue.length} Chapters
+                            </span>
+                          </h4>
+                          <p className="text-xs text-emerald-300/70">
+                            {batchQueue.filter((q) => q.status === 'success').length} of {batchQueue.length} chapters successfully seeded into database
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={isBatchRunning}
+                            onClick={() => batchFileInputRef.current?.click()}
+                            className="px-3 py-1.5 rounded-xl text-xs font-semibold font-mono bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 border border-emerald-700/60 cursor-pointer disabled:opacity-50"
+                          >
+                            + Add More PDFs
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBatchRunning}
+                            onClick={() => setBatchQueue([])}
+                            className="px-3 py-1.5 rounded-xl text-xs font-semibold font-mono bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/60 cursor-pointer disabled:opacity-50"
+                          >
+                            Clear Queue
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      {batchQueue.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="w-full h-2.5 rounded-full bg-emerald-950 border border-emerald-900/80 overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+                              style={{
+                                width: `${Math.round(
+                                  (batchQueue.filter((q) => q.status === 'success').length /
+                                    batchQueue.length) *
+                                    100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[11px] font-mono text-emerald-400/80">
+                            <span>Progress</span>
+                            <span>
+                              {Math.round(
+                                (batchQueue.filter((q) => q.status === 'success').length /
+                                  batchQueue.length) *
+                                  100
+                              )}% Complete
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Chapter Queue Items */}
+                      <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                        {batchQueue.map((item, idx) => (
+                          <div
+                            key={item.id}
+                            className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                              item.status === 'processing'
+                                ? 'bg-emerald-900/40 border-emerald-400 shadow-md ring-1 ring-emerald-400/40'
+                                : item.status === 'success'
+                                ? 'bg-emerald-950/40 border-emerald-800 text-emerald-200'
+                                : item.status === 'error'
+                                ? 'bg-red-950/30 border-red-800/80 text-red-200'
+                                : 'bg-[#0c1610] border-emerald-900/60 text-emerald-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {/* Chapter Number Badge / Input */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-mono text-emerald-400 font-semibold">Ch:</span>
+                                <input
+                                  type="number"
+                                  disabled={isBatchRunning || item.status === 'success'}
+                                  value={item.chapterNumber}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10) || 1
+                                    setBatchQueue((prev) =>
+                                      prev.map((q, qIdx) => (qIdx === idx ? { ...q, chapterNumber: val } : q))
+                                    )
+                                  }}
+                                  className="w-12 h-7 px-2 text-center rounded-lg bg-[#08110a] border border-emerald-700/80 font-mono text-xs text-white focus:outline-none focus:border-emerald-400 disabled:opacity-60"
+                                />
+                              </div>
+
+                              {/* Chapter Title Input */}
+                              <div className="space-y-0.5">
+                                <input
+                                  type="text"
+                                  disabled={isBatchRunning || item.status === 'success'}
+                                  value={item.chapterTitle}
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    setBatchQueue((prev) =>
+                                      prev.map((q, qIdx) => (qIdx === idx ? { ...q, chapterTitle: val } : q))
+                                    )
+                                  }}
+                                  className="h-7 px-2.5 rounded-lg bg-[#08110a] border border-emerald-800/60 font-sans text-xs text-white focus:outline-none focus:border-emerald-400 disabled:opacity-60 w-48 sm:w-64"
+                                />
+                                <div className="text-[10px] font-mono text-emerald-400/60 truncate max-w-[200px]">
+                                  {item.file.name} ({(item.file.size / (1024 * 1024)).toFixed(2)} MB)
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Status & Actions */}
+                            <div className="flex items-center gap-2 justify-end">
+                              {item.status === 'pending' && (
+                                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                                  Queued
+                                </span>
+                              )}
+                              {item.status === 'processing' && (
+                                <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400 flex items-center gap-1.5 animate-pulse">
+                                  <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+                                  <span>Synthesizing Capsules...</span>
+                                </span>
+                              )}
+                              {item.status === 'success' && (
+                                <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  <span>Seeded ({item.capsulesCount ?? 0} Capsules)</span>
+                                </span>
+                              )}
+                              {item.status === 'error' && (
+                                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/60 flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3 text-red-400" />
+                                  <span>{item.errorMsg || 'Failed'}</span>
+                                </span>
+                              )}
+
+                              {!isBatchRunning && item.status !== 'success' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setBatchQueue((prev) => prev.filter((_, qIdx) => qIdx !== idx))}
+                                  className="text-emerald-400/60 hover:text-red-400 p-1 rounded-lg"
+                                  title="Remove from queue"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Start Batch Button */}
+                      <Button
+                        type="button"
+                        disabled={isBatchRunning || batchQueue.every((q) => q.status === 'success')}
+                        onClick={handleStartBatchSeeding}
+                        className="w-full h-12 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        {isBatchRunning ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                            <span>
+                              Processing Chapter {batchCurrentIndex + 1} of {batchQueue.length}...
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 text-slate-950" />
+                            <span>
+                              Start Batch Auto-Seeding ({batchQueue.filter((q) => q.status !== 'success').length} Chapters)
+                            </span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SINGLE CHAPTER UPLOAD MODE */}
+              {notesUploadMode === 'single' && (
+                <div className="space-y-5">
+{/* TARGET CHAPTER SELECTION (EXISTING OR CREATE NEW) */}
               <div className="p-4 rounded-2xl bg-[#0c1711] border border-emerald-900/70 space-y-4">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -1491,10 +1931,14 @@ export default function AdminPortalPage() {
                 </div>
               </div>
 
-              {/* SUBMIT BUTTON */}
-              <Button
-                type="submit"
-                disabled={isProcessingNotes}
+              
+                </div>
+              )}
+{/* SUBMIT BUTTON */}
+              {notesUploadMode === 'single' && (
+                <Button
+                  type="submit"
+                  disabled={isProcessingNotes}
                 className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 {isProcessingNotes ? (
@@ -1509,6 +1953,7 @@ export default function AdminPortalPage() {
                   </>
                 )}
               </Button>
+              )}
             </form>
           </section>
         )}
@@ -1589,7 +2034,14 @@ export default function AdminPortalPage() {
                   </label>
                   <select
                     value={selectedClass}
-                    onChange={(e) => setSelectedClass(e.target.value)}
+                    onChange={(e) => {
+                      const c = e.target.value
+                      setSelectedClass(c)
+                      const subs = getSubjectsForClass(c)
+                      if (!subs.includes(selectedSubject)) {
+                        setSelectedSubject(subs[0])
+                      }
+                    }}
                     className="w-full h-11 px-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-sm text-emerald-100 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer"
                   >
                     {PRESET_CLASSES.map((cls) => (
@@ -1609,7 +2061,7 @@ export default function AdminPortalPage() {
                     onChange={(e) => setSelectedSubject(e.target.value)}
                     className="w-full h-11 px-3.5 rounded-xl bg-[#0c1610] border border-emerald-800/70 text-sm text-emerald-100 focus:outline-none focus:border-emerald-500 font-sans cursor-pointer"
                   >
-                    {PRESET_SUBJECTS.map((sub) => (
+                    {getSubjectsForClass(selectedClass).map((sub) => (
                       <option key={sub} value={sub}>
                         {sub}
                       </option>
@@ -1724,23 +2176,44 @@ export default function AdminPortalPage() {
                 )}
               </div>
 
-              <Button
-                type="submit"
-                disabled={isAnalyzing}
-                className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>{analysisStep || 'Analyzing Syllabus with Gemini...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>Analyze & Preview 15-Minute Topic Capsules</span>
-                  </>
-                )}
-              </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Button
+                  type="submit"
+                  disabled={isAnalyzing}
+                  className="w-full h-12 rounded-2xl bg-emerald-700/80 hover:bg-emerald-600 text-white font-semibold text-sm shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>{analysisStep || 'Analyzing Syllabus...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Analyze & Preview Chapters</span>
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  type="button"
+                  disabled={isAnalyzing}
+                  onClick={() => handleAnalyze(undefined, 'commit')}
+                  className="w-full h-12 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Auto-Seeding into Supabase...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-4 h-4" />
+                      <span>Auto-Seed All to Database (Skip Preview)</span>
+                    </>
+                  )}
+                </Button>
+              </div>
             </form>
           </section>
         )}
