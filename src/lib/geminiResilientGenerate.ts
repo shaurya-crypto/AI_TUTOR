@@ -19,24 +19,22 @@ export interface ResilientGenerateOptions {
 
 /**
  * Verified high-availability models for curriculum decomposition, diagram generation, and notes synthesis.
- * Priority order:
- * 1. gemini-3.8-flash: Primary flagship with extended thinking reasoning
- * 2. gemini-3.1-pro-preview: Frontier Gemini 3.1 Pro fallback
- * 3. gemini-3.5-flash: High-capacity modern flagship intermediate fallback
- * 4. gemini-2.5-flash: Reliable NCERT-structured thinking fallback
- * 5. gemini-2.5-flash-lite: Ultra-low latency safety net
+ * Optimized for maximum speed and intelligence:
+ * 1. gemini-2.5-flash: Ultra-fast flagship workhorse (sub-second response, high throughput, exceptional structured JSON)
+ * 2. gemini-3.8-flash: Extended reasoning fallback
+ * 3. gemini-3.1-pro-preview: Frontier preview fallback
+ * 4. gemini-2.5-flash-lite: Low-latency safety net
  */
 const DEFAULT_MODEL_CASCADE = [
+  'gemini-2.5-flash',
   'gemini-3.8-flash',
   'gemini-3.1-pro-preview',
-  'gemini-3.5-flash',
-  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
 ]
 
 /**
  * Instant-Failover Multi-Model Generator without artificial client timeouts.
- * Lets Gemini complete full thinking, analysis, and comprehensive synthesis naturally.
+ * Lets Gemini complete generation naturally with maximum throughput.
  * If a model returns an API error (503 High Demand, 429 Rate Limit, etc.),
  * it IMMEDIATELY cascades to the next available model in 0 milliseconds.
  */
@@ -52,9 +50,8 @@ export async function resilientGenerateContent(
   const label = options.label || 'Gemini API'
   const errorsCollected: string[] = []
 
-  // Ensure thinking budget and generous output token ceiling are active by default (up to 65,536 tokens)
+  // Ensure generous output token ceiling by default (up to 65,536 tokens) without forcing artificial thinking delays
   const baseConfig = {
-    thinkingConfig: { thinkingBudget: 2048 },
     maxOutputTokens: 65536,
     ...(options.config || {}),
   }
@@ -67,7 +64,6 @@ export async function resilientGenerateContent(
       try {
         console.log(`[${label}] Requesting generation via ${model} (Round ${round}/${maxRounds})...`)
 
-        // Allow natural execution to complete without artificial client timeout
         const response = await ai.models.generateContent({
           model,
           contents: options.contents,
@@ -79,7 +75,7 @@ export async function resilientGenerateContent(
           if (round > 1 || model !== models[0]) {
             console.log(`[${label}] Successfully completed generation using failover model "${model}".`)
           } else {
-            console.log(`[${label}] Successfully completed generation using primary model "${model}".`)
+            console.log(`[${label}] Successfully completed generation using primary fast model "${model}".`)
           }
           return { text: rawText, modelUsed: model }
         }
@@ -105,7 +101,7 @@ export async function resilientGenerateContent(
 
     // If round 1 failed across all models, pause briefly with jitter before round 2
     if (round < maxRounds) {
-      const backoff = 1500 + Math.random() * 500
+      const backoff = 1000 + Math.random() * 500
       console.warn(`[${label}] All models exhausted in Round ${round}. Pausing ${Math.round(backoff)}ms before Round ${round + 1}...`)
       await new Promise((r) => setTimeout(r, backoff))
     }

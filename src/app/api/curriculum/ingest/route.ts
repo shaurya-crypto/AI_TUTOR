@@ -101,11 +101,11 @@ function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
   let cleaned = raw.trim()
 
   // 1. Strip markdown code fences if present (even if unclosed due to truncation)
-  const fenceMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)(?:```)?$/i)
+  const fenceMatch = cleaned.match(/^\`\`\`(?:json)?\s*([\s\S]*?)(?:\`\`\`)?$/i)
   if (fenceMatch && fenceMatch[1]) {
     cleaned = fenceMatch[1].trim()
   } else {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+    cleaned = cleaned.replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\s*\`\`\`$/i, '')
   }
 
   const firstBrace = cleaned.indexOf('{')
@@ -120,13 +120,10 @@ function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
   try {
     return JSON.parse(cleaned)
   } catch (initialErr) {
-    // Proceed to character-level normalization & auto-healing
+    // Proceed to character-level normalization & structural recovery
   }
 
-  // 2. Character-by-character sanitize:
-  // - Fix unescaped backslashes (especially LaTeX \sqrt, \frac, \pi, \cdot, etc.)
-  // - Escape unescaped newlines/tabs inside strings
-  // - Track delimiter stack to auto-close unclosed strings and structures
+  // 2. Character-by-character sanitize & balance
   let result = ''
   let inString = false
   let escaped = false
@@ -141,7 +138,6 @@ function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
         result += char
       } else if (char === '\\') {
         const nextChar = cleaned[i + 1]
-        // In JSON, valid escape targets are " \ / b f n r t u
         if (!nextChar || !/["\\/bfnrtu]/.test(nextChar)) {
           result += '\\\\'
         } else {
@@ -158,8 +154,8 @@ function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
       } else if (char === '\t') {
         result += '\\t'
       } else {
-        const code = char.charCodeAt(0)
-        result += code < 32 ? ' ' : char
+        const codeNum = char.charCodeAt(0)
+        result += codeNum < 32 ? ' ' : char
       }
     } else {
       if (char === '"') {
@@ -180,19 +176,15 @@ function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
     }
   }
 
-  // If ended while inside an unclosed string (e.g. truncated at EOF), close it
   if (inString) {
     result += '"'
   }
 
   result = result.trim().replace(/,\s*$/, '')
-
-  // Remove any unclosed dangling property like `"key":`
   result = result.replace(/,\s*"[^"]*"\s*:\s*$/, '')
   result = result.replace(/\{\s*"[^"]*"\s*:\s*$/, '{')
   result = result.replace(/\[\s*"[^"]*"\s*:\s*$/, '[')
 
-  // Close remaining open delimiters in reverse order
   const finalStack = [...stack]
   let balancedResult = result
   while (finalStack.length > 0) {
@@ -201,54 +193,51 @@ function resilientJsonParse<T = any>(raw: string, label = 'JSON Parser'): T {
     balancedResult += openDelim === '{' ? '}' : ']'
   }
 
-  // 3. Try parsing the balanced/repaired JSON
   try {
     return JSON.parse(balancedResult)
   } catch (secondErr) {
-    console.warn(`[${label}] Balanced parse failed, attempting deep structural recovery...`)
+    // Proceed to iterative rollback
   }
 
-  // 4. Structural recovery: truncate back to the last completed object '}' or array ']'
-  try {
-    const lastCloseObj = cleaned.lastIndexOf('}')
-    const lastCloseArr = cleaned.lastIndexOf(']')
-    const lastSafe = Math.max(lastCloseObj, lastCloseArr)
+  // 3. Iterative rollback: search backwards for previous completed object boundaries (zero recursion)
+  let searchPos = cleaned.length - 1
+  for (let step = 0; step < 10; step++) {
+    const lastCloseObj = cleaned.lastIndexOf('}', searchPos)
+    const lastCloseArr = cleaned.lastIndexOf(']', searchPos)
+    const boundary = Math.max(lastCloseObj, lastCloseArr)
+    if (boundary <= 0) break
 
-    if (lastSafe > 0) {
-      const safeSub = cleaned.substring(0, lastSafe + 1)
-      const recStack: string[] = []
-      let sInStr = false
-      let sEsc = false
+    const candidateSub = cleaned.substring(0, boundary + 1)
+    const recStack: string[] = []
+    let sInStr = false
+    let sEsc = false
 
-      for (let i = 0; i < safeSub.length; i++) {
-        const c = safeSub[i]
-        if (sInStr) {
-          if (sEsc) sEsc = false
-          else if (c === '\\') sEsc = true
-          else if (c === '"') sInStr = false
-        } else {
-          if (c === '"') sInStr = true
-          else if (c === '{' || c === '[') recStack.push(c)
-          else if (c === '}' && recStack[recStack.length - 1] === '{') recStack.pop()
-          else if (c === ']' && recStack[recStack.length - 1] === '[') recStack.pop()
-        }
-      }
-
-      let recovered = safeSub.trim().replace(/,\s*$/, '')
-      while (recStack.length > 0) {
-        const open = recStack.pop()
-        recovered = recovered.trim().replace(/,\s*$/, '')
-        recovered += open === '{' ? '}' : ']'
-      }
-
-      try {
-        return JSON.parse(recovered)
-      } catch (innerErr) {
-        return resilientJsonParse(recovered, label)
+    for (let i = 0; i < candidateSub.length; i++) {
+      const c = candidateSub[i]
+      if (sInStr) {
+        if (sEsc) sEsc = false
+        else if (c === '\\') sEsc = true
+        else if (c === '"') sInStr = false
+      } else {
+        if (c === '"') sInStr = true
+        else if (c === '{' || c === '[') recStack.push(c)
+        else if (c === '}' && recStack[recStack.length - 1] === '{') recStack.pop()
+        else if (c === ']' && recStack[recStack.length - 1] === '[') recStack.pop()
       }
     }
-  } catch (deepErr) {
-    console.error(`[${label}] Deep structural recovery failed:`, deepErr)
+
+    let recovered = candidateSub.trim().replace(/,\s*$/, '')
+    while (recStack.length > 0) {
+      const open = recStack.pop()
+      recovered = recovered.trim().replace(/,\s*$/, '')
+      recovered += open === '{' ? '}' : ']'
+    }
+
+    try {
+      return JSON.parse(recovered)
+    } catch {
+      searchPos = boundary - 1
+    }
   }
 
   throw new Error(`[${label}] Unable to parse JSON response.`)
@@ -850,7 +839,6 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
           responseMimeType: 'application/json',
           temperature: 0.2,
           maxOutputTokens: 65536,
-          thinkingConfig: { thinkingBudget: 2048 },
           ...(geminiCacheName ? { cachedContent: geminiCacheName } : {}),
         },
         label: 'Chapter Notes Synthesis',
@@ -1227,7 +1215,6 @@ Respond with ONLY a valid JSON object matching this schema (do NOT include conve
         responseMimeType: 'application/json',
         temperature: 0.2,
         maxOutputTokens: 65536,
-        thinkingConfig: { thinkingBudget: 2048 },
       },
       label: 'Syllabus Decomposition',
     })
