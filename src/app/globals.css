@@ -464,3 +464,16 @@ html.lenis, html.lenis body {
 .animate-chalk-fade-out {
   animation: chalkFadeOut 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+
+@font-face {
+  font-family: 'Excalifont';
+  src: url('/fonts/Excalifont-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-chalk {
+  font-family: 'Excalifont', 'Virgil', 'Xiaolai', 'Segoe UI Emoji', cursive, sans-serif !important;
+}

@@ -88,10 +88,12 @@ export interface ActiveTypingItem {
   actionLabel: string
   words: string[]
   visibleWordCount: number
-  screenX: number
-  screenY: number
+  canvasX: number
+  canvasY: number
+  fontSize: number
   color: string
   bulletType?: 'dot' | 'step' | 'title' | 'box' | 'question' | 'none'
+  bulletColor?: string
   isFadingOut: boolean
 }
 
@@ -261,7 +263,9 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       color: string,
       canvasX: number,
       canvasY: number,
-      bulletType: 'dot' | 'step' | 'title' | 'box' | 'question' | 'none' = 'none'
+      fontSize = 16,
+      bulletType: 'dot' | 'step' | 'title' | 'box' | 'question' | 'none' = 'none',
+      bulletColor?: string
     ): Promise<void> => {
       if (typeof window === 'undefined') return
       if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return
@@ -270,37 +274,34 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
       const words = cleanText.split(/\s+/).filter(Boolean)
       if (words.length === 0) return
 
-      const zoomFactor = 0.7
-      const scrollY = excalidrawAPIRef.current?.getAppState?.()?.scrollY || 0
-      const screenX = Math.max(24, canvasX * zoomFactor)
-      const screenY = Math.max(20, (canvasY + scrollY) * zoomFactor + 40)
-
       const id = Math.random().toString(36).substring(7)
       setActiveTyping({
         id,
         actionLabel,
         words,
         visibleWordCount: 1,
-        screenX,
-        screenY,
+        canvasX,
+        canvasY,
+        fontSize,
         color,
         bulletType,
+        bulletColor,
         isFadingOut: false,
       })
 
-      // Fast, smooth word-by-word progression
-      const wordDelay = Math.max(20, Math.min(48, 550 / words.length))
+      // Smooth, natural word-by-word pacing (60-80ms per word)
+      const wordDelay = Math.max(45, Math.min(80, 850 / words.length))
       for (let i = 2; i <= words.length; i++) {
         await new Promise((r) => setTimeout(r, wordDelay))
         setActiveTyping((prev) => (prev && prev.id === id ? { ...prev, visibleWordCount: i } : prev))
       }
 
-      // Momentary pause to read completed thought
-      await new Promise((r) => setTimeout(r, 160))
+      // Brief hold to absorb the complete written phrase
+      await new Promise((r) => setTimeout(r, 180))
 
-      // Smooth fade-out effect
+      // Smooth fade-out into the permanent chalkboard canvas
       setActiveTyping((prev) => (prev && prev.id === id ? { ...prev, isFadingOut: true } : prev))
-      await new Promise((r) => setTimeout(r, 360))
+      await new Promise((r) => setTimeout(r, 280))
 
       setActiveTyping((prev) => (prev && prev.id === id ? null : prev))
     }
@@ -1228,7 +1229,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const titleColor = resolveChalkColor(color, INK_PRIMARY)
         const underlineColor = color ? titleColor : INK_BOTANICAL
 
-        await playTypingEffect('Topic', titleText, titleColor, startX, startY, 'title')
+        await playTypingEffect('Topic', titleText, titleColor, startX, startY, 19, 'none')
 
         const elements = convertFn([
           {
@@ -1282,7 +1283,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const noteColor = resolveChalkColor(color, activeChalkColorRef.current)
         const bulletColor = color ? noteColor : INK_BOTANICAL
 
-        await playTypingEffect('Note', clean, noteColor, startX, startY, 'dot')
+        await playTypingEffect('Note', clean, noteColor, startX, startY, 16, 'dot', bulletColor)
 
         const elements = convertToExcalidrawElements([
           {
@@ -1337,7 +1338,7 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
         const startY = getDynamicNextY(12)
         const stepColor = resolveChalkColor(color, INK_SECONDARY)
 
-        await playTypingEffect('Step', clean, stepColor, startX, startY, 'step')
+        await playTypingEffect('Step', clean, stepColor, startX, startY, 15, 'step')
 
         const elements = convertToExcalidrawElements([
           {
@@ -3941,54 +3942,68 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
             UIOptions={EXCALIDRAW_UI_OPTIONS}
           />
 
-          {/* Active Word-by-Word Typing & Smooth Fade-Out Effect Overlay */}
+          {/* Exact Board-Font Word-by-Word Typing & Smooth Fade-Out Chalk Overlay */}
           {activeTyping && (
             <div
               key={activeTyping.id}
               style={{
                 position: 'absolute',
-                left: `${activeTyping.screenX}px`,
-                top: `${activeTyping.screenY}px`,
+                left: `${((activeTyping.canvasX || 60) + (excalidrawAPIRef.current?.getAppState?.()?.scrollX || 0)) * 0.7}px`,
+                top: `${((activeTyping.canvasY || 100) + (excalidrawAPIRef.current?.getAppState?.()?.scrollY || 0)) * 0.7}px`,
+                transform: 'scale(0.7)',
+                transformOrigin: 'top left',
                 zIndex: 25,
-                maxWidth: 'min(640px, 85vw)',
+                maxWidth: '840px',
                 pointerEvents: 'none',
-                transform: activeTyping.isFadingOut ? 'translateY(-4px) scale(0.98)' : 'translateY(0) scale(1)',
+                fontFamily: 'Excalifont, Virgil, Xiaolai, "Segoe UI Emoji", sans-serif',
+                fontSize: `${activeTyping.fontSize}px`,
+                lineHeight: 1.38,
+                color: activeTyping.color,
                 opacity: activeTyping.isFadingOut ? 0 : 1,
-                filter: activeTyping.isFadingOut ? 'blur(3px)' : 'none',
-                transition: 'opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1), transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), filter 0.38s ease-out',
+                transition: 'opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
               }}
-              className="select-none py-1.5 px-3.5 rounded-xl bg-white/95 backdrop-blur-md border border-[#E5E3DB] shadow-[0_10px_24px_rgba(23,24,23,0.08)] flex items-start gap-2.5"
+              className="select-none flex items-start"
             >
-              {/* Action Indicator / Bullet */}
-              <div className="mt-1 shrink-0 flex items-center justify-center">
-                {activeTyping.bulletType === 'dot' && (
-                  <span
-                    className="w-2 h-2 rounded-full animate-ping"
-                    style={{ backgroundColor: activeTyping.color }}
-                  />
-                )}
-                {activeTyping.bulletType === 'step' && (
-                  <span className="text-xs font-bold font-mono text-[#255D88] animate-pulse">
-                    -&gt;
-                  </span>
-                )}
-                {activeTyping.bulletType === 'title' && (
-                  <span className="w-2.5 h-2.5 rounded-sm bg-[#52715D] animate-pulse" />
-                )}
-                {activeTyping.bulletType === 'box' && (
-                  <span className="w-2 h-2 rounded-full bg-[#BD4C36] animate-pulse" />
-                )}
-                {activeTyping.bulletType === 'question' && (
-                  <span className="w-2 h-2 rounded-full bg-[#255D88] animate-ping" />
-                )}
-              </div>
+              {/* Optional Dot Bullet matching board ellipse */}
+              {activeTyping.bulletType === 'dot' && (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: activeTyping.bulletColor || activeTyping.color,
+                    marginTop: '8px',
+                    marginRight: '12px',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
 
-              {/* Words typed word-by-word with smooth fade-in */}
-              <div className="flex-1 text-sm font-medium text-[#1F1C18] leading-relaxed flex flex-wrap items-center">
+              {/* Optional Step Arrow matching board derivation */}
+              {activeTyping.bulletType === 'step' && (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    marginRight: '8px',
+                    color: activeTyping.color,
+                    fontWeight: 'bold',
+                  }}
+                >
+                  -&gt;
+                </span>
+              )}
+
+              {/* Words typed word-by-word with exact board font & size */}
+              <div className="flex-1 whitespace-pre-wrap leading-relaxed">
                 {activeTyping.words.slice(0, activeTyping.visibleWordCount).map((word, wIdx) => (
                   <span
                     key={`${activeTyping.id}-${wIdx}`}
-                    className="inline-block mr-1.5 text-[#1F1C18] animate-chalk-word"
+                    style={{
+                      display: 'inline-block',
+                      marginRight: '0.28em',
+                      animation: 'chalkWordFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                    }}
                   >
                     {word}
                   </span>
@@ -3997,8 +4012,15 @@ export const GreenChalkboard = forwardRef<GreenChalkboardRef, GreenChalkboardPro
                 {/* Chalk typing cursor / blinking caret */}
                 {!activeTyping.isFadingOut && (
                   <span
-                    className="inline-block w-1.5 h-4 ml-0.5 rounded-full animate-pulse align-middle"
-                    style={{ backgroundColor: activeTyping.color }}
+                    style={{
+                      display: 'inline-block',
+                      width: '2px',
+                      height: `${activeTyping.fontSize * 0.9}px`,
+                      marginLeft: '2px',
+                      backgroundColor: activeTyping.color,
+                      verticalAlign: 'middle',
+                    }}
+                    className="animate-pulse"
                   />
                 )}
               </div>

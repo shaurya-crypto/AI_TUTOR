@@ -11,7 +11,8 @@ interface LiveChalkSubtitleStreamerProps {
 
 /**
  * Word-by-word floating chalk subtitle streamer for live spoken teaching.
- * Renders words as they are spoken, then smoothly fades out with physics blur.
+ * Renders words as they are spoken in exact chalkboard hand-drawn font,
+ * then smoothly fades out with optical physics blur.
  */
 export const LiveChalkSubtitleStreamer: React.FC<LiveChalkSubtitleStreamerProps> = ({
   latestTranscript = '',
@@ -87,7 +88,7 @@ export const LiveChalkSubtitleStreamer: React.FC<LiveChalkSubtitleStreamerProps>
             <span className="p-1 rounded-lg bg-[#255D88]/10 text-[#255D88] shrink-0">
               <Volume2 className="w-3.5 h-3.5 animate-pulse" />
             </span>
-            <div className="flex-1 text-xs sm:text-sm font-medium text-[#1F1C18] leading-relaxed flex flex-wrap items-center">
+            <div className="flex-1 font-chalk text-sm sm:text-base text-[#1F1C18] leading-relaxed flex flex-wrap items-center">
               {displayedWords.map((word, idx) => (
                 <motion.span
                   key={`${word}-${idx}`}
