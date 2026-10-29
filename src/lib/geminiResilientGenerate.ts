@@ -48,7 +48,7 @@ export async function resilientGenerateContent(
 
   const maxRounds = options.maxRounds || 2
   const label = options.label || 'Gemini API'
-  const timeoutLimit = options.timeoutMs || 25000
+  const timeoutLimit = options.timeoutMs ?? 0
   const errorsCollected: string[] = []
 
   const baseConfig = {
@@ -63,6 +63,15 @@ export async function resilientGenerateContent(
 
       // Helper to execute generation with timeout guard
       const executeWithTimeout = async (): Promise<string> => {
+        if (!timeoutLimit || timeoutLimit <= 0) {
+          const response = await ai.models.generateContent({
+            model,
+            contents: options.contents,
+            config: baseConfig,
+          })
+          return response?.text?.trim() || ''
+        }
+
         let timeoutTimer: NodeJS.Timeout | null = null
 
         const timeoutPromise = new Promise<never>((_, reject) => {
