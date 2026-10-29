@@ -16,14 +16,27 @@ export default function ClassRedirectPage() {
 
     async function routeToActiveModule() {
       try {
-        // 1. Fetch user class level
+        // 1. Fetch completed modules for this user (1 Free Session Quota Check)
+        const { data: completedList } = await supabase
+          .from('user_progress')
+          .select('syllabus_module_id')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+
+        if (completedList && completedList.length >= 1) {
+          // Free tier completed-module limit reached (1 completed module)
+          router.replace(`/dashboard/${userId}?pricing_notice=true`)
+          return
+        }
+
+        // 2. Fetch user class level
         const { data: profile } = await supabase
           .from('profiles')
           .select('class_level')
           .eq('id', userId)
           .single()
 
-        // 2. Check if there's an in_progress module
+        // 3. Check if there's an in_progress module
         const { data: inProgList } = await supabase
           .from('user_progress')
           .select('syllabus_module_id')
@@ -35,13 +48,6 @@ export default function ClassRedirectPage() {
           router.replace(`/dashboard/${userId}/class/${inProgList[0].syllabus_module_id}`)
           return
         }
-
-        // 3. Fetch completed module IDs for this user
-        const { data: completedList } = await supabase
-          .from('user_progress')
-          .select('syllabus_module_id')
-          .eq('user_id', userId)
-          .eq('status', 'completed')
 
         const completedSet = new Set((completedList || []).map((p) => p.syllabus_module_id))
 

@@ -42,7 +42,7 @@ interface QuestionConfig {
   sobiExpression: string
   type: 'text' | 'number' | 'select'
   placeholder?: string
-  options?: { value: string; label: string }[]
+  options?: { value: string; label: string; disabled?: boolean; badge?: string }[]
   audioFile: string
 }
 
@@ -122,7 +122,9 @@ const QUESTIONS: QuestionConfig[] = [
     options: [
       { value: 'CBSE', label: 'CBSE (NCERT & Competency-Based Application)' },
       { value: 'ICSE', label: 'ICSE / ISC (Concise Formulations & Deep Precision)' },
-      { value: 'IB', label: 'IB (MYP & DP Inquiry & Real-world Analysis)' },
+      { value: 'IB', label: 'IB (International Baccalaureate)', disabled: true, badge: 'Coming Soon' },
+      { value: 'CAMBRIDGE', label: 'Cambridge (IGCSE & A Levels)', disabled: true, badge: 'Coming Soon' },
+      { value: 'STATE', label: 'State Examination Boards', disabled: true, badge: 'Coming Soon' },
     ],
   },
   {
@@ -460,23 +462,36 @@ export default function OnboardingPage() {
                 <div className="flex flex-col gap-2.5">
                   {currentQ.options?.map((opt) => {
                     const isSelected = answers[currentQ.id] === opt.value
+                    const isDisabled = !!opt.disabled
                     return (
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() => handleNext(opt.value)}
-                        onMouseEnter={() => setHoverExpression('attentive-left')}
-                        onMouseLeave={() => setHoverExpression(undefined)}
-                        className={`group flex w-full items-center gap-3.5 rounded-xl border px-4 py-3.5 text-left transition-all active:scale-[0.99] ${
-                          isSelected
-                            ? 'border-neutral-800 bg-neutral-50 shadow-sm'
-                            : 'border-neutral-200/90 bg-white hover:border-neutral-400 hover:bg-neutral-50/60'
+                        disabled={isDisabled}
+                        onClick={() => {
+                          if (!isDisabled) handleNext(opt.value)
+                        }}
+                        onMouseEnter={() => !isDisabled && setHoverExpression('attentive-left')}
+                        onMouseLeave={() => !isDisabled && setHoverExpression(undefined)}
+                        className={`group flex w-full items-center justify-between gap-3.5 rounded-xl border px-4 py-3.5 text-left transition-all ${
+                          isDisabled
+                            ? 'cursor-not-allowed border-neutral-200/50 bg-neutral-100/50 opacity-60'
+                            : isSelected
+                            ? 'border-neutral-800 bg-neutral-50 shadow-sm active:scale-[0.99]'
+                            : 'border-neutral-200/90 bg-white hover:border-neutral-400 hover:bg-neutral-50/60 active:scale-[0.99]'
                         }`}
                       >
-                        <SparkleStar className="h-5 w-5 shrink-0 transition-transform group-hover:scale-110" />
-                        <span className="text-[15px] font-medium text-neutral-800">
-                          {opt.label}
-                        </span>
+                        <div className="flex items-center gap-3.5">
+                          <SparkleStar className={`h-5 w-5 shrink-0 transition-transform ${isDisabled ? 'text-neutral-400' : 'group-hover:scale-110'}`} />
+                          <span className={`text-[15px] font-medium ${isDisabled ? 'text-neutral-500' : 'text-neutral-800'}`}>
+                            {opt.label}
+                          </span>
+                        </div>
+                        {opt.badge && (
+                          <span className="shrink-0 rounded-full border border-neutral-300 bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+                            {opt.badge}
+                          </span>
+                        )}
                       </button>
                     )
                   })}

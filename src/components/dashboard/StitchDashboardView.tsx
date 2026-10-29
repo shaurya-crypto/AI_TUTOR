@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { signOutAction, updatePreferencesAction, enrollCurriculumAction } from '@/app/dashboard/actions'
 import { triggerCompanionGuidance } from '@/components/mascot/Mascot'
 import { MasteryQuizModal } from '@/components/quiz/MasteryQuizModal'
+import { PricingNoticeModal } from './PricingNoticeModal'
 import { StudyPlannerCard, StudyPlanData } from './StudyPlannerCard'
 import { WeakConceptsReviewCard } from './WeakConceptsReviewCard'
 import { VOICE_OPTIONS } from '@/lib/voiceAndLanguageConfig'
@@ -117,6 +118,7 @@ export function StitchDashboardView({
   const [liveModalOpen, setLiveModalOpen] = useState(false)
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const [notesDialogOpen, setNotesDialogOpen] = useState(false)
+  const [pricingModalOpen, setPricingModalOpen] = useState(false)
   const [coursesDialogOpen, setCoursesDialogOpen] = useState(false)
   const [isStartingSession, setIsStartingSession] = useState(false)
   const [quizModalOpen, setQuizModalOpen] = useState(false)
@@ -163,6 +165,29 @@ export function StitchDashboardView({
   // Live Progress Map
   const progressMap = new Map<string, ProgressRecord>()
   progressRecords.forEach((p) => progressMap.set(p.syllabus_module_id, p))
+
+  // 1 Free Module Quota Calculation
+  const completedCapsulesCount = progressRecords.filter((p) => p.status === 'completed' || !!p.completed_at).length
+  const isFreeQuotaExhausted = completedCapsulesCount >= 1
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      if (urlParams.get('pricing_notice') === 'true' || urlParams.get('limit_reached') === 'true') {
+        setPricingModalOpen(true)
+      }
+    }
+  }, [])
+
+  const handleModuleClick = (e: React.MouseEvent, targetModId?: string) => {
+    if (isFreeQuotaExhausted) {
+      if (targetModId && isModuleComplete(targetModId)) {
+        return
+      }
+      e.preventDefault()
+      setPricingModalOpen(true)
+    }
+  }
 
   // Helper to reliably check module completion (respects status === 'completed' or completed_at != null)
   const isModuleComplete = (modId: string) => {

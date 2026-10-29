@@ -103,8 +103,9 @@ export const BOARD_OPTIONS = [
   },
   {
     id: 'IB',
-    name: 'IB (International Baccalaureate MYP & DP)',
-    desc: 'Statement of Inquiry (SOI), official IB command terms, measurement uncertainty, formula booklet HUD.',
+    name: 'IB (International Baccalaureate - Coming Soon)',
+    desc: 'Coming Soon - Statement of Inquiry (SOI), official IB command terms, measurement uncertainty.',
+    disabled: true,
   },
 ]
 
@@ -659,9 +660,9 @@ export function SettingsView({ user, profile }: SettingsViewProps) {
                         onChange={(e) => setTargetBoard(e.target.value)}
                         className="w-full px-3 py-2 rounded-xl border border-[var(--border-subtle)] bg-white text-sm text-[#2D2A26] focus:outline-hidden focus:ring-2 focus:ring-[#255D88]/20"
                       >
-                        {BOARD_OPTIONS.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.id} — {b.name.split('(')[0].trim()}
+                        {BOARD_OPTIONS.map((b: any) => (
+                          <option key={b.id} value={b.id} disabled={b.disabled}>
+                            {b.id} — {b.name.split('(')[0].trim()} {b.disabled ? '(Coming Soon)' : ''}
                           </option>
                         ))}
                       </select>

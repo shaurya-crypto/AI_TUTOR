@@ -35,6 +35,7 @@ import { ChapterNotesModal } from '@/components/classroom/ChapterNotesModal'
 import { CallControls } from '@/components/CallControls'
 import { ErrorModal } from '@/components/ErrorModal'
 import { MasteryQuizModal } from '@/components/quiz/MasteryQuizModal'
+import { PricingNoticeModal } from '@/components/dashboard/PricingNoticeModal'
 import {
   Mic,
   Play,
@@ -404,6 +405,8 @@ export default function ModuleClassroomPage() {
     orderIndex: number
   } | null>(null)
   const [moduleCompletedSuccess, setModuleCompletedSuccess] = useState(false)
+  const [showPricingModal, setShowPricingModal] = useState(false)
+  const [isQuotaExhausted, setIsQuotaExhausted] = useState(false)
   const [isLoadingLesson, setIsLoadingLesson] = useState(true)
   const [quizOpen, setQuizOpen] = useState(false)
   const [preferredVoice, setPreferredVoice] = useState('Leda')
@@ -666,6 +669,21 @@ export default function ModuleClassroomPage() {
               }
             }
           }
+        }
+
+        // Check 1 Free Completed Module Quota
+        const { data: allCompleted } = await supabase
+          .from('user_progress')
+          .select('syllabus_module_id')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+
+        const otherCompleted = (allCompleted || []).filter(
+          (c: any) => c.syllabus_module_id !== moduleId
+        )
+        if (otherCompleted.length >= 1) {
+          setIsQuotaExhausted(true)
+          setShowPricingModal(true)
         }
 
         // Check if student has existing progress: concept index, completed concepts, notes
