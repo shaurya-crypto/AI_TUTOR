@@ -99,7 +99,7 @@ export function LandingNav() {
 
       {/* HeyAristotle Fixed Edge-to-Edge Navigation Header with Liquid Glass */}
       <header
-        className={`fixed top-0 left-0 right-0 z-50 h-16 sm:h-[72px] transition-all duration-350 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        className={`fixed top-0 left-0 right-0 z-50 h-16 sm:h-[72px] transition-all duration-350 ease-smooth ${
           hidden ? '-translate-y-full' : 'translate-y-0'
         } ${isScrolled ? 'liquid-glass-active' : 'liquid-glass-top'}`}
       >

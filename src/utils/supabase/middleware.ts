@@ -58,9 +58,43 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    let user = null
+  try {
+    const { data, error } = await supabase.auth.getUser()
+    if (error) {
+      if (
+        error.code === 'refresh_token_not_found' ||
+        error.status === 400 ||
+        error.message?.includes('Refresh Token Not Found')
+      ) {
+        // Clear invalid / expired auth cookies so browser immediately drops the dead session
+        const authCookies = request.cookies.getAll().filter(
+          (c) => c.name.startsWith('sb-') || c.name.includes('-auth-token')
+        )
+        authCookies.forEach((c) => {
+          request.cookies.delete(c.name)
+          supabaseResponse.cookies.delete(c.name)
+        })
+      }
+    } else {
+      user = data.user
+    }
+  } catch (err: any) {
+    if (
+      err?.code === 'refresh_token_not_found' ||
+      err?.status === 400 ||
+      err?.message?.includes('Refresh Token Not Found')
+    ) {
+      const authCookies = request.cookies.getAll().filter(
+        (c) => c.name.startsWith('sb-') || c.name.includes('-auth-token')
+      )
+      authCookies.forEach((c) => {
+        request.cookies.delete(c.name)
+        supabaseResponse.cookies.delete(c.name)
+      })
+    }
+    user = null
+  }
 
   // 4. Bypass Server Actions from navigation redirects.
   // Next.js Server Actions (POST with 'Next-Action' header) handle their own redirects and responses.
