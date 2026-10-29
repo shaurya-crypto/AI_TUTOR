@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Mascot } from "@/components/mascot/Mascot";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "AI Tutor - Personalized Learning",
@@ -79,6 +80,7 @@ export default function RootLayout({
       >
         {children}
         <Mascot />
+        <Analytics />
       </body>
     </html>
   );
